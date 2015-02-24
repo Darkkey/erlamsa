@@ -133,5 +133,17 @@ rand_range(L, L) ->
 rand_range(_, _) ->
     0.
 
+%% see http://en.wikipedia.org/wiki/Reservoir_sampling
+reservoir_sample(Ll, K) when K >= length(Ll) -> Ll;
+reservoir_sample(Ll, K) ->     
+    reservoir_sample(list_to_tuple(Ll), length(Ll), K, K+1, list_to_tuple(lists:sublist(Ll, K))).
 
+reservoir_sample(_S, N, _K, I, R) when I > N -> tuple_to_list(R);
+reservoir_sample(S, N, K, I, R) ->
+    J = erand(I),
+    case J =< K of
+        true -> reservoir_sample(S, N, K, I+1, 
+            setelement(J, R, element(I, S)));
+        false -> reservoir_sample(S, N, K, I+1, R)
+    end.
 

@@ -646,7 +646,7 @@ sublists([H|T], Found) when is_list(H) ->
 sublists([_H|T], Found) ->
     sublists(T, Found).
 
-pick_sublist(Rs, Lst) ->
+pick_sublist(_Rs, Lst) ->
     Subs = sublists(Lst),
     case Subs of
         [] -> false;
@@ -662,15 +662,15 @@ edit_sublist([H|T], Sub, Op) ->
 edit_sublist(Lst, _Sub, _Op) -> Lst.
 
 %% lst (ff of node -> (node -> node)) -> lst' ; <- could also be done with a recursive-mapn
-edit_sublists([H|T], OpFF) when is_list(H) -> 
-    MaybeOp = owllisp:get(H, false, OpFF),
+edit_sublists([Hd|T], OpFF) when is_list(Hd) -> 
+    MaybeOp = owllisp:get(Hd, false, OpFF),
     case MaybeOp of
         false -> 
-            [edit_sublists(H, OpFF) | edit_sublists(T, OpFF)];
+            [edit_sublists(Hd, OpFF) | edit_sublists(T, OpFF)];
         _ ->
-            [MaybeOp(H) | edit_sublists(T, OpFF)]
+            [MaybeOp(Hd) | edit_sublists(T, OpFF)]            
     end;
-edit_sublists([H|T], OpFF) when is_list(H) -> 
+edit_sublists([H|T], OpFF) -> 
     [H | edit_sublists(T, OpFF)];
 edit_sublists(Lst, _) -> Lst.
 
@@ -716,26 +716,39 @@ sed_tree_dup() ->
     sed_tree_op(fun (Node = [H|_T]) -> [H|Node] end, tree_dup).
 
 sed_tree_del() ->
-    sed_tree_op(fun ([H|T]) -> T end, tree_del).
-
-sed_tree_swap_one(Lst, Subs, _Name, Fun, Rs, Ll, Meta) when length(Subs) < 2 ->
-    {Fun, Rs, Ll, Meta, -1};
-sed_tree_swap_one(Lst, Subs, Name, Fun, Rs, Ll = [_|T], Meta) ->
-    ToSwap = reservoir_sample(Rs, Subs, 2),
-    [A | [B | _]] = owllisp:random_permutation(Rs, ToSwap),
-    NewLst = edit_sublist(Lst, A, fun ([_|Tl]) -> [B | Tl] end),
-    {Fun, Rs, [list_to_binary(flatten(NewLst, [])) | T], [{Name, 1} | Meta], 1}.
+    sed_tree_op(fun ([_H|T]) -> T end, tree_del).
 
 %% overwrite one node with one of the others
-% sed_tree_swap_one(Rs, Ll = [H|T], Meta) ->
-%     case binarish(H) of
-%         true -> {F, Rs, Ll, Meta, -1};
-%         false -> 
-%             Lst = partial_parse(binary_to_list(H)),
-%             Subs = sublists(Lst),
-%             N = length(Subs),
+sed_tree_swap_one(Lst, Subs) ->
+    ToSwap = owllisp:reservoir_sample(Subs, 2),
+    [A | [B | _]] = owllisp:random_permutation(ToSwap),
+    edit_sublist(Lst, A, fun ([_|Tl]) -> [B | Tl] end).
 
-%     end.    
+%% pairwise swap of two nodes
+%% TODO: here there is a bug (also in original radamsa) that causes to swap child with the parent node, could be feature xD
+sed_tree_swap_two(Lst, Subs) ->
+    ToSwap = owllisp:reservoir_sample(Subs, 2),
+    [A | [B | _]] = ToSwap,
+    Mapping = gb_trees:enter(B, fun(_X) -> A end, gb_trees:enter(A, fun (_X) -> B end, gb_trees:empty())),    
+    edit_sublists(Lst, Mapping).
+
+
+construct_sed_tree_swap(Op, Name) ->
+    fun F (Rs, Ll = [H|T], Meta) ->
+        case binarish(H) of
+            true -> {F, Rs, Ll, Meta, -1};
+            false -> 
+                Lst = partial_parse(binary_to_list(H)),
+                Subs = sublists(Lst),
+                N = length(Subs),
+                case N < 2 of
+                    true -> {F, Rs, Ll, Meta, -1};
+                    false ->
+                        NewLst = Op(Lst, Subs),
+                        {F, Rs, [list_to_binary(flatten(NewLst, [])) | T], [{Name, 1} | Meta], 1}
+                end
+        end
+    end.
 
 %%
 %% UTF-8
@@ -859,7 +872,9 @@ mux_fuzzers_loop(Ll, [Node|Tail], Out, Rs, Meta) ->
 %default_mutations() -> [{10, 1, construct_ascii_bad_mutator(), ab}].
 %default_mutations() -> [{10, 1, construct_ascii_delimeter_mutator(), ad}].
 %default_mutations() -> [{10, 1, sed_tree_dup(), tr2}].
-default_mutations() -> [{10, 1, sed_tree_del(), td}].
+%default_mutations() -> [{10, 1, sed_tree_del(), td}].
+%default_mutations() -> [{10, 1, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1}].
+default_mutations() -> [{10, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2}].
 %default_mutations() -> [{10, 1, construct_sed_byte_drop(), bd}, 
 %                        {10, 1, construct_sed_byte_inc(), bei}, 
 %                        {10, 1, construct_sed_byte_dec(), bed}].
