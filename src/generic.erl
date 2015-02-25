@@ -13,6 +13,7 @@
 %% API
 -export([]).
 
+-define(STORED_ELEMS, 10).
 
 %% More effective operations for changing at a position of a list
 %% for explanaction while we're not using lists:... see 
@@ -94,8 +95,47 @@ list_perm(L, Len) ->
 			owllisp:random_permutation([E|ToPerm]) ++ Rest 
 		end).
 
+%% mutations which keep some old elements for mutations in (n-elems elem-1 elem2 ...)
 
+update_prob() -> ?STORED_ELEMS bsl 1.
 
+step_state([H|T], L, Len) when H < ?STORED_ELEMS ->
+%% add elements until there are enough stored elements
+	P = owllisp:erand(Len),
+	step_state( 
+		[H + 1, lists:nth(P, L) | T]
+		, L, Len);
+step_state(St, L, Len) -> 
+	Up = owllisp:erand(update_prob()),
+	case Up < ?STORED_ELEMS of
+		true -> 
+			Ep = owllisp:erand(Len),
+			New = lists:nth(Ep, L),
+			applynth(Up + 1, St, fun ([_|T], R) -> [[New | T] | R] end); % +1 for len			
+		false -> 
+			St
+	end.
+
+pick_state([H|T]) ->
+	P = owllisp:erand(H),
+	lists:nth(P, T).
+
+st_list_mod(St, L, Fun) ->
+	N = length(L),
+	Stp = step_state(St, L, N),
+	X = pick_state(Stp),
+	P = owllisp:erand(N),
+	Lp = applynth(P, L, Fun(X)),
+	{Stp, Lp}.
+
+%% ins 
+st_list_ins(St, L) ->
+	st_list_mod(St, L, fun(X) -> fun (T, R) -> [X, T | R] end end).
+
+%% replace
+st_list_replace(St, L) ->
+	st_list_mod(St, L, fun(X) -> fun (_, R) -> [X | R] end end).
+ 
 
 
 

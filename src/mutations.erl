@@ -259,18 +259,21 @@ construct_line_muta(Op, Name) ->
         end
     end.
 
-% construct_stateful_line_muta(Op, Name, InitialState) ->
-%     fun Self(Rs, Ll = [H|T], Meta) ->
-%         Ls = try_lines(H),
-%         if
-%             Ls =:= false ->
-%                 {Rs, Ll, Meta, -1};
-%             true ->
-%                 MLs = Op(Ls, length(Ls)), % calc length only once
-%                 NH = unlines(MLs),
-%                 {Self, Rs, [NH | T], [{Name, 1}|Meta], 1} 
-%         end
-%     end.
+%% state is (n <line> ...)
+construct_st_line_muta(Op, Name, InitialState) ->
+    fun (Rs, Ll = [H|T], Meta) ->
+        Ls = try_lines(H),
+        if
+            Ls =:= false ->
+                {construct_st_line_muta(Op, Name, InitialState), 
+                    Rs, Ll, Meta, -1};
+            true ->
+                {Stp, NewLs} = Op(InitialState, Ls), 
+                io:write(NewLs),
+                {construct_st_line_muta(Op, Name, Stp), 
+                    Rs, [unlines(NewLs) | T], [{Name, 1} | Meta], 1} 
+        end
+    end.
 
 %%
 %% Shared sequences
@@ -874,7 +877,9 @@ mux_fuzzers_loop(Ll, [Node|Tail], Out, Rs, Meta) ->
 %default_mutations() -> [{10, 1, sed_tree_dup(), tr2}].
 %default_mutations() -> [{10, 1, sed_tree_del(), td}].
 %default_mutations() -> [{10, 1, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1}].
-default_mutations() -> [{10, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2}].
+%default_mutations() -> [{10, 1, construct_st_line_muta(fun generic:st_list_ins/2, list_ins, [0]), lis}].
+default_mutations() -> [{10, 1, construct_st_line_muta(fun generic:st_list_replace/2, list_replace, [0]), lrs}].
+%%default_mutations() -> [{10, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2}].
 %default_mutations() -> [{10, 1, construct_sed_byte_drop(), bd}, 
 %                        {10, 1, construct_sed_byte_inc(), bei}, 
 %                        {10, 1, construct_sed_byte_dec(), bed}].
