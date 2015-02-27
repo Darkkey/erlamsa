@@ -753,6 +753,50 @@ construct_sed_tree_swap(Op, Name) ->
         end
     end.
 
+%% tree stutter
+
+repeat_path(Parent, _Child, N) when N < 2 ->
+    Parent; %% <- causes at least 1 extra path to be made, saves one useless replace cycle
+repeat_path(Parent, Child, N) ->
+    edit_sublist(Parent, Child, 
+        fun ([_H|T]) -> [repeat_path(Parent, Child, N-1) | T] end).
+
+choose_child(Node) ->
+    Subs = sublists(Node),
+    case Subs of 
+        [] -> false;
+        _Else -> owllisp:rand_elem(Subs)
+    end.
+
+choose_stutr_nodes(_Rs, []) -> {false, false}; %% no child nodes
+choose_stutr_nodes(Rs, [H|T]) ->
+    Childp = choose_child(H),
+    case Childp of
+        false -> choose_stutr_nodes(Rs, T);
+        _Else -> {H, Childp}
+    end.
+
+sed_tree_stutter(Rs, Ll = [H|T], Meta) ->
+    case binarish(H) of
+        true -> {fun sed_tree_stutter/3, Rs, Ll, Meta, -1};
+        false -> 
+            Lst = partial_parse(binary_to_list(H)), %% (byte|node ...)
+            Subs = sublists(Lst),
+            RandSubs = owllisp:random_permutation(Subs),
+            {Parent, Child} = choose_stutr_nodes(Rs, RandSubs),
+            N_reps = owllisp:rand_log(10),
+            case Parent of 
+                false -> {fun sed_tree_stutter/3, Rs, Ll, Meta, -1};
+                _Else ->
+                    NewLst = edit_sublist(Lst, Child, 
+                            fun ([_H|Tl]) -> [repeat_path(Parent, Child, N_reps)|Tl] end),
+                    {fun sed_tree_stutter/3, Rs, 
+                        [list_to_binary(flatten(NewLst, [])) | T], 
+                        [{tree_stutter, 1} | Meta], 1}
+            end
+    end.
+
+
 %%
 %% UTF-8
 %%
@@ -878,7 +922,8 @@ mux_fuzzers_loop(Ll, [Node|Tail], Out, Rs, Meta) ->
 %default_mutations() -> [{10, 1, sed_tree_del(), td}].
 %default_mutations() -> [{10, 1, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1}].
 %default_mutations() -> [{10, 1, construct_st_line_muta(fun generic:st_list_ins/2, list_ins, [0]), lis}].
-default_mutations() -> [{10, 1, construct_st_line_muta(fun generic:st_list_replace/2, list_replace, [0]), lrs}].
+%default_mutations() -> [{10, 1, construct_st_line_muta(fun generic:st_list_replace/2, list_replace, [0]), lrs}].
+default_mutations() -> [{10, 1, fun sed_tree_stutter/3, ts}].
 %%default_mutations() -> [{10, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2}].
 %default_mutations() -> [{10, 1, construct_sed_byte_drop(), bd}, 
 %                        {10, 1, construct_sed_byte_inc(), bei}, 
@@ -898,8 +943,8 @@ default_mutations() -> [{10, 1, construct_st_line_muta(fun generic:st_list_repla
 %default_mutations() -> [{10, 1, construct_line_muta(fun generic:list_swap/2, line_swap), ls}].
 %default_mutations() -> [{10, 1, construct_line_muta(fun generic:list_perm/2, line_perm), lp}].
 %default_mutations() -> [{10, 1, fun sed_fuse_this/3, ft}].
-%default_mutations() -> [{10, 1, fun sed_fuse_next/3, ft}].
-%default_mutations() -> [{10, 1, fun sed_fuse_old/3, ft}].
+%default_mutations() -> [{10, 1, fun sed_fuse_next/3, fn}].
+%default_mutations() -> [{10, 1, fun sed_fuse_old/3, fo}].
 
 %% randomize mutator scores
 mutators_mutator(Rs, Mutas) ->
