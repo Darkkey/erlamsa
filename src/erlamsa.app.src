@@ -1,0 +1,12 @@
+{application, erlamsa,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { erlamsa_app, []}},
+  {env, []}
+ ]}.

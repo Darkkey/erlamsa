@@ -227,7 +227,7 @@ construct_sed_bytes_drop() -> %% drop a seq
 lines(Bvec) -> lines(binary_to_list(Bvec), [], []).
 
 lines([], [], Out) -> lists:reverse(Out);
-lines([], Buff, Out) -> lists:reverse(lists:reverse(Buff) ++ Out);
+lines([], Buff, Out) -> lists:reverse([lists:reverse(Buff)] ++ Out);
 lines([10|T], Buff, Out) -> lines(T, [], [lists:reverse([10 | Buff]) | Out]);
 lines([H|T], Buff, Out) -> lines(T, [H | Buff], Out).
 
@@ -248,16 +248,16 @@ try_lines(Bvec) ->
 
 construct_line_muta(Op, Name) ->
     fun Self(Rs, Ll = [H|T], Meta) ->
-        Ls = try_lines(H),
+        Ls = try_lines(H),        
         if
             Ls =:= false ->
-                {Rs, Ll, Meta, -1};
+                {Self, Rs, Ll, Meta, -1};
             true ->
                 MLs = Op(Ls, length(Ls)), % calc length only once
                 NH = unlines(MLs),
                 {Self, Rs, [NH | T], [{Name, 1}|Meta], 1} 
         end
-    end.
+    end. 
 
 %% state is (n <line> ...)
 construct_st_line_muta(Op, Name, InitialState) ->
@@ -269,7 +269,6 @@ construct_st_line_muta(Op, Name, InitialState) ->
                     Rs, Ll, Meta, -1};
             true ->
                 {Stp, NewLs} = Op(InitialState, Ls), 
-                io:write(NewLs),
                 {construct_st_line_muta(Op, Name, Stp), 
                     Rs, [unlines(NewLs) | T], [{Name, 1} | Meta], 1} 
         end
@@ -492,16 +491,19 @@ mutate_text_data(Lst, TxtMutators) ->
     mutate_text(owllisp:rand_elem(TxtMutators), Lst).
 
 %% insert badness
+mutate_text(insert_badness, []) -> random_badness(); %% empty list -- just insert random
 mutate_text(insert_badness, Lst) ->
     P = owllisp:erand(length(Lst)), % in erlang lists starts from 1
     Bad = random_badness(),
     owllisp:led(Lst, P, fun (X) -> [X|Bad]  end); % in radamsa Bad ++ [X], optimized here
 %% replace badness
+mutate_text(replace_badness, []) -> random_badness(); %% empty list -- just replace with random
 mutate_text(replace_badness, Lst) ->
     P = owllisp:erand(length(Lst)), % in erlang lists starts from 1
     Bad = random_badness(),
     lists:sublist(Lst, P - 1) ++ overwrite(lists:nthtail(P, Lst), Bad);
 %% insert as
+mutate_text(insert_aaas, []) -> push_as(rand_as_count(), []); %% empty list -- just insert random
 mutate_text(insert_aaas, Lst) ->
     N = rand_as_count(),
     P = owllisp:erand(length(Lst)), % in erlang lists starts from 1    
@@ -510,6 +512,7 @@ mutate_text(insert_aaas, Lst) ->
 mutate_text(insert_null, Lst) ->
     Lst ++ [0];
 %% insert delimeter
+mutate_text(insert_delimeter, []) -> [owllisp:rand_elem(delimeters())]; %% empty list -- just insert random
 mutate_text(insert_delimeter, Lst) ->
     P = owllisp:erand(length(Lst)), % in erlang lists starts from 1
     Bad = owllisp:rand_elem(delimeters()),
@@ -531,8 +534,8 @@ string_generic_mutate(Cs, TxtMutators, L, R) ->
         [byte|_Bs] ->
             string_generic_mutate(Cs, TxtMutators, L, R + 1);
         [delimited, {Left, Bs, Right}] ->
-            owllisp:led(Cs, P, fun (_X) -> [[delimited, {Left, mutate_text_data(Bs, TxtMutators), Right}]] end)
-    end.
+            generic:applynth(P, Cs, fun (_E, Rest) -> [[delimited, {Left, mutate_text_data(Bs, TxtMutators), Right}]] ++ Rest end)
+    end. 
 
 construct_ascii_mutator(Fun, Name) ->
     fun Ascii_mutator (Rs, Ll = [H|T], Meta) -> 
@@ -902,7 +905,9 @@ mux_fuzzers_loop(Ll, [], Out, Rs, Meta) -> {mux_fuzzers(Out), Rs, Ll, Meta};
 mux_fuzzers_loop(Ll, [Node|Tail], Out, Rs, Meta) ->
     {Mscore, MPri, Fn, Mname} = Node,
     shared:debug("mux-fuzzers-loop calling mutation: ", Node),
-    {MFn, RsN, Mll, MMeta, Delta} = Fn(Rs, Ll, Meta), %% in radamsa (mfn rs mll mmeta delta) = Fn(...), that strange, TODO: check it
+    Res = Fn(Rs, Ll, Meta),
+    shared:debug("Res:", Res),
+    {MFn, RsN, Mll, MMeta, Delta} = Res, %% in radamsa (mfn rs mll mmeta delta) = Fn(...), that strange, TODO: check it
     shared:debug("mux-fuzzers-loop /calling mutation: ", {MFn, RsN, Mll, MMeta, Delta}),
     NOut = [{adjust_priority(Mscore, Delta), MPri, MFn, Mname} | Out], %% in radamsa mfn instead of fn
     IsMllPair = owllisp:is_pair(Mll),
@@ -913,17 +918,17 @@ mux_fuzzers_loop(Ll, [Node|Tail], Out, Rs, Meta) ->
     end.
 
 %% default mutations list
-% default_mutations() -> [{10, 1, fun sed_num/3, num}].
+%default_mutations() -> [{10, 1, fun sed_num/3, num}].
 %default_mutations() -> [{10, 1, fun sed_utf8_widen/3, uw}].
 %default_mutations() -> [{10, 1, fun sed_utf8_insert/3, ui}].
-%default_mutations() -> [{10, 1, construct_ascii_bad_mutator(), ab}].
+default_mutations() -> [{10, 1, construct_ascii_bad_mutator(), ab}].
 %default_mutations() -> [{10, 1, construct_ascii_delimeter_mutator(), ad}].
 %default_mutations() -> [{10, 1, sed_tree_dup(), tr2}].
 %default_mutations() -> [{10, 1, sed_tree_del(), td}].
 %default_mutations() -> [{10, 1, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1}].
 %default_mutations() -> [{10, 1, construct_st_line_muta(fun generic:st_list_ins/2, list_ins, [0]), lis}].
 %default_mutations() -> [{10, 1, construct_st_line_muta(fun generic:st_list_replace/2, list_replace, [0]), lrs}].
-default_mutations() -> [{10, 1, fun sed_tree_stutter/3, ts}].
+%default_mutations() -> [{10, 1, fun sed_tree_stutter/3, ts}].
 %%default_mutations() -> [{10, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2}].
 %default_mutations() -> [{10, 1, construct_sed_byte_drop(), bd}, 
 %                        {10, 1, construct_sed_byte_inc(), bei}, 

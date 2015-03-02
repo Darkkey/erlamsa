@@ -69,7 +69,7 @@ list_clone(L, Len) ->
 	From = owllisp:erand(Len),
 	To = owllisp:erand(Len),
 	Elem = lists:nth(From, L),
-	applynth(To, L, fun(E, R) -> [Elem, E | R] end).
+	applynth(To, L, fun(_E, R) -> [Elem | R] end).
 
 %% swap two adjecent values 
 list_swap([], 0) -> [];

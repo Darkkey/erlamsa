@@ -8,6 +8,10 @@
 -module(owllisp).
 -author("dark_k3y").
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
 %% API
 -compile([export_all]).
 -export([]).
@@ -120,8 +124,11 @@ random_numbers(Bound, Cnt, Acc) -> random_numbers(Bound, Cnt - 1, [rand(Bound) |
 %% TODO: FIXME if it's incorrect
 %% randomly permutate the given list
 %% DIRTY HACK(!!!): works bad on 2 bytes, so force permute, FIXME
-random_permutation([A, B]) ->
-    [B, A];
+random_permutation(Lst = [A, B]) ->
+    case rand(2) =:= 1 of
+        true -> [B, A];
+        false -> Lst
+    end;
 random_permutation(L) ->
     [Y || {_, Y} <- lists:sort([{random:uniform(),X} || X <- L])].
 
