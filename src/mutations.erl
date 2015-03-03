@@ -357,7 +357,7 @@ texty_enough([H|T], N) ->
         false -> false
     end.
 
-flush_type_node(Type, Bytes, Chunks) ->
+flush_type_node(Type, Bytes, Chunks) ->    
     [[Type | lists:reverse(Bytes)] | Chunks].
 
 %% (byte ..) → (node ...)
@@ -407,7 +407,7 @@ step_delimited(_Lst = [H|T], Start, End, AfterR, _PrevR = [_PrevrH | PrevrT], Ch
     Node = [delimited, {Start, lists:reverse(AfterR), End}],
     case PrevrT =:= [] of
         true -> string_lex_step(T, [], [Node | Chunks]);
-        false -> string_lex_step(T, [], [Node, [text, lists:reverse(PrevrT)] | Chunks])
+        false -> string_lex_step(T, [], [Node, [text | lists:reverse(PrevrT)] | Chunks])
     end;
 %% skip byte after quotation, if it seems texty    
 step_delimited(_Lst = [H|T], Start, End, AfterR, PrevR, Chunks) when H =:= 92, T =:= [] -> %% \

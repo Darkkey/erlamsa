@@ -114,6 +114,13 @@ rand_occurs_fixed(Rs, Nom, Denom) ->
             {Rs, N < Nom}
     end.
 
+%% Generate random block of bytes.
+%% TODO: check byte-stream magic here, Radamsa realization is MUCH differ
+random_block(N) -> random_block(N, []).
+
+random_block(0, Out) -> list_to_binary(Out);
+random_block(N, Out) -> random_block(N - 1, [owllisp:rand(256) | Out]).
+
 %% generates a list of Cnt numbers with upper Bount
 random_numbers(Bound, Cnt) -> random_numbers(Bound, Cnt, []).
 

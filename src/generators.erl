@@ -30,7 +30,7 @@ finish(_Rs, Len) ->
         true -> []
     end.
 
-%% get rnadom size of block
+%% get random size of block
 rand_block_size() ->
     max(owllisp:rand(?MAX_BLOCK_SIZE), ?MIN_BLOCK_SIZE).
 
@@ -94,16 +94,13 @@ file_streamer(Paths) ->
         end
     end.
 
-%% Generate random block of bytes.
-%% TODO: check byte-stream magic here, Radamsa realization is MUCH differ
-random_block(0, Out) -> list_to_binary(Out);
-random_block(N, Out) -> random_block(N - 1, [owllisp:rand(256) | Out]).
+
 
 %% Random input stream
 random_stream() ->
     shared:debug_str("Random generator stream"),
     N = owllisp:rand_range(32, ?MAX_BLOCK_SIZE),
-    B = random_block(N, []),
+    B = owllisp:random_block(N),
     Ip = owllisp:rand_range(1, 100),
     O = owllisp:rand(Ip),
     case O of
