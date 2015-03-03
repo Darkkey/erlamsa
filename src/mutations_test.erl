@@ -221,3 +221,23 @@ sed_byte_random_length_test() ->
 		owllisp:random_block(owllisp:erand(?MAX_BLOCK_SIZE)), 
 		mutations:construct_sed_byte_random(),
 		fun (X, Y) -> size(X) =:= size(Y) end, 1000).
+
+
+sed_bytes_perm_length_test() ->
+	sed_byte_muta_tester(		
+		owllisp:random_block(owllisp:erand(?MAX_BLOCK_SIZE)), 
+		mutations:construct_sed_bytes_perm(),
+		fun (X, Y) -> size(X) =:= size(Y) end, 1000).
+
+sed_bytes_drop_length_test() ->
+	sed_byte_muta_tester(		
+		owllisp:random_block(owllisp:erand(?MAX_BLOCK_SIZE)), 
+		mutations:construct_sed_bytes_drop(),
+		fun (X, Y) -> size(X) > size(Y) end, 1000).
+
+sed_bytes_repeat_length_test() ->
+	sed_byte_muta_tester(		
+		owllisp:random_block(owllisp:erand(?MAX_BLOCK_SIZE)), 
+		mutations:construct_sed_bytes_repeat(),
+		fun (X, Y) -> size(X) < size(Y) end, 1000).
+

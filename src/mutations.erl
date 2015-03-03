@@ -180,14 +180,14 @@ construct_sed_bytes_muta(F, Name) ->
         {Rs, BTail, [{Name, -1}|Meta], -1};
     Self(Rs, [BVec|BTail], Meta) ->
         BSize = byte_size(BVec),
-        S = owllisp:rand(BSize - 1), 
-        L = owllisp:rand_range(2, BSize - S),  %% FIXME: here any (min 2), in radamsa 20: fixme: magic constant, should use something like repeat-len
+        S = owllisp:rand(BSize), 
+        L = owllisp:rand_range(1, BSize - S + 1),  %% FIXME: here any (min 2), in radamsa 20: fixme: magic constant, should use something like repeat-len
                                                    %% ^^ check may be max(20, ...) with "MAGIX" could be MORE effective
+                                                   %% TODO: make this interval more random...?
         H_bits = S*8,
         P_bits = L*8, 
-        shared:debug("sed-bytes-muta", {S, H_bits, L, P_bits, BSize, BSize - 1 - S}),
         <<H:H_bits, P:P_bits, T/binary>> = BVec,      
-        C = F(H, H_bits, P, P_bits, T, BTail),
+        C = F(<<H:H_bits>>, <<P:P_bits>>, T, BTail),
         D = rand_delta(Rs),
         {Self, Rs, C, [{Name, D}|Meta], D}
     end.
@@ -196,27 +196,27 @@ construct_sed_bytes_muta(F, Name) ->
 %% WARNING: in radamsa max permutation block could not exceed length 20, here could be any length
 construct_sed_bytes_perm() -> %% permute a few bytes
     construct_sed_bytes_muta(
-        fun (H, H_bits, Bs, Bs_bits_length, T, BTail) -> 
+        fun (H, Bs, T, BTail) -> 
             C = list_to_binary(
             owllisp:random_permutation(
-                binary_to_list(<<Bs:Bs_bits_length>>))),
-            [<<H:H_bits, C/binary, T/binary>> | BTail]
+                binary_to_list(Bs))),
+            [<<H/binary, C/binary, T/binary>> | BTail]
         end, seq_perm).
 
 construct_sed_bytes_repeat() -> %% repeat a seq
     construct_sed_bytes_muta(
-        fun (H, H_bits, Bs, Bs_bits_length, T, BTail) -> 
-            L = <<Bs:Bs_bits_length>>,
+        fun (H, Bs, T, BTail) ->            
             N = max(2, owllisp:rand_log(10)), %% max 2^10 = 1024 stuts
-            %% !FIXME: !WARNING: Below is VERY INEFFECTIVE CODE, just working sketch, may be need to optimize?
-            Res = [<<H:H_bits>>] ++ [L || _ <- lists:seq(1,N)] ++ [<<T/binary>> | BTail],
+            %% !FIXME: !WARNING: Below is VERY INEFFECTIVE CODE, just working sketch, may be need to optimize?            
+            C = list_to_binary([Bs || _ <- lists:seq(1,N)]),
+            Res = [<<H/binary, C/binary ,T/binary>> | BTail],
             Res
         end, seq_repeat).
 
 construct_sed_bytes_drop() -> %% drop a seq
     construct_sed_bytes_muta(
-        fun (H, H_bits, _Bs, _Bs_bits_length, T, BTail) -> 
-            [<<H:H_bits, T/binary>> | BTail] end, seq_drop).
+        fun (H, _Bs, T, BTail) -> 
+            [<<H/binary, T/binary>> | BTail] end, seq_drop).
 
 
 %%
