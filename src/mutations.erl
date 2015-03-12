@@ -11,8 +11,7 @@
 -define(MIN_SCORE, 2).
 -define(MAX_SCORE, 10).
 -define(RAND_DELTA, 18446744073709551616).
--define(P_WEAKLY_USUALLY_NOM, 11).
--define(P_WEAKLY_USUALLY_DENOM, 20).
+
 %% minimum texty bytes in sequence to be considered interesting
 %% note - likely to happen in longish data (a few kb) anyway
 -define(MIN_TEXTY, 6).
@@ -25,31 +24,7 @@
 %% API
 -export([]).
 
-%%%
-%%% Random delta generators for random priority steppers
-%%%
 
-%% random delta for brownian steppers
-%% strange random delta <-- copied from radamsa,
-%% TODO: check for uniformity for Bit && rewrite
-rand_delta(_Rs) ->
-    Bit = owllisp:rand_bit(),
-    case Bit of
-        0 ->
-            +1;
-        _Else ->
-            -1
-    end.
-
-%% random delta with a slight positive bias
-rand_delta_up(_Rs) ->
-    Occ = owllisp:rand_occurs(?P_WEAKLY_USUALLY_NOM, ?P_WEAKLY_USUALLY_DENOM),
-    case Occ of
-        true ->
-            +1;
-        false ->
-            -1
-    end.
 
 %% quick peek if the data looks possibly binary
 %% quick stupid version: ignore UTF-8, look for high bits
@@ -73,6 +48,34 @@ edit_byte_vector(BVec, Edit_pos, Func) ->
 %%% Number Mutator
 %%%
 
+interesting_numbers() ->
+    lists:foldl(
+        fun (I, Acc) ->
+            X = 1 bsl I,
+            [X-1, X, X+1 | Acc]
+            end,
+        [],
+        [1, 7, 8, 15, 16, 31, 32, 63, 64, 127, 128]).
+
+mutate_num(Num) -> mutate_num(Num, erlamsa_rnd:rand(12)).
+
+mutate_num(Num, 0) -> Num + 1; %% in randamsa n + 1 which is exactly 1; Bug in Radamsa?
+mutate_num(Num, 1) -> Num - 1; %% in randamsa n - 1 which is exactly 0; Bug in Radamsa?
+mutate_num(_, 2) -> 0;
+mutate_num(_, 3) -> 1;
+mutate_num(_, N) when N > 2 andalso N < 7 -> erlamsa_rnd:rand_elem(interesting_numbers());
+mutate_num(Num, 7) -> Num + erlamsa_rnd:rand_elem(interesting_numbers());
+mutate_num(Num, 8) -> Num - erlamsa_rnd:rand_elem(interesting_numbers());
+mutate_num(Num, 9) -> Num - erlamsa_rnd:rand(Num*2); %% in radamsa n*2 which is exactly 18 (9*2); Bug in Radamsa?
+mutate_num(Num, _) ->
+    N = erlamsa_rnd:rand_range(1, 129),
+    L = erlamsa_rnd:rand_log(N),
+    S = erlamsa_rnd:rand(3),
+    case S of
+        0 -> Num - L;
+        _Else -> Num + L
+    end.
+
 get_num(Lst) -> get_num(Lst, 0, 0).
 
 get_num(<<>>, _, 0) -> {false, <<>>};
@@ -85,43 +88,43 @@ get_num(Lst, N, _) -> {N, Lst}.
 copy_range(Pos, Pos, Tail) -> Tail;
 copy_range(<<H:8,T/binary>>, End, Tail) -> NT = copy_range(T, End, Tail), <<H:8, NT/binary>>.
 
-mutate_a_num(Rs, <<>>, NFound) ->
-    Which = owllisp:rand(NFound),
-    {Rs, Which, <<>>};
-mutate_a_num(Rs, Lst = <<H:8, T/binary>>, NFound) ->
+mutate_a_num(<<>>, NFound) ->
+    Which = erlamsa_rnd:rand(NFound),
+    {Which, <<>>};
+mutate_a_num(Lst = <<H:8, T/binary>>, NFound) ->
     {ValP, LstP} = get_num(Lst),
     if
         ValP =/= false ->
-            {_RsN, Which, Tail} = mutate_a_num(Rs, LstP, NFound + 1),
+            {Which, Tail} = mutate_a_num(LstP, NFound + 1),
             case Which of
                 0 ->
-                    NewNum = shared:mutate_num(ValP),
+                    NewNum = mutate_num(ValP),
                     BinNewNum = list_to_bitstring(integer_to_list(NewNum)),
-                    {Rs, -1, shared:merge(BinNewNum, Tail)};
+                    {-1, erlamsa_utils:merge(BinNewNum, Tail)};
                 _Else ->
-                    {Rs, Which - 1, copy_range(Lst, LstP, Tail)}
+                    {Which - 1, copy_range(Lst, LstP, Tail)}
             end;
         true ->
-            {_RsN, Which, Tail} = mutate_a_num(Rs, T, NFound),
-            {Rs, Which, <<H:8, Tail/binary>>}
+            {Which, Tail} = mutate_a_num(T, NFound),
+            {Which, <<H:8, Tail/binary>>}
     end.
 
 
-sed_num(Rs, [H|T], Meta) ->
-    {Rs, N, Lst} = mutate_a_num(Rs, H, 0),
+sed_num([H|T], Meta) ->
+    {N, Lst} = mutate_a_num(H, 0),
     IsBin = binarish(Lst),
-    FlushedLst = shared:flush_bvecs(Lst, T),
+    FlushedLst = erlamsa_utils:flush_bvecs(Lst, T),
     if
         N =:= 0 ->
-            R = owllisp:rand(10), %% low priority negative, because could be textual with less frequent numbers
+            R = erlamsa_rnd:rand(10), %% low priority negative, because could be textual with less frequent numbers
             case R of
-                0 -> {fun sed_num/3, Rs, FlushedLst, [{muta_num, 1}|Meta], -1};
-                _Else -> {fun sed_num/3, Rs, FlushedLst, [{muta_num, 1}|Meta], 0}
+                0 -> {fun sed_num/2, FlushedLst, [{muta_num, 1}|Meta], -1};
+                _Else -> {fun sed_num/2, FlushedLst, [{muta_num, 1}|Meta], 0}
             end;
         IsBin =:= true ->
-            {fun sed_num/3, Rs, FlushedLst, [{muta_num, 1}|Meta], -1};
+            {fun sed_num/2, FlushedLst, [{muta_num, 1}|Meta], -1};
         true ->
-            {fun sed_num/3, Rs, FlushedLst, [{muta_num, 1}|Meta], +2}
+            {fun sed_num/2, FlushedLst, [{muta_num, 1}|Meta], +2}
     end.
 
 
@@ -130,10 +133,10 @@ sed_num(Rs, [H|T], Meta) ->
 %%%
 
 construct_sed_byte_muta(F, Name) ->
-    fun Self(Rs, [H|T], Meta) ->
-        P = owllisp:rand(byte_size(H)),
-        D = rand_delta(Rs),
-        {Self, Rs, [edit_byte_vector(H, P, F) | T], [{Name, D}|Meta], D}
+    fun Self([H|T], Meta) ->
+        P = erlamsa_rnd:rand(byte_size(H)),
+        D = erlamsa_rnd:rand_delta(),
+        {Self, [edit_byte_vector(H, P, F) | T], [{Name, D}|Meta], D}
     end.
 
 construct_sed_byte_drop() ->  %% drop byte
@@ -151,9 +154,8 @@ construct_sed_byte_repeat() ->  %% repeat a byte
 construct_sed_byte_flip() ->  %% flip a bit in a byte
     construct_sed_byte_muta(
         fun (B) -> 
-            Flip = owllisp:rand(8),
+            Flip = erlamsa_rnd:rand(8),
             Mask = 1 bsl Flip,
-            % shared:debug("Flipping byte...", {Flip, Mask, B, B bxor Mask}),
             C = B bxor Mask, 
             <<C:8>> 
         end, byte_flip).
@@ -161,14 +163,14 @@ construct_sed_byte_flip() ->  %% flip a bit in a byte
 construct_sed_byte_insert() ->  %% insert a byte
     construct_sed_byte_muta(
         fun (B) -> 
-            NewByte = owllisp:rand(256),
+            NewByte = erlamsa_rnd:rand(256),
             <<NewByte:8, B:8>> 
         end, byte_insert).
 
 construct_sed_byte_random() ->  %% swap a byte with a random one
     construct_sed_byte_muta(
         fun (_B) -> 
-            NewByte = owllisp:rand(256),
+            NewByte = erlamsa_rnd:rand(256),
             <<NewByte:8>> 
         end, byte_swap_random).
 
@@ -180,20 +182,20 @@ construct_sed_byte_random() ->  %% swap a byte with a random one
 %% WARNING && TODO: this impementation is DIRTY and not as effective as Radamsa
 construct_sed_bytes_muta(F, Name) ->
     fun 
-    Self(Rs, [<<>>|BTail], Meta) -> 
-        {Rs, BTail, [{Name, -1}|Meta], -1};
-    Self(Rs, [BVec|BTail], Meta) ->
+    Self([<<>>|BTail], Meta) -> 
+        {Self, BTail, [{Name, -1}|Meta], -1};
+    Self([BVec|BTail], Meta) ->
         BSize = byte_size(BVec),
-        S = owllisp:rand(BSize), 
-        L = owllisp:rand_range(1, BSize - S + 1),  %% FIXME: here any (min 2), in radamsa 20: fixme: magic constant, should use something like repeat-len
+        S = erlamsa_rnd:rand(BSize), 
+        L = erlamsa_rnd:rand_range(1, BSize - S + 1),  %% FIXME: here any (min 2), in radamsa 20: fixme: magic constant, should use something like repeat-len
                                                    %% ^^ check may be max(20, ...) with "MAGIX" could be MORE effective
                                                    %% TODO: make this interval more random...?
         H_bits = S*8,
         P_bits = L*8, 
         <<H:H_bits, P:P_bits, T/binary>> = BVec,      
         C = F(<<H:H_bits>>, <<P:P_bits>>, T, BTail),
-        D = rand_delta(Rs),
-        {Self, Rs, C, [{Name, D}|Meta], D}
+        D = erlamsa_rnd:rand_delta(),
+        {Self, C, [{Name, D}|Meta], D}
     end.
 
 
@@ -202,7 +204,7 @@ construct_sed_bytes_perm() -> %% permute a few bytes
     construct_sed_bytes_muta(
         fun (H, Bs, T, BTail) -> 
             C = list_to_binary(
-            owllisp:random_permutation(
+            erlamsa_rnd:random_permutation(
                 binary_to_list(Bs))),
             [<<H/binary, C/binary, T/binary>> | BTail]
         end, seq_perm).
@@ -210,7 +212,7 @@ construct_sed_bytes_perm() -> %% permute a few bytes
 construct_sed_bytes_repeat() -> %% repeat a seq
     construct_sed_bytes_muta(
         fun (H, Bs, T, BTail) ->            
-            N = max(2, owllisp:rand_log(10)), %% max 2^10 = 1024 stuts
+            N = max(2, erlamsa_rnd:rand_log(10)), %% max 2^10 = 1024 stuts
             %% !FIXME: !WARNING: Below is VERY INEFFECTIVE CODE, just working sketch, may be need to optimize?            
             C = list_to_binary([Bs || _ <- lists:seq(1,N)]),
             Res = [<<H/binary, C/binary ,T/binary>> | BTail],
@@ -239,7 +241,7 @@ lines([H|T], Buff, Out) -> lines(T, [H | Buff], Out).
 unlines(Lst) ->
     lists:foldl(fun (X, Acc) -> C = list_to_binary(X), <<Acc/binary, C/binary>> end, <<>>, Lst).
 
-%% #u8[byte ...] → ((byte ... 10) ...) | #false, if this doesn't look like line-based text data
+%% #u8[byte ...] -> ((byte ... 10) ...) | #false, if this doesn't look like line-based text data
 %% TODO: ugly code, need a bit refactor
 try_lines(Bvec) ->
     Ls = lines(Bvec),
@@ -251,30 +253,30 @@ try_lines(Bvec) ->
     end.
 
 construct_line_muta(Op, Name) ->
-    fun Self(Rs, Ll = [H|T], Meta) ->
+    fun Self(Ll = [H|T], Meta) ->
         Ls = try_lines(H),        
         if
             Ls =:= false ->
-                {Self, Rs, Ll, Meta, -1};
+                {Self, Ll, Meta, -1};
             true ->
                 MLs = Op(Ls, length(Ls)), % calc length only once
                 NH = unlines(MLs),
-                {Self, Rs, [NH | T], [{Name, 1}|Meta], 1} 
+                {Self, [NH | T], [{Name, 1}|Meta], 1} 
         end
     end. 
 
 %% state is (n <line> ...)
 construct_st_line_muta(Op, Name, InitialState) ->
-    fun (Rs, Ll = [H|T], Meta) ->
+    fun (Ll = [H|T], Meta) ->
         Ls = try_lines(H),
         if
             Ls =:= false ->
                 {construct_st_line_muta(Op, Name, InitialState), 
-                    Rs, Ll, Meta, -1};
+                    Ll, Meta, -1};
             true ->
                 {Stp, NewLs} = Op(InitialState, Ls), 
                 {construct_st_line_muta(Op, Name, Stp), 
-                    Rs, [unlines(NewLs) | T], [{Name, 1} | Meta], 1} 
+                    [unlines(NewLs) | T], [{Name, 1} | Meta], 1} 
         end
     end.
 
@@ -283,11 +285,11 @@ construct_st_line_muta(Op, Name, InitialState) ->
 %%
 
 %% (a b ...) -> (a+a b ...)
-sed_fuse_this(Rs, [H|T], Meta) -> % jump between two shared suffixes in the block
+sed_fuse_this([H|T], Meta) -> % jump between two shared suffixes in the block
     Lst = binary_to_list(H),    
-    B = list_to_binary(fuse:fuse(Lst, Lst)),
-    D = rand_delta(Rs),
-    {fun sed_fuse_this/3, Rs, [B | T], [{fuse_this, D}|Meta], D}.
+    B = list_to_binary(erlamsa_fuse:fuse(Lst, Lst)),
+    D = erlamsa_rnd:rand_delta(),
+    {fun sed_fuse_this/2, [B | T], [{fuse_this, D}|Meta], D}.
 
 
 %% split list into two halves
@@ -303,40 +305,40 @@ walk(T, [_Head|Tail], Acc) when Tail =:= [] ->
 walk([A|B], [_Head|Tail], Acc) ->
     walk(B, tl(Tail), [A | Acc]).
 
-sed_fuse_next(Rs, [H|T], Meta) ->
+sed_fuse_next([H|T], Meta) ->
     {Al1, Al2} = split(binary_to_list(H)),
-    {B, Ll} = owllisp:uncons(T, H), % next or current
+    {B, Ll} = erlamsa_utils:uncons(T, H), % next or current
     Bl = binary_to_list(B),
     Abl = fuse:fuse(Al1, Bl),
     Abal = fuse:fuse(Abl, Al2),
-    D = rand_delta(Rs),
-    {fun sed_fuse_next/3, Rs, 
-        shared:flush_bvecs(list_to_binary(Abal), Ll), %  <- on avg 1x, max 2x block sizes
+    D = erlamsa_rnd:rand_delta(),
+    {fun sed_fuse_next/2,  
+        erlamsa_utils:flush_bvecs(list_to_binary(Abal), Ll), %  <- on avg 1x, max 2x block sizes
         [{fuse_next, D}|Meta], D}.
 
 
 remember(Block) ->
-    fun (Rs, [H|T], Meta) -> 
+    fun ([H|T], Meta) -> 
         %% TODO: Check -- in radamsa here using owllisp halve instead of split
         {Al1, Al2} = split(binary_to_list(H)),
         {Ol1, Ol2} = split(binary_to_list(Block)),
         A = fuse:fuse(Al1, Ol1), % a -> o
         B = fuse:fuse(Ol2, Al2), % o -> a
-        Swap = owllisp:rand(3),
-        D = rand_delta(Rs),
+        Swap = erlamsa_rnd:rand(3),
+        D = erlamsa_rnd:rand_delta(),
         NewBlock = case Swap of
                      0 -> H;
                      _Else -> Block
                  end,
-        {remember(NewBlock), Rs, 
-            shared:flush_bvecs(list_to_binary(A), % <- on avg 1x, max 2x block sizes
-                 shared:flush_bvecs(list_to_binary(B), T)), 
+        {remember(NewBlock),  
+            erlamsa_utils:flush_bvecs(list_to_binary(A), % <- on avg 1x, max 2x block sizes
+                 erlamsa_utils:flush_bvecs(list_to_binary(B), T)), 
             [{fuse_old, D}|Meta], D}
     end.
 
- sed_fuse_old(Rs, Ll = [H|_], Meta) ->
+ sed_fuse_old(Ll = [H|_], Meta) ->
      R = remember(H),
-     R(Rs, Ll, Meta).
+     R(Ll, Meta).
 
 
 %%
@@ -364,7 +366,7 @@ texty_enough([H|T], N) ->
 flush_type_node(Type, Bytes, Chunks) ->    
     [[Type | lists:reverse(Bytes)] | Chunks].
 
-%% (byte ..) → (node ...)
+%% (byte ..) -> (node ...)
 %%  node = #(byte bytes...) | #(text bytes) | #(delimited byte (byte ...) byte)
 string_lex(Lst) -> string_lex_step(Lst, [], []).
 
@@ -457,11 +459,11 @@ delimeters() ->
      "\\", [10], [13], [9], " ", "`", [0], "]", "[", ">", "<"].
     
 random_badness() ->
-    random_badness(owllisp:rand(20) + 1, []).
+    random_badness(erlamsa_rnd:rand(20) + 1, []).
 
 random_badness(0, Out) -> Out;
 random_badness(N, Out) ->
-    X = owllisp:rand_elem(silly_strings()),
+    X = erlamsa_rnd:rand_elem(silly_strings()),
     random_badness(N - 1, X ++ Out).
 
 overwrite([], Old) -> Old;
@@ -471,7 +473,7 @@ overwrite([H|T], Old) ->
     [H | overwrite(T, Old)].
 
 rand_as_count() ->
-    Type = owllisp:rand(11),
+    Type = erlamsa_rnd:rand(11),
     case Type of
         0 -> 127;
         1 -> 128;
@@ -483,7 +485,7 @@ rand_as_count() ->
         7 -> 32768;
         8 -> 65535;
         9 -> 65536;
-        _Else -> owllisp:rand(1024)        
+        _Else -> erlamsa_rnd:rand(1024)        
     end.
 
 push_as(0, Tail)
@@ -492,36 +494,36 @@ push_as(N, Tail) ->
     push_as(N - 1, [97 | Tail]).
 
 mutate_text_data(Lst, TxtMutators) ->
-    mutate_text(owllisp:rand_elem(TxtMutators), Lst).
+    mutate_text(erlamsa_rnd:rand_elem(TxtMutators), Lst).
 
 %% insert badness
 mutate_text(insert_badness, []) -> random_badness(); %% empty list -- just insert random
 mutate_text(insert_badness, Lst) ->
-    P = owllisp:erand(length(Lst)), % in erlang lists starts from 1
+    P = erlamsa_rnd:erand(length(Lst)), % in erlang lists starts from 1
     Bad = random_badness(),
-    owllisp:led(Lst, P, fun (X) -> [X|Bad]  end); % in radamsa Bad ++ [X], optimized here
+    erlamsa_utils:applynth(P, Lst, fun(E, R) -> Bad ++ [E|R] end); %% TODO: check before or after E, in radamsa Bad ++ [X],
 %% replace badness
 mutate_text(replace_badness, []) -> random_badness(); %% empty list -- just replace with random
 mutate_text(replace_badness, Lst) ->
-    P = owllisp:erand(length(Lst)), % in erlang lists starts from 1
+    P = erlamsa_rnd:erand(length(Lst)), % in erlang lists starts from 1
     Bad = random_badness(),
     lists:sublist(Lst, P - 1) ++ overwrite(lists:nthtail(P, Lst), Bad);
 %% insert as
 mutate_text(insert_aaas, []) -> push_as(rand_as_count(), []); %% empty list -- just insert random
 mutate_text(insert_aaas, Lst) ->
     N = rand_as_count(),
-    P = owllisp:erand(length(Lst)), % in erlang lists starts from 1    
+    P = erlamsa_rnd:erand(length(Lst)), % in erlang lists starts from 1    
     lists:sublist(Lst, P - 1) ++ push_as(N, lists:nthtail(P, Lst));
 %% insert null
 mutate_text(insert_null, Lst) ->
     Lst ++ [0];
 %% insert delimeter
-mutate_text(insert_delimeter, []) -> [owllisp:rand_elem(delimeters())]; %% empty list -- just insert random
+mutate_text(insert_delimeter, []) -> [erlamsa_rnd:rand_elem(delimeters())]; %% empty list -- just insert random
 mutate_text(insert_delimeter, Lst) ->
-    P = owllisp:erand(length(Lst)), % in erlang lists starts from 1
-    Bad = owllisp:rand_elem(delimeters()),
-    owllisp:led(Lst, P, fun (X) -> [X|Bad]  end).
-
+    P = erlamsa_rnd:erand(length(Lst)), % in erlang lists starts from 1
+    Bad = erlamsa_rnd:rand_elem(delimeters()),
+    erlamsa_utils:applynth(P, Lst, fun(E, R) -> Bad ++ [E|R] end). %% TODO: check before or after E
+    
 
 %% Generic ASCII Bad mutation
 %% In Radamsa, this function will work only if Cs started as string
@@ -530,32 +532,33 @@ mutate_text(insert_delimeter, Lst) ->
 %% TODO: WARN: Ineffective, need rewrite/optimize
 string_generic_mutate(Cs, _, L, R) when R > L/4 -> Cs;
 string_generic_mutate(Cs, TxtMutators, L, R) ->
-    P = owllisp:erand(L), % in erlang, list is beginning from index 1
+    P = erlamsa_rnd:erand(L), % in erlang, list is beginning from index 1
     El = lists:nth(P, Cs),
     case El of 
         [text|Bs] -> 
-            owllisp:led(Cs, P, fun (_X) -> [[text | mutate_text_data(Bs, TxtMutators)]] end); % [Node]
+            Data = mutate_text_data(Bs, TxtMutators),
+            erlamsa_utils:applynth(P, Cs, fun(_E, Rest) -> [[text | Data] | Rest] end);  % [Node]
         [byte|_Bs] ->
             string_generic_mutate(Cs, TxtMutators, L, R + 1);
         [delimited, {Left, Bs, Right}] ->
-            generic:applynth(P, Cs, fun (_E, Rest) -> [[delimited, {Left, mutate_text_data(Bs, TxtMutators), Right}]] ++ Rest end)
+            erlamsa_utils:applynth(P, Cs, fun (_E, Rest) -> [[delimited, {Left, mutate_text_data(Bs, TxtMutators), Right}]] ++ Rest end)
     end. 
 
 construct_ascii_mutator(Fun, Name) ->
-    fun Ascii_mutator (Rs, Ll = [H|T], Meta) -> 
+    fun Ascii_mutator (Ll = [H|T], Meta) -> 
         Data = binary_to_list(H),
         Cs = string_lex(Data),
 
         case stringy(Cs) of % in radamsa stringy_length
             true ->   % do something bad...
                 Ms = Fun(Cs),
-                D = rand_delta(Rs),        
+                D = erlamsa_rnd:rand_delta(),        
                 BinData = list_to_binary(string_unlex(Ms)),
-                {Ascii_mutator, Rs,
+                {Ascii_mutator, 
                     [BinData | T], 
                     [{Name, D}|Meta], D};
             false ->  % not a string at all (even 1 node), skipping
-                {Ascii_mutator, Rs, Ll, Meta, -1} 
+                {Ascii_mutator, Ll, Meta, -1} 
         end
     end.
 
@@ -581,15 +584,17 @@ drop_delimeter(_, El) -> % drop none
 %% Play with delimeters
 string_delimeter_mutate(Cs, L, R) when R > L/4 -> Cs;
 string_delimeter_mutate(Cs, L, R) ->
-    P = owllisp:erand(L), % in erlang, list is beginning from index 1
+    P = erlamsa_rnd:erand(L), % in erlang, list is beginning from index 1
     El = lists:nth(P, Cs),
     case El of 
         [text|Bs] -> %% insert or drop special delimeter(s)
-            owllisp:led(Cs, P, fun (_X) -> [[text | mutate_text_data(Bs, [insert_delimeter])]] end); % [Node]
+            Data = mutate_text_data(Bs, [insert_delimeter]),
+            erlamsa_utils:applynth(P, Cs, fun(_E, Rest) -> [[text | Data]|Rest] end); % [Node]            
         [byte|_Bs] -> %% do nothing
             string_delimeter_mutate(Cs, L, R + 1);
         [delimited, {_Left, _Bs, _Right}] ->
-            owllisp:led(Cs, P, fun (_X) -> [drop_delimeter(owllisp:rand(4), El)] end)
+            Drop = drop_delimeter(erlamsa_rnd:rand(4), El),
+            erlamsa_utils:applynth(P, Cs, fun(_E, Rest) -> [Drop|Rest] end)
     end.
 
 construct_ascii_delimeter_mutator() ->    
@@ -656,12 +661,12 @@ sublists([H|T], Found) when is_list(H) ->
 sublists([_H|T], Found) ->
     sublists(T, Found).
 
-pick_sublist(_Rs, Lst) ->
+pick_sublist(Lst) ->
     Subs = sublists(Lst),
     case Subs of
         [] -> false;
         _Else ->
-            owllisp:rand_elem(Subs) %% TODO: FIXME: CHECK IF it's correct!
+            erlamsa_rnd:rand_elem(Subs) %% TODO: FIXME: CHECK IF it's correct!
     end.
 
 %% replace the node (sub . tail) with (op (sub . tail))
@@ -673,7 +678,7 @@ edit_sublist(Lst, _Sub, _Op) -> Lst.
 
 %% lst (ff of node -> (node -> node)) -> lst' ; <- could also be done with a recursive-mapn
 edit_sublists([Hd|T], OpFF) when is_list(Hd) -> 
-    MaybeOp = owllisp:get(Hd, false, OpFF),
+    MaybeOp = erlamsa_utils:get(Hd, false, OpFF),
     case MaybeOp of
         false -> 
             [edit_sublists(Hd, OpFF) | edit_sublists(T, OpFF)];
@@ -710,15 +715,15 @@ flatten(Node, Tl) ->
     [Node | Tl].
 
 sed_tree_op(Op, Name) ->
-    fun F (Rs, Ll = [H|T], Meta) ->
+    fun F (Ll = [H|T], Meta) ->
         case binarish(H) of
-            true -> {F, Rs, Ll, Meta, -1};
+            true -> {F, Ll, Meta, -1};
             false -> 
                 NewMeta = [{Name, 1} | Meta],
                 Lst = partial_parse(binary_to_list(H)),
-                Sub = pick_sublist(Rs, Lst), %% choose partially parsed node to mutate ;; fixme: not checked for F
+                Sub = pick_sublist(Lst), %% choose partially parsed node to mutate ;; fixme: not checked for F
                 NewLst = edit_sublist(Lst, Sub, Op),
-                {F, Rs, [list_to_binary(flatten(NewLst, [])) | T], NewMeta, 1}
+                {F, [list_to_binary(flatten(NewLst, [])) | T], NewMeta, 1}
         end    
     end.
 
@@ -730,32 +735,32 @@ sed_tree_del() ->
 
 %% overwrite one node with one of the others
 sed_tree_swap_one(Lst, Subs) ->
-    ToSwap = owllisp:reservoir_sample(Subs, 2),
-    [A | [B | _]] = owllisp:random_permutation(ToSwap),
+    ToSwap = erlamsa_rnd:reservoir_sample(Subs, 2),
+    [A | [B | _]] = erlamsa_rnd:random_permutation(ToSwap),
     edit_sublist(Lst, A, fun ([_|Tl]) -> [B | Tl] end).
 
 %% pairwise swap of two nodes
 %% TODO: here there is a bug (also in original radamsa) that causes to swap child with the parent node, could be feature xD
 sed_tree_swap_two(Lst, Subs) ->
-    ToSwap = owllisp:reservoir_sample(Subs, 2),
+    ToSwap = erlamsa_rnd:reservoir_sample(Subs, 2),
     [A | [B | _]] = ToSwap,
     Mapping = gb_trees:enter(B, fun(_X) -> A end, gb_trees:enter(A, fun (_X) -> B end, gb_trees:empty())),    
     edit_sublists(Lst, Mapping).
 
 
 construct_sed_tree_swap(Op, Name) ->
-    fun F (Rs, Ll = [H|T], Meta) ->
+    fun F (Ll = [H|T], Meta) ->
         case binarish(H) of
-            true -> {F, Rs, Ll, Meta, -1};
+            true -> {F, Ll, Meta, -1};
             false -> 
                 Lst = partial_parse(binary_to_list(H)),
                 Subs = sublists(Lst),
                 N = length(Subs),
                 case N < 2 of
-                    true -> {F, Rs, Ll, Meta, -1};
+                    true -> {F, Ll, Meta, -1};
                     false ->
                         NewLst = Op(Lst, Subs),
-                        {F, Rs, [list_to_binary(flatten(NewLst, [])) | T], [{Name, 1} | Meta], 1}
+                        {F, [list_to_binary(flatten(NewLst, [])) | T], [{Name, 1} | Meta], 1}
                 end
         end
     end.
@@ -772,32 +777,32 @@ choose_child(Node) ->
     Subs = sublists(Node),
     case Subs of 
         [] -> false;
-        _Else -> owllisp:rand_elem(Subs)
+        _Else -> erlamsa_rnd:rand_elem(Subs)
     end.
 
-choose_stutr_nodes(_Rs, []) -> {false, false}; %% no child nodes
-choose_stutr_nodes(Rs, [H|T]) ->
+choose_stutr_nodes([]) -> {false, false}; %% no child nodes
+choose_stutr_nodes([H|T]) ->
     Childp = choose_child(H),
     case Childp of
-        false -> choose_stutr_nodes(Rs, T);
+        false -> choose_stutr_nodes(T);
         _Else -> {H, Childp}
     end.
 
-sed_tree_stutter(Rs, Ll = [H|T], Meta) ->
+sed_tree_stutter(Ll = [H|T], Meta) ->
     case binarish(H) of
-        true -> {fun sed_tree_stutter/3, Rs, Ll, Meta, -1};
+        true -> {fun sed_tree_stutter/2, Ll, Meta, -1};
         false -> 
             Lst = partial_parse(binary_to_list(H)), %% (byte|node ...)
             Subs = sublists(Lst),
-            RandSubs = owllisp:random_permutation(Subs),
-            {Parent, Child} = choose_stutr_nodes(Rs, RandSubs),
-            N_reps = owllisp:rand_log(10),
+            RandSubs = erlamsa_rnd:random_permutation(Subs),
+            {Parent, Child} = choose_stutr_nodes(RandSubs),
+            N_reps = erlamsa_rnd:rand_log(10),
             case Parent of 
-                false -> {fun sed_tree_stutter/3, Rs, Ll, Meta, -1};
+                false -> {fun sed_tree_stutter/2, Ll, Meta, -1};
                 _Else ->
                     NewLst = edit_sublist(Lst, Child, 
                             fun ([_H|Tl]) -> [repeat_path(Parent, Child, N_reps)|Tl] end),
-                    {fun sed_tree_stutter/3, Rs, 
+                    {fun sed_tree_stutter/2, 
                         [list_to_binary(flatten(NewLst, [])) | T], 
                         [{tree_stutter, 1} | Meta], 1}
             end
@@ -856,21 +861,21 @@ funny_unicode() ->
                 end, [], Codes), 
     Manual ++ lists:map(fun (X) -> encode_point(X) end, Numbers).
 
-sed_utf8_widen(Rs, [H|T], Meta) ->    
-    P = owllisp:rand(size(H)),
-    D = rand_delta(Rs),
-    {fun sed_utf8_widen/3, Rs, 
+sed_utf8_widen([H|T], Meta) ->    
+    P = erlamsa_rnd:rand(size(H)),
+    D = erlamsa_rnd:rand_delta(),
+    {fun sed_utf8_widen/2, 
      [edit_byte_vector(H, P, 
         fun (B) when B =:= B band 2#111111 -> N = B bor 2#10000000, <<2#11000000:8, N:8>>;
             (B) -> <<B:8>>
         end)
       | T], [{sed_utf8_widen, D}|Meta], D}.
 
-sed_utf8_insert(Rs, [H|T], Meta) ->    
-    P = owllisp:rand(size(H)),
-    D = rand_delta(Rs),
-    Bin = list_to_binary(owllisp:rand_elem(funny_unicode())),
-    {fun sed_utf8_insert/3, Rs, 
+sed_utf8_insert([H|T], Meta) ->    
+    P = erlamsa_rnd:rand(size(H)),
+    D = erlamsa_rnd:rand_delta(),
+    Bin = list_to_binary(erlamsa_rnd:rand_elem(funny_unicode())),
+    {fun sed_utf8_insert/2, 
      [edit_byte_vector(H, P, 
         fun (B) -> <<B:8, Bin/binary>> end)
       | T], [{sed_utf8_insert, D}|Meta], D}.
@@ -887,8 +892,7 @@ adjust_priority(Pri, Delta) ->
 %% [{Score, Priority, _, _}, ...] -> [{Rand(S*P), {...}}, ...] -> sort -> [{...}, ...]
 weighted_permutations([]) -> [];
 weighted_permutations(Pris) ->
-    shared:debug("weighted-permutations", Pris),
-    PPris = lists:map(fun (X = {S, P, _, _}) -> {owllisp:rand(S*P), X} end, Pris),
+    PPris = lists:map(fun (X = {S, P, _, _}) -> {erlamsa_rnd:rand(S*P), X} end, Pris),
     SPPris = lists:sort(fun ({A,_},{B,_}) -> A>=B end, PPris),
     lists:map(fun ({_, X}) -> X end, SPPris).
 
@@ -897,72 +901,67 @@ weighted_permutations(Pris) ->
 
 %% (#(score priority mutafn name) ...) -> merged-mutafn :: rs ll meta -> merged-mutafn' rs' ll' meta'
 mux_fuzzers(Fs) ->
-    shared:debug("calling mux-fuzzer with ", Fs),
-    fun L(Rs, [], Meta) -> {mux_fuzzers(Fs), Rs, <<>>, Meta};
-        L(Rs, Ll, Meta) when is_list(Ll) ->
-            shared:debug("calling mux-fuzzers-loop with ", {Ll, weighted_permutations(Fs), [], Rs, Meta}),
-            mux_fuzzers_loop(Ll, weighted_permutations(Fs), [], Rs, Meta) ;
-        L(Rs, Ll, Meta) -> L(Rs, Ll(), Meta) %% TODO: strange behaviour
+    fun L([], Meta) -> {mux_fuzzers(Fs), <<>>, Meta};
+        L(Ll, Meta) when is_list(Ll) ->
+            mux_fuzzers_loop(Ll, weighted_permutations(Fs), [], Meta) ;
+        L(Ll, Meta) -> L(Ll(), Meta) %% TODO: strange behaviour
     end.
 
-mux_fuzzers_loop(Ll, [], Out, Rs, Meta) -> {mux_fuzzers(Out), Rs, Ll, Meta};
-mux_fuzzers_loop(Ll, [Node|Tail], Out, Rs, Meta) ->
+mux_fuzzers_loop(Ll, [], Out, Meta) -> {mux_fuzzers(Out), Ll, Meta};
+mux_fuzzers_loop(Ll, [Node|Tail], Out, Meta) ->
     {Mscore, MPri, Fn, Mname} = Node,
-    shared:debug("mux-fuzzers-loop calling mutation: ", Node),
-    Res = Fn(Rs, Ll, Meta),
-    shared:debug("Res:", Res),
-    {MFn, RsN, Mll, MMeta, Delta} = Res, %% in radamsa (mfn rs mll mmeta delta) = Fn(...), that strange, TODO: check it
-    shared:debug("mux-fuzzers-loop /calling mutation: ", {MFn, RsN, Mll, MMeta, Delta}),
+    Res = Fn(Ll, Meta),
+    {MFn, Mll, MMeta, Delta} = Res, %% in radamsa (mfn rs mll mmeta delta) = Fn(...), that strange, TODO: check it
     NOut = [{adjust_priority(Mscore, Delta), MPri, MFn, Mname} | Out], %% in radamsa mfn instead of fn
-    IsMllPair = owllisp:is_pair(Mll),
+    IsMllPair = erlamsa_utils:is_pair(Mll),
     IsHEq = (hd(Mll) == hd(Ll)),
     if
-        IsMllPair andalso IsHEq -> mux_fuzzers_loop(Ll, Tail, NOut, RsN, MMeta);
-        true -> shared:stderr_probe({used, Mname}, {mux_fuzzers(NOut ++ Tail), RsN, Mll, MMeta})
+        IsMllPair andalso IsHEq -> mux_fuzzers_loop(Ll, Tail, NOut, MMeta);
+        true -> erlamsa_utils:stderr_probe({used, Mname}, {mux_fuzzers(NOut ++ Tail), Mll, MMeta})
     end.
 
 %% default mutations list
-default_mutations() -> [{10, 1, fun sed_num/3, num},
-                        {10, 1, fun sed_utf8_widen/3, uw},
-                        {10, 1, fun sed_utf8_insert/3, ui},
+default_mutations() -> [%{10, 1, fun sed_num/2, num},
+                        %{10, 1, fun sed_utf8_widen/2, uw},
+                        %{10, 1, fun sed_utf8_insert/2, ui},
                         {10, 1, construct_ascii_bad_mutator(), ab},
-                        {10, 1, construct_ascii_delimeter_mutator(), ad},
-                        {10, 1, sed_tree_dup(), tr2},
-                        {10, 1, sed_tree_del(), td},
-                        {10, 1, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1},
-                        {10, 1, construct_st_line_muta(fun generic:st_list_ins/2, list_ins, [0]), lis},
-                        {10, 1, construct_st_line_muta(fun generic:st_list_replace/2, list_replace, [0]), lrs},
-                        {10, 1, fun sed_tree_stutter/3, tr},
-                        {10, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2},
-                        {10, 1, construct_sed_byte_drop(), bd},
-                        {10, 1, construct_sed_byte_inc(), bei},
-                        {10, 1, construct_sed_byte_dec(), bed},
-                        {10, 1, construct_sed_byte_flip(), bf},
-                        {10, 1, construct_sed_byte_insert(), bi},
-                        {10, 1, construct_sed_byte_random(), ber},
-                        {10, 1, construct_sed_byte_repeat(), br},
-                        {10, 1, construct_sed_bytes_perm(), sp},
-                        {10, 1, construct_sed_bytes_repeat(), sr},
-                        {10, 1, construct_sed_bytes_drop(), sd},
-                        {10, 1, construct_line_muta(fun generic:list_del/2, line_del), ld},
-                        {10, 1, construct_line_muta(fun generic:list_del_seq/2, line_del_seq), lds},
-                        {10, 1, construct_line_muta(fun generic:list_dup/2, line_dup), lr2},
-                        {10, 1, construct_line_muta(fun generic:list_clone/2, line_clone), lri},
-                        {10, 1, construct_line_muta(fun generic:list_repeat/2, line_repeat), lr},
-                        {10, 1, construct_line_muta(fun generic:list_swap/2, line_swap), ls},
-                        {10, 1, construct_line_muta(fun generic:list_perm/2, line_perm), lp},
-                        {10, 1, fun sed_fuse_this/3, ft},
-                        {10, 1, fun sed_fuse_next/3, fn},
-                        {10, 1, fun sed_fuse_old/3, fo}].
+                        {10, 1, construct_ascii_delimeter_mutator(), ad}].%,
+                        % {10, 1, sed_tree_dup(), tr2},
+                        % {10, 1, sed_tree_del(), td},
+                        % {10, 1, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1},
+                        % {10, 1, construct_st_line_muta(fun erlamsa_generic:st_list_ins/2, list_ins, [0]), lis},
+                        % {10, 1, construct_st_line_muta(fun erlamsa_generic:st_list_replace/2, list_replace, [0]), lrs},
+                        % {10, 1, fun sed_tree_stutter/2, tr},
+                        % {10, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2},
+                        % {10, 1, construct_sed_byte_drop(), bd},
+                        % {10, 1, construct_sed_byte_inc(), bei},
+                        % {10, 1, construct_sed_byte_dec(), bed},
+                        % {10, 1, construct_sed_byte_flip(), bf},
+                        % {10, 1, construct_sed_byte_insert(), bi},
+                        % {10, 1, construct_sed_byte_random(), ber},
+                        % {10, 1, construct_sed_byte_repeat(), br},
+                        % {10, 1, construct_sed_bytes_perm(), sp},
+                        % {10, 1, construct_sed_bytes_repeat(), sr},
+                        % {10, 1, construct_sed_bytes_drop(), sd},
+                        % {10, 1, construct_line_muta(fun erlamsa_generic:list_del/2, line_del), ld},
+                        % {10, 1, construct_line_muta(fun erlamsa_generic:list_del_seq/2, line_del_seq), lds},
+                        % {10, 1, construct_line_muta(fun erlamsa_generic:list_dup/2, line_dup), lr2},
+                        % {10, 1, construct_line_muta(fun erlamsa_generic:list_clone/2, line_clone), lri},
+                        % {10, 1, construct_line_muta(fun erlamsa_generic:list_repeat/2, line_repeat), lr},
+                        % {10, 1, construct_line_muta(fun erlamsa_generic:list_swap/2, line_swap), ls},
+                        % {10, 1, construct_line_muta(fun erlamsa_generic:list_perm/2, line_perm), lp},
+                        % {10, 1, fun sed_fuse_this/2, ft},
+                        % {10, 1, fun sed_fuse_next/2, fn},
+                        % {10, 1, fun sed_fuse_old/2, fo}].
 
 %% randomize mutator scores
-mutators_mutator(Rs, Mutas) ->
-    mutators_mutator(Rs, Mutas, []).
+mutators_mutator(Mutas) ->
+    mutators_mutator(Mutas, []).
 
-mutators_mutator(Rs, [], Out) ->
-    {Rs, mux_fuzzers(Out)};
-mutators_mutator(Rs, [{_, Pri, F, Name}|T], Out) ->
-    N = owllisp:rand(?MAX_SCORE),
-    mutators_mutator(Rs, T, [{max(2, N), Pri, F, Name} | Out]).
+mutators_mutator([], Out) ->
+    mux_fuzzers(Out);
+mutators_mutator([{_, Pri, F, Name}|T], Out) ->
+    N = erlamsa_rnd:rand(?MAX_SCORE),
+    mutators_mutator(T, [{max(2, N), Pri, F, Name} | Out]).
 
 

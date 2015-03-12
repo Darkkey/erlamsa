@@ -5,55 +5,23 @@
 %%%
 %%% @end
 %%%-------------------------------------------------------------------
--module(owllisp).
+-module(erlamsa_rnd).
 -author("dark_k3y").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+-compile([export_all]).
 -endif.
 
 %% API
--compile([export_all]).
--export([]).
+-export([rand/1, erand/1, rand_float/0, rand_bit/0, rand_occurs/1, 
+		rand_nbit/1, rand_log/1, rand_elem/1, random_block/1, 
+		random_numbers/2, random_permutation/1, rand_range/2,
+		reservoir_sample/2, rand_delta/0, rand_delta_up/0]).
 
-%% l -> hd l' | error
-uncons([L|T], _) -> {L, T};
-uncons([], D) -> {D, []};
-uncons(B, _) when is_binary(B) -> {B, []};
-uncons(L, D) when is_function(L) -> uncons(L(), D).
-
-%% extract function value
-extract_function([X]) -> extract_function(X); %% <-- may be ambigious
-extract_function(X) when is_function(X) -> extract_function(X());
-extract_function(X) -> X.
-
-%% forcing ll def
-forcell([]) -> [];
-forcell([H|T]) -> [H | forcell(T)];
-forcell(X) when is_function(X) -> X().
-
-%% get an element by key from gb_tree, return DefaulrValue if none exists
-get(Key, DefaultValue, Tree) ->
-    case gb_trees:lookup(Key, Tree) of
-        {value, Value} -> Value;
-        none -> DefaultValue
-    end.
-
-%% last member find
-last(L) when is_list(L) -> last(lists:last(L));
-%% last(F) when is_function(F) -> shared:debug(F()), last(F);
-last(X) -> X.
-
-%% apply function to list element at position N
-%% Fun MUST return list!
-%% WARN: TODO: Ugly, need rewrite
-led(L, Pos, Fun) ->
-    % io:write({L, Pos, Fun, lists:sublist(L, Pos - 1), Fun(lists:nth(Pos,L)), lists:nthtail(Pos,L)}),
-    lists:sublist(L, Pos - 1) ++ Fun(lists:nth(Pos,L)) ++ lists:nthtail(Pos,L).
-
-%% check if pair
-is_pair([_ | T]) when T =/= [] -> true;
-is_pair(_) -> false.
+%% Constants
+-define(P_WEAKLY_USUALLY_NOM, 11).
+-define(P_WEAKLY_USUALLY_DENOM, 20).
 
 %% common GCD (uneffective!)
 gcd(A, 0) -> A;
@@ -67,6 +35,14 @@ rand(N) -> random:uniform(N) - 1.
 erand(0) -> 0;
 erand(N) -> random:uniform(N).
 
+% generates random in range(L,R)
+rand_range(L, R) when R>L ->
+    rand(R-L) + L;
+rand_range(L, L) ->
+    L;
+rand_range(_, _) ->
+    0.
+
 %% generate random float
 rand_float() -> rand:uniform().
 
@@ -74,17 +50,27 @@ rand_float() -> rand:uniform().
 rand_bit() -> round(random:uniform()).
 
 %% check if random occurs with some probability
-rand_occurs(Rs, {Nom, Denom}) when is_integer(Nom), is_integer(Denom) ->
-    rand_occurs_fixed(Rs, Nom, Denom);
-rand_occurs(Rs, Prob) when is_float(Prob) ->
+rand_occurs({Nom, Denom}) when is_integer(Nom), is_integer(Denom) ->
+    rand_occurs_fixed(Nom, Denom);
+rand_occurs(Prob) when is_float(Prob) ->
     PreNom = trunc(Prob * 100),
     G = gcd(PreNom, 100),
     Nom = PreNom div G,
     Denom = 100 div G,
-    rand_occurs_fixed(Rs, Nom, Denom);
-rand_occurs(Rs, Prob) when is_integer(Prob) -> {Rs, false};
-rand_occurs(Rs, Prob) when Prob == 0 -> {Rs, false};
-rand_occurs(Rs, _) -> {Rs, false}.
+    rand_occurs_fixed(Nom, Denom);
+rand_occurs(Prob) when is_integer(Prob) -> false;
+rand_occurs(Prob) when Prob == 0 -> false;
+rand_occurs(_) -> false.
+
+%% check if random occurs with Nom/Denom probability
+rand_occurs_fixed(Nom, Denom) ->
+    N = rand(Denom),
+    if
+        Nom == 1 ->
+            N /= 0;
+        true ->
+            N < Nom
+    end.
 
 % random exactly n-bit number
 rand_nbit(0) -> 0;
@@ -104,22 +90,13 @@ rand_elem(L) ->
     N = length(L),
     lists:nth(random:uniform(N), L).
 
-%% check if random occurs with Nom/Denom probability
-rand_occurs_fixed(Rs, Nom, Denom) ->
-    N = rand(Denom),
-    if
-        Nom == 1 ->
-            {Rs, N /= 0};
-        true ->
-            {Rs, N < Nom}
-    end.
 
 %% Generate random block of bytes.
 %% TODO: check byte-stream magic here, Radamsa realization is MUCH differ
 random_block(N) -> random_block(N, []).
 
 random_block(0, Out) -> list_to_binary(Out);
-random_block(N, Out) -> random_block(N - 1, [owllisp:rand(256) | Out]).
+random_block(N, Out) -> random_block(N - 1, [rand(256) | Out]).
 
 %% generates a list of Cnt numbers with upper Bount
 random_numbers(Bound, Cnt) -> random_numbers(Bound, Cnt, []).
@@ -139,13 +116,6 @@ random_permutation(Lst = [A, B]) ->
 random_permutation(L) ->
     [Y || {_, Y} <- lists:sort([{random:uniform(),X} || X <- L])].
 
-% generates random in range(L,R)
-rand_range(L, R) when R>L ->
-    rand(R-L) + L;
-rand_range(L, L) ->
-    L;
-rand_range(_, _) ->
-    0.
 
 %% see http://en.wikipedia.org/wiki/Reservoir_sampling
 reservoir_sample(Ll, K) when K >= length(Ll) -> Ll;
@@ -161,3 +131,28 @@ reservoir_sample(S, N, K, I, R) ->
         false -> reservoir_sample(S, N, K, I+1, R)
     end.
 
+%%%
+%%% Random delta generators for random priority steppers
+%%%
+
+%% random delta for brownian steppers
+%% strange random delta <-- copied from radamsa,
+%% TODO: check for uniformity for Bit && rewrite
+rand_delta() ->
+    Bit = rand_bit(),
+    case Bit of
+        0 ->
+            +1;
+        _Else ->
+            -1
+    end.
+
+%% random delta with a slight positive bias
+rand_delta_up() ->
+    Occ = owllisp:rand_occurs({?P_WEAKLY_USUALLY_NOM, ?P_WEAKLY_USUALLY_DENOM}),
+    case Occ of
+        true ->
+            +1;
+        false ->
+            -1
+    end.

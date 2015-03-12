@@ -42,27 +42,23 @@ start(Dict, Paths) ->
             Fail = fun(Why) -> io:write(Why), throw(Why) end,
             N = N,
             Mutas = Mutas,
-            Rs = 1,
-            {_, Muta} = mutations:mutators_mutator(Rs, Mutas),
-            Gen = generators:generators_priorities_to_generator(Rs,  maps:get("generators", Dict, generators:default()), Paths, Fail, N),
+            Muta = mutations:mutators_mutator(Mutas),
+            Gen = generators:generators_priorities_to_generator(maps:get("generators", Dict, generators:default()), Paths, Fail, N),
             Record_Meta = maybe_meta_logger( maps:get("metadata", Dict, "-"), maps:get("verbose", Dict, 1), Fail),
             Record_Meta(maps:put(seed, maps:get("seed", Dict), maps:new())),
             Pat = patterns:string_patterns(maps:get("patterns", Dict, patterns:patterns())),
-            Out = output:string_outputs(maps:get("output", Dict, "-"), N),
-            loop(Rs, Muta, Gen, Pat, Out, Record_Meta, 1, N)
+            Out = erlamsa_out:string_outputs(maps:get("output", Dict, "-"), N),
+            loop(Muta, Gen, Pat, Out, Record_Meta, 1, N)
     end.
 
-loop(_, _, _, _, _, _Record_Meta, I, N) when is_integer(N) andalso N < I -> ok; %% record-meta("closed")
-loop(Rs, Muta, Gen, Pat, Out,  Record_Meta, I, N) ->
-    shared:debug("Main loop step", N),
-    {_, Ll, GenMeta} = Gen(Rs),
-    shared:debug("Gen res -- Ll in main loop:", Ll),
+loop(_, _, _, _, _Record_Meta, I, N) when is_integer(N) andalso N < I -> ok; %% record-meta("closed")
+loop(Muta, Gen, Pat, Out, Record_Meta, I, N) ->
+    {Ll, GenMeta} = Gen(), 
     {_, Fd, OutMeta} = Out([{nth, I} | GenMeta]),
-    shared:debug("Current Meta in main loop:", OutMeta),
-    Tmp = Pat(Rs, Ll, Muta, OutMeta),
-    shared:debug("Pat res:", Tmp),
-    {_, NewMuta, _OutMeta2, _Written} = output:output(Tmp, Fd),
-    loop(Rs, NewMuta, Gen, Pat, Out, Record_Meta, I + 1, N).
+    Tmp = Pat(Ll, Muta, OutMeta),
+    {NewMuta, Meta, _Written} = erlamsa_out:output(Tmp, Fd),
+    io:write(Meta),    
+    loop(NewMuta, Gen, Pat, Out, Record_Meta, I + 1, N).
 
 
 
