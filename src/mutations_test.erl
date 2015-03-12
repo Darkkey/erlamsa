@@ -4,6 +4,13 @@
 -include("erlamsa.hrl").
 
 %%
+%% TODO: not covered by tests:
+%% - utf9 (uw, ui): sed_utf8_widen, sed_utf8_insert
+%% - st_list_replace (srs)
+%% - fuses (fn, fo): sed_fuse_next, sed_fuse_old
+%%
+
+%%
 %% Tests helper functions
 %%
 
@@ -97,6 +104,50 @@ ascii_delimeter_test() ->
 		) =:= true). 
 	
 %%
+%% Fuse mutator test
+%%
+
+sed_fuse_this_test() ->	
+	?assert(recursive_regex_tester(
+		"kittenslartibartfasterthaneelslartibartfastenyourseatbelts",
+		"kittenslartibartfastenyourseatbelts", fun mutations:sed_fuse_this/3, 60
+		) =:= true). 
+
+%%
+%% Tree mutators test
+%%
+
+
+sed_tree_stutter_test() ->	
+	?assert(recursive_regex_tester(
+		"(x (Y x))",
+		"\\(x \\(x \\(x \\(x \\(Y x\\)\\)\\)\\)\\)", fun mutations:sed_tree_stutter/3, 500
+		) =:= true). 
+
+
+sed_tree_count_tester(TestString, Cnt, Swaps, Muta) ->
+	init_randr(),
+	Lst = lists:foldl(
+		fun (_X, Acc) -> 
+			{_F, _Rs, Ll, _Meta, _D} = Muta(1, [list_to_binary(TestString)], []),
+			[binary_to_list(hd(Ll)) | Acc]
+		end,
+		[],
+		lists:seq(1, Cnt)),
+	ULst = lists:usort(fun(A, B) -> A =< B end, Lst),
+	length(ULst) =:= Swaps.
+
+sed_tree_dup_test() ->
+	?assert(sed_tree_count_tester("(a) (b)", 30, 2, mutations:sed_tree_dup())).
+	
+sed_tree_swap_one_test() ->
+	?assert(sed_tree_count_tester("A (a) (b) (c) B", 400, 6, mutations:construct_sed_tree_swap(fun mutations:sed_tree_swap_one/2, tree_swap_one))).
+
+sed_tree_swap_two_test() ->
+	?assert(sed_tree_count_tester("(a) (b (c))", 30, 3, mutations:construct_sed_tree_swap(fun mutations:sed_tree_swap_two/2, tree_swap_two))).
+
+
+%%
 %% Line mutations tests
 %%
 
@@ -160,6 +211,18 @@ line_perm_length_test() ->
 				length(string:tokens(R, [10])) =:= length(string:tokens(S, [10]))
 			 end)).
 
+%%
+%% Line-string mutations tests
+%%
+
+st_line_ins_test() ->
+	init_randr(),
+	TestString = "ABC DEF", 
+	Muta = mutations:construct_st_line_muta(fun generic:st_list_ins/2, list_ins, [0]),
+	{_F, _Rs, Ll, _Meta, _D} = Muta(1, [list_to_binary(TestString)], []),
+	RStr = binary_to_list(hd(Ll)),
+	{RLst1, RLst2} = lists:split(length(RStr) div 2, RStr),
+	?assert(RLst1 =:= RLst2).
 
 %%
 %% Byte-level mutations test

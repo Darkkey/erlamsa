@@ -16,6 +16,10 @@
 %% minimum texty bytes in sequence to be considered interesting
 %% note - likely to happen in longish data (a few kb) anyway
 -define(MIN_TEXTY, 6).
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
 -compile([export_all]).
 
 %% API
@@ -918,38 +922,38 @@ mux_fuzzers_loop(Ll, [Node|Tail], Out, Rs, Meta) ->
     end.
 
 %% default mutations list
-%default_mutations() -> [{10, 1, fun sed_num/3, num}].
-%default_mutations() -> [{10, 1, fun sed_utf8_widen/3, uw}].
-%default_mutations() -> [{10, 1, fun sed_utf8_insert/3, ui}].
-default_mutations() -> [{10, 1, construct_ascii_bad_mutator(), ab}].
-%default_mutations() -> [{10, 1, construct_ascii_delimeter_mutator(), ad}].
-%default_mutations() -> [{10, 1, sed_tree_dup(), tr2}].
-%default_mutations() -> [{10, 1, sed_tree_del(), td}].
-%default_mutations() -> [{10, 1, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1}].
-%default_mutations() -> [{10, 1, construct_st_line_muta(fun generic:st_list_ins/2, list_ins, [0]), lis}].
-%default_mutations() -> [{10, 1, construct_st_line_muta(fun generic:st_list_replace/2, list_replace, [0]), lrs}].
-%default_mutations() -> [{10, 1, fun sed_tree_stutter/3, ts}].
-%%default_mutations() -> [{10, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2}].
-%default_mutations() -> [{10, 1, construct_sed_byte_drop(), bd}, 
-%                        {10, 1, construct_sed_byte_inc(), bei}, 
-%                        {10, 1, construct_sed_byte_dec(), bed}].
-%default_mutations() -> [{10, 1, construct_sed_byte_flip(), bf}].
-%default_mutations() -> [{10, 1, construct_sed_byte_insert(), bi}].
-%default_mutations() -> [{10, 1, construct_sed_byte_random(), ber}].
-%default_mutations() -> [{10, 1, construct_sed_byte_repeat(), br}].
-%default_mutations() -> [{10, 1, construct_sed_bytes_perm(), sp}]. %% aka 'bp' in radamsa
-%default_mutations() -> [{10, 1, construct_sed_bytes_repeat(), sr}].
-%default_mutations() -> [{10, 1, construct_sed_bytes_drop(), sd}].
-%default_mutations() -> [{10, 1, construct_line_muta(fun generic:list_del/2, line_del), ld}].
-%default_mutations() -> [{10, 1, construct_line_muta(fun generic:list_del_seq/2, line_del_seq), lds}].
-%default_mutations() -> [{10, 1, construct_line_muta(fun generic:list_dup/2, line_dup), lr2}].
-%default_mutations() -> [{10, 1, construct_line_muta(fun generic:list_clone/2, line_clone), lri}].
-%default_mutations() -> [{10, 1, construct_line_muta(fun generic:list_repeat/2, line_repeat), lr}].
-%default_mutations() -> [{10, 1, construct_line_muta(fun generic:list_swap/2, line_swap), ls}].
-%default_mutations() -> [{10, 1, construct_line_muta(fun generic:list_perm/2, line_perm), lp}].
-%default_mutations() -> [{10, 1, fun sed_fuse_this/3, ft}].
-%default_mutations() -> [{10, 1, fun sed_fuse_next/3, fn}].
-%default_mutations() -> [{10, 1, fun sed_fuse_old/3, fo}].
+default_mutations() -> [{10, 1, fun sed_num/3, num},
+                        {10, 1, fun sed_utf8_widen/3, uw},
+                        {10, 1, fun sed_utf8_insert/3, ui},
+                        {10, 1, construct_ascii_bad_mutator(), ab},
+                        {10, 1, construct_ascii_delimeter_mutator(), ad},
+                        {10, 1, sed_tree_dup(), tr2},
+                        {10, 1, sed_tree_del(), td},
+                        {10, 1, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1},
+                        {10, 1, construct_st_line_muta(fun generic:st_list_ins/2, list_ins, [0]), lis},
+                        {10, 1, construct_st_line_muta(fun generic:st_list_replace/2, list_replace, [0]), lrs},
+                        {10, 1, fun sed_tree_stutter/3, tr},
+                        {10, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2},
+                        {10, 1, construct_sed_byte_drop(), bd},
+                        {10, 1, construct_sed_byte_inc(), bei},
+                        {10, 1, construct_sed_byte_dec(), bed},
+                        {10, 1, construct_sed_byte_flip(), bf},
+                        {10, 1, construct_sed_byte_insert(), bi},
+                        {10, 1, construct_sed_byte_random(), ber},
+                        {10, 1, construct_sed_byte_repeat(), br},
+                        {10, 1, construct_sed_bytes_perm(), sp},
+                        {10, 1, construct_sed_bytes_repeat(), sr},
+                        {10, 1, construct_sed_bytes_drop(), sd},
+                        {10, 1, construct_line_muta(fun generic:list_del/2, line_del), ld},
+                        {10, 1, construct_line_muta(fun generic:list_del_seq/2, line_del_seq), lds},
+                        {10, 1, construct_line_muta(fun generic:list_dup/2, line_dup), lr2},
+                        {10, 1, construct_line_muta(fun generic:list_clone/2, line_clone), lri},
+                        {10, 1, construct_line_muta(fun generic:list_repeat/2, line_repeat), lr},
+                        {10, 1, construct_line_muta(fun generic:list_swap/2, line_swap), ls},
+                        {10, 1, construct_line_muta(fun generic:list_perm/2, line_perm), lp},
+                        {10, 1, fun sed_fuse_this/3, ft},
+                        {10, 1, fun sed_fuse_next/3, fn},
+                        {10, 1, fun sed_fuse_old/3, fo}].
 
 %% randomize mutator scores
 mutators_mutator(Rs, Mutas) ->
