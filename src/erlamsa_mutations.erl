@@ -44,14 +44,14 @@
 -define(RAND_DELTA, 18446744073709551616).
 
 -type byte_edit_fun() :: fun((byte()) -> binary()).
--type text_mutators() :: insert_badness | replace_badness | insert_aaas | insert_null.
+-type text_mutators() :: insert_badness | replace_badness | insert_aaas | insert_null | insert_delimeter.
 
 %% quick peek if the data looks possibly binary
 %% quick stupid version: ignore UTF-8, look for high bits
--spec binarish(list()) -> true | false.
+-spec binarish(binary()) -> boolean().
 binarish(Lst) -> binarish(Lst, 0).
 
--spec binarish(list(), non_neg_integer()) -> true | false.
+-spec binarish(binary(), non_neg_integer()) -> boolean().
 binarish(_, P) when P =:= 8 -> false;
 binarish(<<>>, _) -> false;
 binarish(<<H:8,_/binary>>, _) when H =:= 0 -> true;
@@ -216,7 +216,8 @@ construct_sed_byte_random() ->  %% swap a byte with a random one
 %%%
 %%% Warning: this implememntations are not radamsa-like, only making "similar" things, but in the other way and with slight differences
 
--spec construct_sed_bytes_muta(byte_edit_fun(), atom()) -> mutation_fun().
+%-spec construct_sed_bytes_muta(byte_edit_fun(), atom()) -> mutation_fun().
+-spec construct_sed_bytes_muta(fun(), atom()) -> mutation_fun().
 %% WARNING && TODO: this impementation is DIRTY and not as effective as Radamsa
 construct_sed_bytes_muta(F, Name) ->
     fun 
@@ -387,7 +388,7 @@ remember(Block) ->
 %% in radamsa this will stop if found byte node; here, we continue
 -spec stringy(list(byte())) -> false | true.
 stringy([]) -> false;
-stringy([[byte | _] | T]) -> false or stringy(T);
+stringy([{byte, _} | T]) -> false or stringy(T);
 stringy(_) -> true. %% in radamsa -- length(Cs)
 
 -spec silly_strings() -> list(string()).
@@ -478,7 +479,7 @@ mutate_text(insert_delimeter, Lst) ->
 %% Else, if Cs contains only byte nodes, it will run infinetely
 %% Here, we do maximum L/4 runs in this case
 %% TODO: WARN: Ineffective, need rewrite/optimize
--spec string_generic_mutate(erlamsa_strlex:chunk_list(), [text_mutators()], non_neg_integer(), non_neg_integer()) -> erlamsa_strlex:chunk_list().
+-spec string_generic_mutate(chunk_list(), [text_mutators()], non_neg_integer(), non_neg_integer()) -> chunk_list().
 string_generic_mutate(Cs, _, L, R) when R > L/4 -> Cs;
 string_generic_mutate(Cs, TxtMutators, L, R) ->
     P = erlamsa_rnd:erand(L), % in erlang, list is beginning from index 1
@@ -521,7 +522,7 @@ construct_ascii_bad_mutator() ->
         end,
         ascii_bad).
 
--spec drop_delimeter(non_neg_integer(), erlamsa_strlex:chunk()) -> erlamsa_strlex:chunk().
+-spec drop_delimeter(non_neg_integer(), chunk()) -> chunk().
 %% drop one(both) or zero delimeters
 drop_delimeter(0, {delimited, Left, Bs, _Right}) -> % drop right
     {text, [Left|Bs]};
@@ -533,7 +534,7 @@ drop_delimeter(_, El) -> % drop none
     El.
 
 %% Play with delimeters
--spec string_delimeter_mutate(erlamsa_strlex:chunk_list(), non_neg_integer(), non_neg_integer()) -> erlamsa_strlex:chunk_list().
+-spec string_delimeter_mutate(chunk_list(), non_neg_integer(), non_neg_integer()) -> chunk_list().
 string_delimeter_mutate(Cs, L, R) when R > L/4 -> Cs;
 string_delimeter_mutate(Cs, L, R) ->
     P = erlamsa_rnd:erand(L), % in erlang, list is beginning from index 1
@@ -561,7 +562,7 @@ construct_ascii_delimeter_mutator() ->
 %% Guessed Parse-tree Mutations
 %%
 
--spec usual_delims(non_neg_integer()) -> non_neg_integer().
+-spec usual_delims(non_neg_integer()) -> non_neg_integer() | false.
 %% ?? could be settable from command line
 usual_delims(40) -> 41;   % ()
 usual_delims(91) -> 93;   % []
@@ -571,7 +572,7 @@ usual_delims(34) -> 34;   % ""
 usual_delims(39) -> 39;   % ''
 usual_delims(_) -> false.
 
--spec grow(list(), byte(), list()) -> {list(), true | false}.
+-spec grow(list(), byte(), list()) -> {list(), list() | false}.
 %% -> lst #false = ran out of data trying to parse up to close, but lst is the same with partial parsing
 %% -> lst tail-lst = did successfully parse up to close. ready node is lst, tail is following data
 grow([], _Close, Rout) ->  %% out of data, didn't find close. return partial parse.
@@ -636,7 +637,7 @@ edit_sublist([H|T], Sub, Op) ->
 edit_sublist(Lst, _Sub, _Op) -> Lst.
 
 %% TODO: type for fun().
--spec edit_sublists(list(), fun()) -> list().
+-spec edit_sublists(list(), gb_trees:tree()) -> list().
 %% lst (ff of node -> (node -> node)) -> lst' ; <- could also be done with a recursive-mapn
 edit_sublists([Hd|T], OpFF) when is_list(Hd) -> 
     MaybeOp = erlamsa_utils:get(Hd, false, OpFF),
@@ -792,7 +793,7 @@ sed_tree_stutter(Ll = [H|T], Meta) ->
 ext(N) ->
     (N band 2#111111) bor 2#10000000.
     
--spec encode_point(integer()) -> integer().
+-spec encode_point(integer()) -> [integer()].
 %% encode an ascii to utf-8
 encode_point(Point) when Point < 16#80 ->                    % ascii, fits 7 bits 
     [Point];
@@ -869,7 +870,7 @@ adjust_priority(Pri, 0) -> Pri;
 adjust_priority(Pri, Delta) ->
     max(?MIN_SCORE, min(?MAX_SCORE, Pri + Delta)).
 
--spec weighted_permutations([mutation()]) -> prioritized_list(). 
+-spec weighted_permutations([mutation()]) -> [mutation()]. 
 %% [{Score, Priority, _, _}, ...] -> [{Rand(S*P), {...}}, ...] -> sort -> [{...}, ...]
 weighted_permutations([]) -> [];
 weighted_permutations(Pris) ->
@@ -890,7 +891,7 @@ mux_fuzzers(Fs) ->
         L(Ll, Meta) -> L(Ll(), Meta) %% TODO: strange behaviour
     end.
 
--spec mux_fuzzers_loop(lazy_list_of_bins(), [mutation()], lazy_list_of_bins(), meta_list()) -> {fun(), lazy_list_of_bins(), meta_list()}.
+-spec mux_fuzzers_loop(lazy_list_of_bins(), [mutation()], [mutation()], meta_list()) -> {fun(), lazy_list_of_bins(), meta_list()}.
 mux_fuzzers_loop(Ll, [], Out, Meta) -> {mux_fuzzers(Out), Ll, Meta};
 mux_fuzzers_loop(Ll, [Node|Tail], Out, Meta) ->
     {Mscore, MPri, Fn, Mname} = Node,
@@ -906,7 +907,7 @@ mux_fuzzers_loop(Ll, [Node|Tail], Out, Meta) ->
 
 -spec mutations() -> [mutation()].
 %% default mutations list
-mutations() -> [{10, 1, fun sed_num/2, num},
+mutations() ->          [{10, 1, fun sed_num/2, num},
                         {10, 1, fun sed_utf8_widen/2, uw},
                         {10, 1, fun sed_utf8_insert/2, ui},
                         {10, 1, construct_ascii_bad_mutator(), ab},

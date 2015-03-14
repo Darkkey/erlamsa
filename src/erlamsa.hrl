@@ -13,3 +13,39 @@
 -define(AVG_BLOCK_SIZE, 2048).
 -define(AVG_BLOCK_SIZE_BITS, 16384).
 -define(MAX_BLOCK_SIZE, 2*?AVG_BLOCK_SIZE).
+
+%% Common inter-module types.
+
+-type prioritized_list() :: [{number(), any()}].
+
+-type lazy_list_of_bins() :: [binary() | fun()].
+
+-type list_of_bins() :: [binary()].
+
+-type input_inc() :: file:io_device() | stdin.
+
+-type output_dest() :: file:io_device() | stdout | return.
+
+-type meta() :: {atom(), any()}.
+
+-type meta_list() :: [meta()].
+
+-type chunk_type() :: text | byte | delimited.
+
+-type chunk() :: {text | byte, list(byte())} | {delimited, byte(), list(byte()), byte()}.
+
+-type chunk_list() :: [chunk()].
+
+-type mutator() :: fun((any(), meta_list()) -> {mutator(), any(), meta_list()}).
+
+-type pattern_fun() :: fun((any(), mutator(), meta_list()) -> list()).
+
+-type pattern() :: {non_neg_integer(), fun(), atom(), string()}.
+
+-type mutation_res() :: {mutation_fun(), list_of_bins(), meta_list(), integer()}.
+
+-type mutation_fun() :: fun((list_of_bins(), meta_list()) -> mutation_res()).
+
+-type mutation() :: {non_neg_integer(), non_neg_integer(), mutation_fun(), atom()}.
+
+%% /Common inter-module types.

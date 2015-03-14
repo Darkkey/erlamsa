@@ -15,15 +15,14 @@
 -endif.
 
 %% API
--export([output/2, stdout_stream/1, file_writer/1, string_outputs/2]).
+-export([output/2, stdout_stream/1, file_writer/1, string_outputs/2, flush/1]).
 
 %% convert list-of-bvecs to one big binary
--spec flush(list_of_bins()) -> binary().
-flush([[]]) -> <<>>; %% dump output
-flush([H|T]) -> R = flush(T), <<R/binary, H/binary>>;
-flush(H) -> <<H/binary>>.
+-spec flush(list(nil | binary())) -> any(). 
+flush([]) -> <<>>;
+flush([H|T]) when is_binary(H) -> R = flush(T), <<R/binary, H/binary>>.
 
--spec output(lazy_list_of_bins(), output_dest()) -> {fun(), meta(), integer()}.
+-spec output(lazy_list_of_bins(), output_dest()) -> {fun(), meta(), integer(), binary()}.
 output(Ll, Fd) ->
     {NLl, Data, N} = blocks_port(Ll, Fd),
     %% (ok? (and (pair? ll) (tuple? (car ll)))) ;; all written? <-- do we really need to check this?
@@ -50,11 +49,11 @@ string_outputs(Str, _N) ->
     end.
 
 %% write blocks to port
--spec blocks_port(lazy_list_of_bins(), output_dest()) -> {lazy_list_of_bins(), list_of_bins(), non_neg_integer()}.
+-spec blocks_port(lazy_list_of_bins(), output_dest()) -> {lazy_list_of_bins(), list(), non_neg_integer()}.
 blocks_port(Ll, Fd) -> blocks_port(Ll, Fd, [], 0).
 
 %% TODO: UGLY, need rewrite and handle errors
--spec blocks_port(lazy_list_of_bins(), output_dest(), list_of_bins(), non_neg_integer()) -> {lazy_list_of_bins(), list_of_bins(), non_neg_integer()}.
+-spec blocks_port(lazy_list_of_bins(), output_dest(), list(), non_neg_integer()) -> {lazy_list_of_bins(), list(), non_neg_integer()}.
 blocks_port([], _, Data, N) -> {[], Data, N};
 blocks_port([Ll], Fd, Data, N) when is_function(Ll) -> blocks_port(Ll(), Fd, Data, N);
 blocks_port(Ll = [H|T], Fd, Data, N) when is_binary(H) ->
@@ -73,10 +72,10 @@ close_port(return) -> ok;
 close_port(Fd) -> file:close(Fd).
 
 %% write to Fd or stdout
-%% TODO: UGLY, need rewrite and handle errors
+%% TODO: UGLY, need rewrite and handle errors, also rewrite spec
 %%write_really(Data, stdout) -> io:put_chars("\n\n********************* write_really stdout: "), io:write({byte_size(Data)}), io:put_chars(Data), io:put_chars("\n\n"), ok;
 %%write_really(Data, Fd) -> io:put_chars("\n\n********************* write_really file: "), file:write(Fd, {byte_size(Data)}), io:put_chars(Data), io:put_chars("\n\n"), ok.
--spec write_really(binary(), output_dest()) -> ok.
+-spec write_really(binary(), output_dest()) -> {any(), binary()}.
 write_really(Data, return) -> {ok, Data};
-write_really(Data, stdout) -> {file:write(standard_io, Data), []};
-write_really(Data, Fd) -> {file:write(Fd, Data), []}.
+write_really(Data, stdout) -> {file:write(standard_io, Data), <<>>};
+write_really(Data, Fd) -> {file:write(Fd, Data), <<>>}.

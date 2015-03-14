@@ -42,10 +42,6 @@
 %% note - likely to happen in longish data (a few kb) anyway
 -define(MIN_TEXTY, 6).
 
--type chunk_type() :: text | byte | delimeter.
--type chunk() :: {text | byte, list(byte())} | {delimter, {byte(), list(byte()), byte()}}.
--type chunk_list() :: [chunk()].
-
 -spec texty(byte()) -> true | false.
 texty(B) when B < 9 -> false;
 texty(B) when B > 126 -> false;

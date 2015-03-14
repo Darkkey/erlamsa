@@ -41,10 +41,10 @@
 -spec urandom_seed() -> {non_neg_integer(), non_neg_integer(), non_neg_integer()}.
 urandom_seed() -> list_to_tuple(lists:map(fun(_) -> lists:foldl(fun(X, A) -> X + (A bsl 8) end, 0, binary_to_list(crypto:rand_bytes(2))) end, lists:seq(1,3))).
 
--spec verb(file:io_device(), non_neg_integer()) -> fun().
-verb(_, 0) -> fun(X) -> X end;
+-spec verb(file:io_device() | standard_error | standard_io, non_neg_integer()) -> fun().
+verb(_Fd, 0) -> fun(X) -> X end;
 % verb(standard_error, _) -> fun(X) -> io:write(X) end;  
-verb(Fd, _) -> fun(X) -> io:write(Fd, X) end.
+verb(Fd, _I) -> fun(X) -> io:write(Fd, X) end.
 
 -spec maybe_meta_logger(string() | atom(), non_neg_integer(), fun()) -> fun().
 maybe_meta_logger(Path, Verbose, _) ->  
@@ -57,7 +57,7 @@ maybe_meta_logger(Path, Verbose, _) ->
 -spec test() -> list().
 test() -> fuzzer(maps:put(paths, ["test.1"], maps:put(verbose, 1,  maps:put(output, "-", maps:new())))).
 
--spec fuzzer(maps:map()) -> [binary()].
+-spec fuzzer(#{}) -> [binary()].
 fuzzer(Dict) ->
     Seed = maps:get(seed, Dict, default),
     Mutas = maps:get(mutations, Dict, default),
@@ -72,7 +72,7 @@ fuzzer(Dict) ->
             fuzzer(maps:put(n, 1, Dict));
         true ->
             random:seed(maps:get(seed, Dict)),
-            Fail = fun(Why) -> io:write(Why), throw(Why), false end,
+            Fail = fun(Why) -> io:write(Why), throw(Why) end,
             Muta = erlamsa_mutations:make_mutator(Mutas),
             Gen = erlamsa_gen:make_generator(maps:get(generators, Dict, erlamsa_gen:default()), Paths, Fail, N),
             Record_Meta = maybe_meta_logger( maps:get(metadata, Dict, stderr), maps:get(verbose, Dict, 1), Fail),
@@ -82,8 +82,8 @@ fuzzer(Dict) ->
             fuzzer_loop(Muta, Gen, Pat, Out, Record_Meta, 1, N, [])
     end.
 
--spec record_result(list(), list()) -> list().
-record_result([], Acc) -> Acc;
+-spec record_result(binary(), list()) -> list().
+record_result(<<>>, Acc) -> Acc;
 record_result(X, Acc) -> [X | Acc].
 
 -spec fuzzer_loop(fun(), fun(), fun(), fun(), fun(), non_neg_integer(), non_neg_integer() | inf, list()) -> [binary()].
