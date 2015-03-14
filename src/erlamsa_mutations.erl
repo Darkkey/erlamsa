@@ -1,41 +1,64 @@
+% Copyright (c) 2011-2014 Aki Helin
+% Copyright (c) 2014-2015 Alexander Bolshev aka dark_k3y
+%
+% Permission is hereby granted, free of charge, to any person obtaining a copy
+% of this software and associated documentation files (the "Software"), to deal
+% in the Software without restriction, including without limitation the rights
+% to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+% copies of the Software, and to permit persons to whom the Software is
+% furnished to do so, subject to the following conditions:
+%
+% The above copyright notice and this permission notice shall be included in
+% all copies or substantial portions of the Software.
+%
+% THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+% IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+% FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+% SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+% DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+% OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+% THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+%
 %%%-------------------------------------------------------------------
 %%% @author dark_k3y
-%%% @copyright (C) 2014, <COMPANY>
 %%% @doc
-%%%
+%%% Mutations definitions.
 %%% @end
 %%%-------------------------------------------------------------------
--module(mutations).
+-module(erlamsa_mutations).
 -author("dark_k3y").
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-compile([export_all]).
+-endif.
+
+-include("erlamsa.hrl").
+
+%% API
+-export([make_mutator/1, default/0]).
+ 
 
 -define(MIN_SCORE, 2).
 -define(MAX_SCORE, 10).
 -define(RAND_DELTA, 18446744073709551616).
 
-%% minimum texty bytes in sequence to be considered interesting
-%% note - likely to happen in longish data (a few kb) anyway
--define(MIN_TEXTY, 6).
-
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.
--compile([export_all]).
-
-%% API
--export([]).
-
-
+-type byte_edit_fun() :: fun((byte()) -> binary()).
+-type text_mutators() :: insert_badness | replace_badness | insert_aaas | insert_null.
 
 %% quick peek if the data looks possibly binary
 %% quick stupid version: ignore UTF-8, look for high bits
+-spec binarish(list()) -> true | false.
 binarish(Lst) -> binarish(Lst, 0).
 
+-spec binarish(list(), non_neg_integer()) -> true | false.
 binarish(_, P) when P =:= 8 -> false;
 binarish(<<>>, _) -> false;
 binarish(<<H:8,_/binary>>, _) when H =:= 0 -> true;
 binarish(<<H:8,_/binary>>, _) when H band 128 =/= 0 -> true;
 binarish(<<_:8,T/binary>>, P) -> binarish(T, P+1).
 
+-spec edit_byte_vector(binary(), non_neg_integer(), byte_edit_fun()) -> binary().
 %% clone a byte vector and edit at given position
 edit_byte_vector(BVec = <<>>, _, _) -> BVec;
 edit_byte_vector(BVec, Edit_pos, Func) ->
@@ -48,6 +71,7 @@ edit_byte_vector(BVec, Edit_pos, Func) ->
 %%% Number Mutator
 %%%
 
+-spec interesting_numbers() -> list(integer()).
 interesting_numbers() ->
     lists:foldl(
         fun (I, Acc) ->
@@ -57,8 +81,10 @@ interesting_numbers() ->
         [],
         [1, 7, 8, 15, 16, 31, 32, 63, 64, 127, 128]).
 
+-spec mutate_num(integer()) -> integer().
 mutate_num(Num) -> mutate_num(Num, erlamsa_rnd:rand(12)).
 
+-spec mutate_num(integer(), 0..12) -> integer().
 mutate_num(Num, 0) -> Num + 1; %% in randamsa n + 1 which is exactly 1; Bug in Radamsa?
 mutate_num(Num, 1) -> Num - 1; %% in randamsa n - 1 which is exactly 0; Bug in Radamsa?
 mutate_num(_, 2) -> 0;
@@ -76,8 +102,10 @@ mutate_num(Num, _) ->
         _Else -> Num + L
     end.
 
-get_num(Lst) -> get_num(Lst, 0, 0).
+-spec get_num(binary()) -> {integer() | false, binary()}.
+get_num(Bin) -> get_num(Bin, 0, 0).
 
+-spec get_num(binary(), integer(), non_neg_integer()) -> {integer() | false, binary()}.
 get_num(<<>>, _, 0) -> {false, <<>>};
 get_num(<<>>, N, _) -> {N, <<>>};
 get_num(<<D:8,T/binary>>, N, Digits) when (D >= 48) and (D =< 57) ->
@@ -85,9 +113,11 @@ get_num(<<D:8,T/binary>>, N, Digits) when (D >= 48) and (D =< 57) ->
 get_num(Lst, _, 0) -> {false, Lst};
 get_num(Lst, N, _) -> {N, Lst}.
 
+-spec copy_range(binary(), binary(), binary()) -> binary().
 copy_range(Pos, Pos, Tail) -> Tail;
 copy_range(<<H:8,T/binary>>, End, Tail) -> NT = copy_range(T, End, Tail), <<H:8, NT/binary>>.
 
+-spec mutate_a_num(binary(), integer()) -> {integer(), binary()}.
 mutate_a_num(<<>>, NFound) ->
     Which = erlamsa_rnd:rand(NFound),
     {Which, <<>>};
@@ -109,7 +139,7 @@ mutate_a_num(Lst = <<H:8, T/binary>>, NFound) ->
             {Which, <<H:8, Tail/binary>>}
     end.
 
-
+-spec sed_num(list_of_bins(), meta_list()) -> mutation_res().
 sed_num([H|T], Meta) ->
     {N, Lst} = mutate_a_num(H, 0),
     IsBin = binarish(Lst),
@@ -131,7 +161,7 @@ sed_num([H|T], Meta) ->
 %%%
 %%% Single Byte-level Mutations
 %%%
-
+-spec construct_sed_byte_muta(byte_edit_fun(), atom()) -> mutation_fun().
 construct_sed_byte_muta(F, Name) ->
     fun Self([H|T], Meta) ->
         P = erlamsa_rnd:rand(byte_size(H)),
@@ -139,18 +169,23 @@ construct_sed_byte_muta(F, Name) ->
         {Self, [edit_byte_vector(H, P, F) | T], [{Name, D}|Meta], D}
     end.
 
+-spec construct_sed_byte_drop() -> mutation_fun().
 construct_sed_byte_drop() ->  %% drop byte
     construct_sed_byte_muta(fun (B) -> <<B:0>> end, byte_drop).
 
+-spec construct_sed_byte_inc() -> mutation_fun().
 construct_sed_byte_inc() ->  %% inc byte mod 256
     construct_sed_byte_muta(fun (B) -> C = (B + 1) band 255, <<C:8>> end, byte_inc).
 
+-spec construct_sed_byte_dec() -> mutation_fun().
 construct_sed_byte_dec() ->  %% dec byte mod 256
     construct_sed_byte_muta(fun (B) -> C = (B - 1) band 255, <<C:8>> end, byte_dec).
 
+-spec construct_sed_byte_repeat() -> mutation_fun().
 construct_sed_byte_repeat() ->  %% repeat a byte
     construct_sed_byte_muta(fun (B) -> <<B:8, B:8>> end, byte_repeat).
 
+-spec construct_sed_byte_flip() -> mutation_fun().
 construct_sed_byte_flip() ->  %% flip a bit in a byte
     construct_sed_byte_muta(
         fun (B) -> 
@@ -160,6 +195,7 @@ construct_sed_byte_flip() ->  %% flip a bit in a byte
             <<C:8>> 
         end, byte_flip).
 
+-spec construct_sed_byte_insert() -> mutation_fun().
 construct_sed_byte_insert() ->  %% insert a byte
     construct_sed_byte_muta(
         fun (B) -> 
@@ -167,6 +203,7 @@ construct_sed_byte_insert() ->  %% insert a byte
             <<NewByte:8, B:8>> 
         end, byte_insert).
 
+-spec construct_sed_byte_random() -> mutation_fun().
 construct_sed_byte_random() ->  %% swap a byte with a random one
     construct_sed_byte_muta(
         fun (_B) -> 
@@ -179,6 +216,7 @@ construct_sed_byte_random() ->  %% swap a byte with a random one
 %%%
 %%% Warning: this implememntations are not radamsa-like, only making "similar" things, but in the other way and with slight differences
 
+-spec construct_sed_bytes_muta(byte_edit_fun(), atom()) -> mutation_fun().
 %% WARNING && TODO: this impementation is DIRTY and not as effective as Radamsa
 construct_sed_bytes_muta(F, Name) ->
     fun 
@@ -198,7 +236,7 @@ construct_sed_bytes_muta(F, Name) ->
         {Self, C, [{Name, D}|Meta], D}
     end.
 
-
+-spec construct_sed_bytes_perm() -> mutation_fun().
 %% WARNING: in radamsa max permutation block could not exceed length 20, here could be any length
 construct_sed_bytes_perm() -> %% permute a few bytes
     construct_sed_bytes_muta(
@@ -209,6 +247,7 @@ construct_sed_bytes_perm() -> %% permute a few bytes
             [<<H/binary, C/binary, T/binary>> | BTail]
         end, seq_perm).
 
+-spec construct_sed_bytes_repeat() -> mutation_fun().
 construct_sed_bytes_repeat() -> %% repeat a seq
     construct_sed_bytes_muta(
         fun (H, Bs, T, BTail) ->            
@@ -219,6 +258,7 @@ construct_sed_bytes_repeat() -> %% repeat a seq
             Res
         end, seq_repeat).
 
+-spec construct_sed_bytes_drop() -> mutation_fun().
 construct_sed_bytes_drop() -> %% drop a seq
     construct_sed_bytes_muta(
         fun (H, _Bs, T, BTail) -> 
@@ -229,7 +269,8 @@ construct_sed_bytes_drop() -> %% drop a seq
 %% Lines
 %%
 
-%% bvec -> (<<... , 10>> .. <<... , 10>>), cut after newlines
+-spec lines(binary()) -> [string()].
+%% bvec -> ([... , 10] .. [... , 10]), cut after newlines
 lines(Bvec) -> lines(binary_to_list(Bvec), [], []).
 
 lines([], [], Out) -> lists:reverse(Out);
@@ -237,10 +278,12 @@ lines([], Buff, Out) -> lists:reverse([lists:reverse(Buff)] ++ Out);
 lines([10|T], Buff, Out) -> lines(T, [], [lists:reverse([10 | Buff]) | Out]);
 lines([H|T], Buff, Out) -> lines(T, [H | Buff], Out).
 
+-spec unlines([string()]) -> binary().
 %% Lst -> bvec
 unlines(Lst) ->
     lists:foldl(fun (X, Acc) -> C = list_to_binary(X), <<Acc/binary, C/binary>> end, <<>>, Lst).
 
+-spec try_lines(binary()) -> [string()] | false.
 %% #u8[byte ...] -> ((byte ... 10) ...) | #false, if this doesn't look like line-based text data
 %% TODO: ugly code, need a bit refactor
 try_lines(Bvec) ->
@@ -252,6 +295,7 @@ try_lines(Bvec) ->
         true -> Ls
     end.
 
+-spec construct_line_muta(fun(), atom()) -> mutation_fun().
 construct_line_muta(Op, Name) ->
     fun Self(Ll = [H|T], Meta) ->
         Ls = try_lines(H),        
@@ -265,6 +309,7 @@ construct_line_muta(Op, Name) ->
         end
     end. 
 
+-spec construct_st_line_muta(fun(), atom(), list()) -> mutation_fun().
 %% state is (n <line> ...)
 construct_st_line_muta(Op, Name, InitialState) ->
     fun (Ll = [H|T], Meta) ->
@@ -284,6 +329,7 @@ construct_st_line_muta(Op, Name, InitialState) ->
 %% Shared sequences
 %%
 
+-spec sed_fuse_this(list_of_bins(), meta_list()) -> mutation_res().
 %% (a b ...) -> (a+a b ...)
 sed_fuse_this([H|T], Meta) -> % jump between two shared suffixes in the block
     Lst = binary_to_list(H),    
@@ -291,39 +337,26 @@ sed_fuse_this([H|T], Meta) -> % jump between two shared suffixes in the block
     D = erlamsa_rnd:rand_delta(),
     {fun sed_fuse_this/2, [B | T], [{fuse_this, D}|Meta], D}.
 
-
-%% split list into two halves
-%% lst -> a b, a ++ b == lst, length a = length b +/- 1
-%% faster than lists:split(length(..)/2, ..), which takes O(n^2)
-split(Lst) -> walk(Lst, Lst, []).
-
-%% TODO: ugly, need refactor
-walk(T, [], Acc) -> 
-    {lists:reverse(Acc), T};
-walk(T, [_Head|Tail], Acc) when Tail =:= [] -> 
-    {lists:reverse(Acc), T};
-walk([A|B], [_Head|Tail], Acc) ->
-    walk(B, tl(Tail), [A | Acc]).
-
+-spec sed_fuse_next(list_of_bins(), meta_list()) -> mutation_res().
 sed_fuse_next([H|T], Meta) ->
-    {Al1, Al2} = split(binary_to_list(H)),
+    {Al1, Al2} = erlamsa_utils:halve(binary_to_list(H)),
     {B, Ll} = erlamsa_utils:uncons(T, H), % next or current
     Bl = binary_to_list(B),
-    Abl = fuse:fuse(Al1, Bl),
-    Abal = fuse:fuse(Abl, Al2),
+    Abl = erlamsa_fuse:fuse(Al1, Bl),
+    Abal = erlamsa_fuse:fuse(Abl, Al2),
     D = erlamsa_rnd:rand_delta(),
     {fun sed_fuse_next/2,  
         erlamsa_utils:flush_bvecs(list_to_binary(Abal), Ll), %  <- on avg 1x, max 2x block sizes
         [{fuse_next, D}|Meta], D}.
 
-
+-spec remember(binary()) -> mutation_fun().
 remember(Block) ->
     fun ([H|T], Meta) -> 
         %% TODO: Check -- in radamsa here using owllisp halve instead of split
-        {Al1, Al2} = split(binary_to_list(H)),
-        {Ol1, Ol2} = split(binary_to_list(Block)),
-        A = fuse:fuse(Al1, Ol1), % a -> o
-        B = fuse:fuse(Ol2, Al2), % o -> a
+        {Al1, Al2} = erlamsa_utils:halve(binary_to_list(H)),
+        {Ol1, Ol2} = erlamsa_utils:halve(binary_to_list(Block)),
+        A = erlamsa_fuse:fuse(Al1, Ol1), % a -> o
+        B = erlamsa_fuse:fuse(Ol2, Al2), % o -> a
         Swap = erlamsa_rnd:rand(3),
         D = erlamsa_rnd:rand_delta(),
         NewBlock = case Swap of
@@ -336,6 +369,7 @@ remember(Block) ->
             [{fuse_old, D}|Meta], D}
     end.
 
+-spec sed_fuse_old(list_of_bins(), meta_list()) -> mutation_res().
  sed_fuse_old(Ll = [H|_], Meta) ->
      R = remember(H),
      R(Ll, Meta).
@@ -345,133 +379,44 @@ remember(Block) ->
 %% ASCII string mutations (use UTF-8 later)
 %%
 
-texty(B) when B < 9 -> false;
-texty(B) when B > 126 -> false;
-texty(B) when B > 31 -> true;
-texty(9) -> true;
-texty(10) -> true;
-texty(13) -> true;
-texty(_) -> false.
-
-texty_enough(Lst) -> texty_enough(Lst, ?MIN_TEXTY).
-
-texty_enough([], _) -> true; % match short textual input, accidentally also short trailing ones
-texty_enough(_, 0) -> true;
-texty_enough([H|T], N) -> 
-    case texty(H) of 
-        true -> texty_enough(T, N - 1);
-        false -> false
-    end.
-
-flush_type_node(Type, Bytes, Chunks) ->    
-    [[Type | lists:reverse(Bytes)] | Chunks].
-
-%% (byte ..) -> (node ...)
-%%  node = #(byte bytes...) | #(text bytes) | #(delimited byte (byte ...) byte)
-string_lex(Lst) -> string_lex_step(Lst, [], []).
-
-string_lex_step([], [], Chunks) -> 
-    lists:reverse(Chunks);
-string_lex_step([], Rawr, Chunks) -> 
-    lists:reverse(flush_type_node(byte, Rawr, Chunks));
-%% WARN: TODO: ugly, need rewrite
-string_lex_step(Lst = [H|T], Rawr, Chunks) -> 
-    case texty_enough(Lst) of
-        true ->
-            if 
-                Rawr =:= [] -> 
-                    step_text(Lst, [], Chunks);
-                true -> 
-                    step_text(Lst, [], 
-                        flush_type_node(byte, Rawr, Chunks))
-            end;
-        false -> 
-            string_lex_step(T, [H | Rawr], Chunks)
-    end.
-
-step_text([], Seenr, Chunks) -> 
-    lists:reverse(flush_type_node(text, Seenr, Chunks));
-step_text([H|T], Seenr, Chunks) when H == 34; H == 39 ->
-    %%fun (End) ->
-        step_delimited(T, H, H, [], [H | Seenr], Chunks);
-    %%end;
-step_text(Lst = [H|T], Seenr, Chunks) ->
-    case texty(H) of
-        true -> step_text(T, [H | Seenr], Chunks);
-        %% min length checked at seen
-        false -> string_lex_step(Lst, [], flush_type_node(text, Seenr, Chunks))
-    end.
-
-%% reading text, seen a delimiter
-%% f o o = " 9 0 0 1
-%% prevr---' '--- afterr
-%%         '-> start = ", end = "
-step_delimited([], _Start, _End, AfterR, PrevR, Chunks) ->
-    lists:reverse(flush_type_node(text, AfterR ++ PrevR, Chunks));
-%% finish text chunk
-step_delimited(_Lst = [H|T], Start, End, AfterR, _PrevR = [_PrevrH | PrevrT], Chunks) when H =:= End ->
-    Node = [delimited, {Start, lists:reverse(AfterR), End}],
-    case PrevrT =:= [] of
-        true -> string_lex_step(T, [], [Node | Chunks]);
-        false -> string_lex_step(T, [], [Node, [text | lists:reverse(PrevrT)] | Chunks])
-    end;
-%% skip byte after quotation, if it seems texty    
-step_delimited(_Lst = [H|T], Start, End, AfterR, PrevR, Chunks) when H =:= 92, T =:= [] -> %% \
-    step_delimited(T, Start, End, [92 | AfterR], PrevR, Chunks);
-step_delimited(_Lst = [H|T], Start, End, AfterR, PrevR, Chunks) when H =:= 92 -> %% \
-    case texty(hd(T)) of
-        true -> step_delimited(tl(T), Start, End, [hd(T), 92 | AfterR], PrevR, Chunks);
-        false -> step_delimited(T, Start, End, [H | AfterR], PrevR, Chunks)
-    end;
-step_delimited(Lst = [H|T], Start, End, AfterR, PrevR, Chunks) ->
-    case texty(H) of
-        true -> step_delimited(T, Start, End, [H | AfterR], PrevR, Chunks);
-        false -> string_lex_step(Lst, [], flush_type_node(text, AfterR ++ PrevR, Chunks))
-    end.
-
-string_unlex(Chunks) ->
-    lists:foldr(
-        fun 
-            ([byte|T], Tail) ->
-                T ++ Tail;
-            ([delimited, {LD, L, RD}], Tail) ->
-                [LD | L] ++ [RD | Tail];
-            ([text|T], Tail) -> 
-                T ++ Tail
-        end
-        , [], Chunks).
-
 %%% Text mutations
 
 %% check that the nodes do look stringy enough to mutate with these 
 %% heuristics, meaning there are some nodes and/or just one, but it's
 %% stringy
 %% in radamsa this will stop if found byte node; here, we continue
+-spec stringy(list(byte())) -> false | true.
 stringy([]) -> false;
 stringy([[byte | _] | T]) -> false or stringy(T);
 stringy(_) -> true. %% in radamsa -- length(Cs)
 
+-spec silly_strings() -> list(string()).
 silly_strings() -> % added \r \n \t \b 
     ["%n", "%n", "%s", "%d", "%p", "%#x", [0], "aaaa%d%n", [10], [13], [9], [8]]. 
 
+-spec delimeters() -> list(string()).
 delimeters() ->
     ["'", "\"", "'", "\"", "'", "\"", "&", ":", "|", ";",
      "\\", [10], [13], [9], " ", "`", [0], "]", "[", ">", "<"].
     
+-spec random_badness() -> list().
 random_badness() ->
     random_badness(erlamsa_rnd:rand(20) + 1, []).
 
+-spec random_badness(non_neg_integer(), list()) -> list().
 random_badness(0, Out) -> Out;
 random_badness(N, Out) ->
     X = erlamsa_rnd:rand_elem(silly_strings()),
     random_badness(N - 1, X ++ Out).
 
+-spec overwrite(list(), list()) -> list().
 overwrite([], Old) -> Old;
 overwrite([H|T], [_|OldT]) ->
     [H | overwrite(T, OldT)];
 overwrite([H|T], Old) ->
     [H | overwrite(T, Old)].
 
+-spec rand_as_count() -> non_neg_integer().
 rand_as_count() ->
     Type = erlamsa_rnd:rand(11),
     case Type of
@@ -488,14 +433,17 @@ rand_as_count() ->
         _Else -> erlamsa_rnd:rand(1024)        
     end.
 
+-spec push_as(non_neg_integer(), list()) -> list().
 push_as(0, Tail)
     -> Tail;
 push_as(N, Tail) ->
     push_as(N - 1, [97 | Tail]).
 
+-spec mutate_text_data(string(), [text_mutators()]) -> string().
 mutate_text_data(Lst, TxtMutators) ->
     mutate_text(erlamsa_rnd:rand_elem(TxtMutators), Lst).
 
+-spec mutate_text(text_mutators(), string()) -> string().
 %% insert badness
 mutate_text(insert_badness, []) -> random_badness(); %% empty list -- just insert random
 mutate_text(insert_badness, Lst) ->
@@ -530,30 +478,32 @@ mutate_text(insert_delimeter, Lst) ->
 %% Else, if Cs contains only byte nodes, it will run infinetely
 %% Here, we do maximum L/4 runs in this case
 %% TODO: WARN: Ineffective, need rewrite/optimize
+-spec string_generic_mutate(erlamsa_strlex:chunk_list(), [text_mutators()], non_neg_integer(), non_neg_integer()) -> erlamsa_strlex:chunk_list().
 string_generic_mutate(Cs, _, L, R) when R > L/4 -> Cs;
 string_generic_mutate(Cs, TxtMutators, L, R) ->
     P = erlamsa_rnd:erand(L), % in erlang, list is beginning from index 1
     El = lists:nth(P, Cs),
     case El of 
-        [text|Bs] -> 
+        {text, Bs} -> 
             Data = mutate_text_data(Bs, TxtMutators),
-            erlamsa_utils:applynth(P, Cs, fun(_E, Rest) -> [[text | Data] | Rest] end);  % [Node]
-        [byte|_Bs] ->
+            erlamsa_utils:applynth(P, Cs, fun(_E, Rest) -> [{text, Data} | Rest] end);  % [Node]
+        {byte, _Bs} ->
             string_generic_mutate(Cs, TxtMutators, L, R + 1);
-        [delimited, {Left, Bs, Right}] ->
-            erlamsa_utils:applynth(P, Cs, fun (_E, Rest) -> [[delimited, {Left, mutate_text_data(Bs, TxtMutators), Right}]] ++ Rest end)
+        {delimited, Left, Bs, Right} ->
+            erlamsa_utils:applynth(P, Cs, fun (_E, Rest) -> [{delimited, Left, mutate_text_data(Bs, TxtMutators), Right}] ++ Rest end)
     end. 
 
+-spec construct_ascii_mutator(fun(), atom()) -> mutation_fun().
 construct_ascii_mutator(Fun, Name) ->
     fun Ascii_mutator (Ll = [H|T], Meta) -> 
         Data = binary_to_list(H),
-        Cs = string_lex(Data),
+        Cs = erlamsa_strlex:lex(Data),
 
         case stringy(Cs) of % in radamsa stringy_length
             true ->   % do something bad...
                 Ms = Fun(Cs),
                 D = erlamsa_rnd:rand_delta(),        
-                BinData = list_to_binary(string_unlex(Ms)),
+                BinData = list_to_binary(erlamsa_strlex:unlex(Ms)),
                 {Ascii_mutator, 
                     [BinData | T], 
                     [{Name, D}|Meta], D};
@@ -562,7 +512,7 @@ construct_ascii_mutator(Fun, Name) ->
         end
     end.
 
-
+-spec construct_ascii_bad_mutator() -> mutation_fun().
 construct_ascii_bad_mutator() ->    
     construct_ascii_mutator(
         fun (Cs) -> string_generic_mutate(Cs, 
@@ -571,32 +521,35 @@ construct_ascii_bad_mutator() ->
         end,
         ascii_bad).
 
+-spec drop_delimeter(non_neg_integer(), erlamsa_strlex:chunk()) -> erlamsa_strlex:chunk().
 %% drop one(both) or zero delimeters
-drop_delimeter(0, [delimited, {Left, Bs, _Right}]) -> % drop right
-    [text, Left] ++ Bs;
-drop_delimeter(1, [delimited, {_Left, Bs, Right}]) -> % drop left
-    [text | Bs] ++ [Right];
-drop_delimeter(2, [delimited, {_Left, Bs, _Right}]) -> % drop both
-    [text | Bs];
+drop_delimeter(0, {delimited, Left, Bs, _Right}) -> % drop right
+    {text, [Left|Bs]};
+drop_delimeter(1, {delimited, _Left, Bs, Right}) -> % drop left
+    {text, Bs ++ [Right]} ;
+drop_delimeter(2, {delimited, _Left, Bs, _Right}) -> % drop both
+    {text, Bs};
 drop_delimeter(_, El) -> % drop none
     El.
 
 %% Play with delimeters
+-spec string_delimeter_mutate(erlamsa_strlex:chunk_list(), non_neg_integer(), non_neg_integer()) -> erlamsa_strlex:chunk_list().
 string_delimeter_mutate(Cs, L, R) when R > L/4 -> Cs;
 string_delimeter_mutate(Cs, L, R) ->
     P = erlamsa_rnd:erand(L), % in erlang, list is beginning from index 1
     El = lists:nth(P, Cs),
     case El of 
-        [text|Bs] -> %% insert or drop special delimeter(s)
+        {text, Bs} -> %% insert or drop special delimeter(s)
             Data = mutate_text_data(Bs, [insert_delimeter]),
-            erlamsa_utils:applynth(P, Cs, fun(_E, Rest) -> [[text | Data]|Rest] end); % [Node]            
-        [byte|_Bs] -> %% do nothing
+            erlamsa_utils:applynth(P, Cs, fun(_E, Rest) -> [{text, Data}|Rest] end); % [Node]            
+        {byte, _Bs} -> %% do nothing
             string_delimeter_mutate(Cs, L, R + 1);
-        [delimited, {_Left, _Bs, _Right}] ->
+        {delimited, _Left, _Bs, _Right} ->
             Drop = drop_delimeter(erlamsa_rnd:rand(4), El),
             erlamsa_utils:applynth(P, Cs, fun(_E, Rest) -> [Drop|Rest] end)
     end.
 
+-spec construct_ascii_delimeter_mutator() -> mutation_fun().
 construct_ascii_delimeter_mutator() ->    
     construct_ascii_mutator(
         fun (Cs) -> string_delimeter_mutate(Cs, length(Cs), 0)
@@ -608,6 +561,7 @@ construct_ascii_delimeter_mutator() ->
 %% Guessed Parse-tree Mutations
 %%
 
+-spec usual_delims(non_neg_integer()) -> non_neg_integer().
 %% ?? could be settable from command line
 usual_delims(40) -> 41;   % ()
 usual_delims(91) -> 93;   % []
@@ -617,16 +571,14 @@ usual_delims(34) -> 34;   % ""
 usual_delims(39) -> 39;   % ''
 usual_delims(_) -> false.
 
+-spec grow(list(), byte(), list()) -> {list(), true | false}.
 %% -> lst #false = ran out of data trying to parse up to close, but lst is the same with partial parsing
 %% -> lst tail-lst = did successfully parse up to close. ready node is lst, tail is following data
 grow([], _Close, Rout) ->  %% out of data, didn't find close. return partial parse.
     {lists:reverse(Rout), false};    
 grow([H|T], Close, Rout) when H =:= Close -> %% match complete, return with rest of list
-    %%io:write({[H|T], Close, Rout}),
     {lists:reverse([Close | Rout]), T};
 grow([H|T], Close, Rout) ->
-    %%io:write({[H|T], Close, Rout}),
-    %%io:format("~n"),
     Next_close = usual_delims(H),
     case Next_close of
         false -> %% add one byte to this node
@@ -643,24 +595,29 @@ grow([H|T], Close, Rout) ->
             end
     end.
 
-%% count how many list nodes are in a tree structure
-count_nodes(Lst) -> count_nodes(Lst, 0).
+% -spec count_nodes(list()) -> non_neg_integer().
+% %% count how many list nodes are in a tree structure
+% count_nodes(Lst) -> count_nodes(Lst, 0).
 
-count_nodes([], N) -> N;
-count_nodes([H|T], N) when is_list(H) -> 
-    count_nodes(T, count_nodes(H, N+1));
-count_nodes([_|T], N) ->
-    count_nodes(T, N).
+% -spec count_nodes(list(), non_neg_integer()) -> non_neg_integer().
+% count_nodes([], N) -> N;
+% count_nodes([H|T], N) when is_list(H) -> 
+%     count_nodes(T, count_nodes(H, N+1));
+% count_nodes([_|T], N) ->
+%     count_nodes(T, N).
 
+-spec sublists(list()) -> list().
 %% lst -> a list of lists (not counting tails) in lst, when walked recursively, not counting lst itself
 sublists(Lst) -> sublists(Lst, []).
 
+-spec sublists(list(), list()) -> list().
 sublists([], Found) -> Found;
 sublists([H|T], Found) when is_list(H) ->
     sublists(T, sublists(H, [H|Found]));
 sublists([_H|T], Found) ->
     sublists(T, Found).
 
+-spec pick_sublist(list()) -> list().
 pick_sublist(Lst) ->
     Subs = sublists(Lst),
     case Subs of
@@ -669,6 +626,8 @@ pick_sublist(Lst) ->
             erlamsa_rnd:rand_elem(Subs) %% TODO: FIXME: CHECK IF it's correct!
     end.
 
+%% TODO: type for fun().
+-spec edit_sublist(list(), list(), fun()) -> list().
 %% replace the node (sub . tail) with (op (sub . tail))
 edit_sublist(Lst = [H|_T], Sub, Op) when H =:= Sub ->
     Op(Lst);
@@ -676,6 +635,8 @@ edit_sublist([H|T], Sub, Op) ->
     [edit_sublist(H, Sub, Op) | edit_sublist(T, Sub, Op)];
 edit_sublist(Lst, _Sub, _Op) -> Lst.
 
+%% TODO: type for fun().
+-spec edit_sublists(list(), fun()) -> list().
 %% lst (ff of node -> (node -> node)) -> lst' ; <- could also be done with a recursive-mapn
 edit_sublists([Hd|T], OpFF) when is_list(Hd) -> 
     MaybeOp = erlamsa_utils:get(Hd, false, OpFF),
@@ -689,8 +650,10 @@ edit_sublists([H|T], OpFF) ->
     [H | edit_sublists(T, OpFF)];
 edit_sublists(Lst, _) -> Lst.
 
+-spec partial_parse(list()) -> list().
 partial_parse(Lst) -> partial_parse(Lst, []).
 
+-spec partial_parse(list(), list()) -> list().
 partial_parse([], Rout) ->
     lists:reverse(Rout);
 partial_parse([H|T], Rout) ->
@@ -708,12 +671,15 @@ partial_parse([H|T], Rout) ->
             end
     end.
 
+-spec flatten(list(), list()) -> list().
 flatten([], Tl) -> Tl;
 flatten([H|T], Tl) ->
     flatten(H, flatten(T, Tl));
 flatten(Node, Tl) ->
     [Node | Tl].
 
+%% TODO: type for fun().
+-spec sed_tree_op(fun(), atom()) -> mutation_fun().
 sed_tree_op(Op, Name) ->
     fun F (Ll = [H|T], Meta) ->
         case binarish(H) of
@@ -727,18 +693,22 @@ sed_tree_op(Op, Name) ->
         end    
     end.
 
+-spec sed_tree_dup() -> mutation_fun().
 sed_tree_dup() ->
     sed_tree_op(fun (Node = [H|_T]) -> [H|Node] end, tree_dup).
 
+-spec sed_tree_del() -> mutation_fun().
 sed_tree_del() ->
     sed_tree_op(fun ([_H|T]) -> T end, tree_del).
 
+-spec sed_tree_swap_one(list(), list()) -> list().
 %% overwrite one node with one of the others
 sed_tree_swap_one(Lst, Subs) ->
     ToSwap = erlamsa_rnd:reservoir_sample(Subs, 2),
     [A | [B | _]] = erlamsa_rnd:random_permutation(ToSwap),
     edit_sublist(Lst, A, fun ([_|Tl]) -> [B | Tl] end).
 
+-spec sed_tree_swap_two(list(), list()) -> list().
 %% pairwise swap of two nodes
 %% TODO: here there is a bug (also in original radamsa) that causes to swap child with the parent node, could be feature xD
 sed_tree_swap_two(Lst, Subs) ->
@@ -747,7 +717,8 @@ sed_tree_swap_two(Lst, Subs) ->
     Mapping = gb_trees:enter(B, fun(_X) -> A end, gb_trees:enter(A, fun (_X) -> B end, gb_trees:empty())),    
     edit_sublists(Lst, Mapping).
 
-
+%% TODO: type for fun().
+-spec construct_sed_tree_swap(fun(), atom()) -> mutation_fun().
 construct_sed_tree_swap(Op, Name) ->
     fun F (Ll = [H|T], Meta) ->
         case binarish(H) of
@@ -766,13 +737,14 @@ construct_sed_tree_swap(Op, Name) ->
     end.
 
 %% tree stutter
-
+-spec repeat_path(list(), list(), non_neg_integer()) -> list().
 repeat_path(Parent, _Child, N) when N < 2 ->
     Parent; %% <- causes at least 1 extra path to be made, saves one useless replace cycle
 repeat_path(Parent, Child, N) ->
     edit_sublist(Parent, Child, 
         fun ([_H|T]) -> [repeat_path(Parent, Child, N-1) | T] end).
 
+-spec choose_child(list()) -> false | list().
 choose_child(Node) ->
     Subs = sublists(Node),
     case Subs of 
@@ -780,6 +752,7 @@ choose_child(Node) ->
         _Else -> erlamsa_rnd:rand_elem(Subs)
     end.
 
+-spec choose_stutr_nodes(list()) -> {false | list(), false | list()}.
 choose_stutr_nodes([]) -> {false, false}; %% no child nodes
 choose_stutr_nodes([H|T]) ->
     Childp = choose_child(H),
@@ -788,6 +761,7 @@ choose_stutr_nodes([H|T]) ->
         _Else -> {H, Childp}
     end.
 
+-spec sed_tree_stutter(list_of_bins(), meta_list()) -> mutation_res().
 sed_tree_stutter(Ll = [H|T], Meta) ->
     case binarish(H) of
         true -> {fun sed_tree_stutter/2, Ll, Meta, -1};
@@ -814,9 +788,11 @@ sed_tree_stutter(Ll = [H|T], Meta) ->
 %%
 
 %% grab low 6 bits of a number
+-spec ext(integer()) -> integer().
 ext(N) ->
     (N band 2#111111) bor 2#10000000.
     
+-spec encode_point(integer()) -> integer().
 %% encode an ascii to utf-8
 encode_point(Point) when Point < 16#80 ->                    % ascii, fits 7 bits 
     [Point];
@@ -833,6 +809,7 @@ encode_point(Point) when Point < 2#1000000000000000000000 -> % 3 + 3*6 bits
     ext(Point bsr 6),
     ext(Point)].
 
+-spec funny_unicode() -> list().
 %% TODO: VERY INEFFECTIVE, should be constant...
 funny_unicode() -> 
     Manual =   [[239, 191, 191],        % 65535
@@ -861,6 +838,7 @@ funny_unicode() ->
                 end, [], Codes), 
     Manual ++ lists:map(fun (X) -> encode_point(X) end, Numbers).
 
+-spec sed_utf8_widen(list_of_bins(), meta_list()) -> mutation_res().
 sed_utf8_widen([H|T], Meta) ->    
     P = erlamsa_rnd:rand(size(H)),
     D = erlamsa_rnd:rand_delta(),
@@ -871,6 +849,7 @@ sed_utf8_widen([H|T], Meta) ->
         end)
       | T], [{sed_utf8_widen, D}|Meta], D}.
 
+-spec sed_utf8_insert(list_of_bins(), meta_list()) -> mutation_res().
 sed_utf8_insert([H|T], Meta) ->    
     P = erlamsa_rnd:rand(size(H)),
     D = erlamsa_rnd:rand_delta(),
@@ -884,11 +863,13 @@ sed_utf8_insert([H|T], Meta) ->
 %%  Main Mutation Functions
 %%
 
+-spec adjust_priority(non_neg_integer(), non_neg_integer()) -> non_neg_integer().
 %% limit to [min-score .. max-score]
 adjust_priority(Pri, 0) -> Pri;
 adjust_priority(Pri, Delta) ->
     max(?MIN_SCORE, min(?MAX_SCORE, Pri + Delta)).
 
+-spec weighted_permutations([mutation()]) -> prioritized_list(). 
 %% [{Score, Priority, _, _}, ...] -> [{Rand(S*P), {...}}, ...] -> sort -> [{...}, ...]
 weighted_permutations([]) -> [];
 weighted_permutations(Pris) ->
@@ -899,6 +880,8 @@ weighted_permutations(Pris) ->
 %% Mutators have a score they can change themselves (1-100) and a priority given by
 %% the user at command line. Activation probability is (score*priority)/SUM(total-scores).
 
+%%TODO: decribe fun() type
+-spec mux_fuzzers([mutation()]) -> fun().
 %% (#(score priority mutafn name) ...) -> merged-mutafn :: rs ll meta -> merged-mutafn' rs' ll' meta'
 mux_fuzzers(Fs) ->
     fun L([], Meta) -> {mux_fuzzers(Fs), <<>>, Meta};
@@ -907,6 +890,7 @@ mux_fuzzers(Fs) ->
         L(Ll, Meta) -> L(Ll(), Meta) %% TODO: strange behaviour
     end.
 
+-spec mux_fuzzers_loop(lazy_list_of_bins(), [mutation()], lazy_list_of_bins(), meta_list()) -> {fun(), lazy_list_of_bins(), meta_list()}.
 mux_fuzzers_loop(Ll, [], Out, Meta) -> {mux_fuzzers(Out), Ll, Meta};
 mux_fuzzers_loop(Ll, [Node|Tail], Out, Meta) ->
     {Mscore, MPri, Fn, Mname} = Node,
@@ -917,47 +901,68 @@ mux_fuzzers_loop(Ll, [Node|Tail], Out, Meta) ->
     IsHEq = (hd(Mll) == hd(Ll)),
     if
         IsMllPair andalso IsHEq -> mux_fuzzers_loop(Ll, Tail, NOut, MMeta);
-        true -> erlamsa_utils:stderr_probe({used, Mname}, {mux_fuzzers(NOut ++ Tail), Mll, MMeta})
+        true -> {mux_fuzzers(NOut ++ Tail), Mll, [{used, Mname} | MMeta]}
     end.
 
+-spec mutations() -> [mutation()].
 %% default mutations list
-default_mutations() -> [%{10, 1, fun sed_num/2, num},
-                        %{10, 1, fun sed_utf8_widen/2, uw},
-                        %{10, 1, fun sed_utf8_insert/2, ui},
+mutations() -> [{10, 1, fun sed_num/2, num},
+                        {10, 1, fun sed_utf8_widen/2, uw},
+                        {10, 1, fun sed_utf8_insert/2, ui},
                         {10, 1, construct_ascii_bad_mutator(), ab},
-                        {10, 1, construct_ascii_delimeter_mutator(), ad}].%,
-                        % {10, 1, sed_tree_dup(), tr2},
-                        % {10, 1, sed_tree_del(), td},
-                        % {10, 1, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1},
-                        % {10, 1, construct_st_line_muta(fun erlamsa_generic:st_list_ins/2, list_ins, [0]), lis},
-                        % {10, 1, construct_st_line_muta(fun erlamsa_generic:st_list_replace/2, list_replace, [0]), lrs},
-                        % {10, 1, fun sed_tree_stutter/2, tr},
-                        % {10, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2},
-                        % {10, 1, construct_sed_byte_drop(), bd},
-                        % {10, 1, construct_sed_byte_inc(), bei},
-                        % {10, 1, construct_sed_byte_dec(), bed},
-                        % {10, 1, construct_sed_byte_flip(), bf},
-                        % {10, 1, construct_sed_byte_insert(), bi},
-                        % {10, 1, construct_sed_byte_random(), ber},
-                        % {10, 1, construct_sed_byte_repeat(), br},
-                        % {10, 1, construct_sed_bytes_perm(), sp},
-                        % {10, 1, construct_sed_bytes_repeat(), sr},
-                        % {10, 1, construct_sed_bytes_drop(), sd},
-                        % {10, 1, construct_line_muta(fun erlamsa_generic:list_del/2, line_del), ld},
-                        % {10, 1, construct_line_muta(fun erlamsa_generic:list_del_seq/2, line_del_seq), lds},
-                        % {10, 1, construct_line_muta(fun erlamsa_generic:list_dup/2, line_dup), lr2},
-                        % {10, 1, construct_line_muta(fun erlamsa_generic:list_clone/2, line_clone), lri},
-                        % {10, 1, construct_line_muta(fun erlamsa_generic:list_repeat/2, line_repeat), lr},
-                        % {10, 1, construct_line_muta(fun erlamsa_generic:list_swap/2, line_swap), ls},
-                        % {10, 1, construct_line_muta(fun erlamsa_generic:list_perm/2, line_perm), lp},
-                        % {10, 1, fun sed_fuse_this/2, ft},
-                        % {10, 1, fun sed_fuse_next/2, fn},
-                        % {10, 1, fun sed_fuse_old/2, fo}].
+                        {10, 1, construct_ascii_delimeter_mutator(), ad},
+                        {10, 1, sed_tree_dup(), tr2},
+                        {10, 1, sed_tree_del(), td},
+                        {10, 1, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1},
+                        {10, 1, construct_st_line_muta(fun erlamsa_generic:st_list_ins/2, list_ins, [0]), lis},
+                        {10, 1, construct_st_line_muta(fun erlamsa_generic:st_list_replace/2, list_replace, [0]), lrs},
+                        {10, 1, fun sed_tree_stutter/2, tr},
+                        {10, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2},
+                        {10, 1, construct_sed_byte_drop(), bd},
+                        {10, 1, construct_sed_byte_inc(), bei},
+                        {10, 1, construct_sed_byte_dec(), bed},
+                        {10, 1, construct_sed_byte_flip(), bf},
+                        {10, 1, construct_sed_byte_insert(), bi},
+                        {10, 1, construct_sed_byte_random(), ber},
+                        {10, 1, construct_sed_byte_repeat(), br},
+                        {10, 1, construct_sed_bytes_perm(), sp},
+                        {10, 1, construct_sed_bytes_repeat(), sr},
+                        {10, 1, construct_sed_bytes_drop(), sd},
+                        {10, 1, construct_line_muta(fun erlamsa_generic:list_del/2, line_del), ld},
+                        {10, 1, construct_line_muta(fun erlamsa_generic:list_del_seq/2, line_del_seq), lds},
+                        {10, 1, construct_line_muta(fun erlamsa_generic:list_dup/2, line_dup), lr2},
+                        {10, 1, construct_line_muta(fun erlamsa_generic:list_clone/2, line_clone), lri},
+                        {10, 1, construct_line_muta(fun erlamsa_generic:list_repeat/2, line_repeat), lr},
+                        {10, 1, construct_line_muta(fun erlamsa_generic:list_swap/2, line_swap), ls},
+                        {10, 1, construct_line_muta(fun erlamsa_generic:list_perm/2, line_perm), lp},
+                        {10, 1, fun sed_fuse_this/2, ft},
+                        {10, 1, fun sed_fuse_next/2, fn},
+                        {10, 1, fun sed_fuse_old/2, fo}].
 
+-spec default() -> [{atom(), non_neg_integer()}].
+default() -> lists:map(fun ({_, Pri, _, Name}) -> {Name, Pri} end, mutations()).
+
+-spec make_mutator([{atom(), non_neg_integer()}]) -> fun().
+make_mutator(Lst) ->
+    SelectedMutas = maps:from_list(Lst),
+    Mutas = lists:foldl(
+        fun ({Score, _Pri, F, Name}, Acc) ->
+            Val = maps:get(Name, SelectedMutas, notfound),
+            case Val of 
+                notfound -> Acc;
+                _Else -> [{Score, Val, F, Name} | Acc]
+            end
+        end,
+        [],
+        mutations()),
+    mutators_mutator(Mutas).
+
+-spec mutators_mutator([mutation()]) -> fun().
 %% randomize mutator scores
 mutators_mutator(Mutas) ->
     mutators_mutator(Mutas, []).
 
+-spec mutators_mutator([mutation()], [mutation()]) -> fun().
 mutators_mutator([], Out) ->
     mux_fuzzers(Out);
 mutators_mutator([{_, Pri, F, Name}|T], Out) ->
