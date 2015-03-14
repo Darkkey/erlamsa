@@ -131,7 +131,7 @@ patterns() -> [{1, fun pat_once_dec/3, od, "Mutate patterns"},
                {1, fun pat_burst/3, bu, "Make several mutations closeby once"}
                 ].
 
--spec default() -> [atom()].
+-spec default() -> [{atom(), non_neg_integer()}].
 default() -> lists:map(fun ({Pri, _, Name, _}) -> {Name, Pri} end, patterns()).
 
 %% TODO: rewrite?
