@@ -36,7 +36,7 @@
 -include("erlamsa.hrl").
 
 %% API
--export([make_mutator/1, default/0]).
+-export([make_mutator/1, default/0, default_string/0, string_to_mutators/1]).
  
 
 -define(MIN_SCORE, 2).
@@ -907,9 +907,9 @@ mux_fuzzers_loop(Ll, [Node|Tail], Out, Meta) ->
 
 -spec mutations() -> [mutation()].
 %% default mutations list
-mutations() ->          [{10, 1, fun sed_num/2, num},
+mutations() ->          [{10, 5, fun sed_num/2, num},
                         {10, 1, fun sed_utf8_widen/2, uw},
-                        {10, 1, fun sed_utf8_insert/2, ui},
+                        {10, 2, fun sed_utf8_insert/2, ui},
                         {10, 1, construct_ascii_bad_mutator(), ab},
                         {10, 1, construct_ascii_delimeter_mutator(), ad},
                         {10, 1, sed_tree_dup(), tr2},
@@ -917,7 +917,7 @@ mutations() ->          [{10, 1, fun sed_num/2, num},
                         {10, 1, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1},
                         {10, 1, construct_st_line_muta(fun erlamsa_generic:st_list_ins/2, list_ins, [0]), lis},
                         {10, 1, construct_st_line_muta(fun erlamsa_generic:st_list_replace/2, list_replace, [0]), lrs},
-                        {10, 1, fun sed_tree_stutter/2, tr},
+                        {10, 7, fun sed_tree_stutter/2, tr},
                         {10, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2},
                         {10, 1, construct_sed_byte_drop(), bd},
                         {10, 1, construct_sed_byte_inc(), bei},
@@ -936,12 +936,24 @@ mutations() ->          [{10, 1, fun sed_num/2, num},
                         {10, 1, construct_line_muta(fun erlamsa_generic:list_repeat/2, line_repeat), lr},
                         {10, 1, construct_line_muta(fun erlamsa_generic:list_swap/2, line_swap), ls},
                         {10, 1, construct_line_muta(fun erlamsa_generic:list_perm/2, line_perm), lp},
-                        {10, 1, fun sed_fuse_this/2, ft},
+                        {10, 2, fun sed_fuse_this/2, ft},
                         {10, 1, fun sed_fuse_next/2, fn},
-                        {10, 1, fun sed_fuse_old/2, fo}].
+                        {10, 2, fun sed_fuse_old/2, fo}].
 
 -spec default() -> [{atom(), non_neg_integer()}].
 default() -> lists:map(fun ({_, Pri, _, Name}) -> {Name, Pri} end, mutations()).
+
+-spec default_string() -> string().
+default_string() -> lists:foldl(fun ({_, Pri, _, Name}, Acc) -> 
+    case Pri of
+        1 -> atom_to_list(Name) ++ "," ++ Acc;
+        _Else -> atom_to_list(Name) ++ "=" ++ integer_to_list(Pri) ++ "," ++ Acc
+    end
+ end, [], mutations()).
+
+-spec string_to_mutators([string()]) -> [{atom(), non_neg_integer()}].
+string_to_mutators([H|T]) ->
+    [{a,1}].
 
 -spec make_mutator([{atom(), non_neg_integer()}]) -> fun().
 make_mutator(Lst) ->

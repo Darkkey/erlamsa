@@ -51,9 +51,9 @@ uncons(L, D) when is_function(L) -> uncons(L(), D).
 
 -spec verb(file:io_device() | standard_error | standard_io, non_neg_integer()) -> fun().
 verb(_Fd, 0) -> fun(X) -> X end;
-verb(stdout, _I) -> fun(X) -> io:write(X) end;  
-verb(stderr, _I) -> fun(X) -> io:write(standard_error, X) end;
-verb(Fd, _I) -> fun(X) -> io:write(Fd, X) end.
+verb(stdout, _I) -> fun(X) -> io:format("~s", [X]) end;  
+verb(stderr, _I) -> fun(X) -> io:format(standard_error, "~s", [X]) end;
+verb(Fd, _I) -> fun(X) -> io:format(Fd, "~s", [X]) end.
 
 %% extract function value
 -spec extract_function(any()) -> any().

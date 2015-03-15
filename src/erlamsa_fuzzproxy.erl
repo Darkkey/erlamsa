@@ -23,7 +23,7 @@ start(Opts) when is_list(Opts) ->
     start(maps:from_list(Opts));
 start(Opts) ->
     Log = erlamsa_logger:build_logger(Opts),
-    Workers = maps:get(proxy_workers, Opts, 10),
+    Workers = maps:get(workers, Opts, 10),
     Verbose = erlamsa_utils:verb(stdout, maps:get(verbose, Opts, 0)),
     {LocalPort, _, _} = maps:get(proxy_address, Opts),
     case gen_tcp:listen(LocalPort, [binary, {active, true}, {packet,0}]) of
@@ -43,7 +43,7 @@ start_servers(Workers, ListenSock, Opts, Verbose, Log) ->
 
 server_tcp(ListenSock, Opts, Verbose, Log) ->
     {_, DHost, DPort} = maps:get(proxy_address, Opts),
-    Verbose(io_lib:format("Server started ~n", [])),
+    Verbose(io_lib:format("Proxy worker process started ~n", [])),
     random:seed(now()),
     case gen_tcp:accept(ListenSock) of
         {ok, ClientSocket} ->
@@ -88,10 +88,12 @@ loop_tcp(ClientSocket, ServerSocket, Opts, Verbose, Log) ->
         {tcp_closed, ClientSocket} ->
             gen_tcp:close(ServerSocket),
             Verbose(io_lib:format("client socket ~w closed [~w]~n", [ClientSocket, self()])),
+            Log("client close (c->s)", []),
             ok;
         {tcp_closed, ServerSocket}->
             gen_tcp:close(ClientSocket),
             Verbose(io_lib:format("server socket ~w closed [~w]~n",[ServerSocket,self()])),
+            Log("server close (s->c)", []),
             ok	
     end.
 
