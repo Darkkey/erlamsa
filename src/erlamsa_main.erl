@@ -36,26 +36,33 @@
 -include("erlamsa.hrl").
 
 %% API
--export([test/0, fuzzer/1]).
+-export([test/0, test/1, test_input/1, fuzzer/1]).
 
 -spec urandom_seed() -> {non_neg_integer(), non_neg_integer(), non_neg_integer()}.
 urandom_seed() -> list_to_tuple(lists:map(fun(_) -> lists:foldl(fun(X, A) -> X + (A bsl 8) end, 0, binary_to_list(crypto:rand_bytes(2))) end, lists:seq(1,3))).
 
--spec verb(file:io_device() | standard_error | standard_io, non_neg_integer()) -> fun().
-verb(_Fd, 0) -> fun(X) -> X end;
-% verb(standard_error, _) -> fun(X) -> io:write(X) end;  
-verb(Fd, _I) -> fun(X) -> io:write(Fd, X) end.
-
 -spec maybe_meta_logger(string() | atom(), non_neg_integer(), fun()) -> fun().
 maybe_meta_logger(Path, Verbose, _) ->  
   case Path of
-      stderr -> verb(standard_error, Verbose);
-      stdout -> verb(standard_io, Verbose);
+      stderr -> erlamsa_utils:verb(stderr, Verbose);
+      stdout -> erlamsa_utils:verb(stdout, Verbose);
       _Else -> fun (X) -> X end
   end.
 
 -spec test() -> list().
-test() -> fuzzer(maps:put(paths, ["test.1"], maps:put(verbose, 1,  maps:put(output, "-", maps:new())))).
+test() -> fuzzer(maps:put(paths, ["test.1"], maps:put(verbose, 0,  maps:put(output, return, maps:new())))).
+
+test_input(Inp) -> fuzzer(
+                    maps:put(paths, [direct], 
+                        maps:put(verbose, 0,  
+                            maps:put(output, return, 
+                                maps:put(input, Inp, maps:new()))))).
+
+test(Seed) -> fuzzer(
+                maps:put(paths, ["test.1"], 
+                    maps:put(verbose, 0,  
+                        maps:put(output, "-", 
+                            maps:put(seed, Seed, maps:new()))))).
 
 -spec fuzzer(#{}) -> [binary()].
 fuzzer(Dict) ->
@@ -72,9 +79,12 @@ fuzzer(Dict) ->
             fuzzer(maps:put(n, 1, Dict));
         true ->
             random:seed(maps:get(seed, Dict)),
+            %io:write(maps:get(seed, Dict)),
+            file:write_file("C:/Users/key/last_seed.txt", io_lib:format("~p", [maps:get(seed, Dict)])),
             Fail = fun(Why) -> io:write(Why), throw(Why) end,
             Muta = erlamsa_mutations:make_mutator(Mutas),
-            Gen = erlamsa_gen:make_generator(maps:get(generators, Dict, erlamsa_gen:default()), Paths, Fail, N),
+            DirectInput = maps:get(input, Dict, nil),
+            Gen = erlamsa_gen:make_generator(maps:get(generators, Dict, erlamsa_gen:default()), Paths, DirectInput, Fail, N),
             Record_Meta = maybe_meta_logger( maps:get(metadata, Dict, stderr), maps:get(verbose, Dict, 1), Fail),
             Record_Meta({seed, maps:get(seed, Dict)}),            
             Pat = erlamsa_patterns:make_pattern(maps:get(patterns, Dict, erlamsa_patterns:default())),

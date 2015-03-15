@@ -632,14 +632,15 @@ pick_sublist(Lst) ->
 %% replace the node (sub . tail) with (op (sub . tail))
 edit_sublist(Lst = [H|_T], Sub, Op) when H =:= Sub ->
     Op(Lst);
-edit_sublist([H|T], Sub, Op) ->
+edit_sublist([H|T], Sub, Op) -> 
     [edit_sublist(H, Sub, Op) | edit_sublist(T, Sub, Op)];
-edit_sublist(Lst, _Sub, _Op) -> Lst.
+edit_sublist(Lst, _Sub, _Op) -> 
+    Lst.
 
 %% TODO: type for fun().
 -spec edit_sublists(list(), gb_trees:tree()) -> list().
 %% lst (ff of node -> (node -> node)) -> lst' ; <- could also be done with a recursive-mapn
-edit_sublists([Hd|T], OpFF) when is_list(Hd) -> 
+edit_sublists([Hd|T], OpFF) when is_list(Hd) ->     
     MaybeOp = erlamsa_utils:get(Hd, false, OpFF),
     case MaybeOp of
         false -> 
@@ -776,7 +777,7 @@ sed_tree_stutter(Ll = [H|T], Meta) ->
                 false -> {fun sed_tree_stutter/2, Ll, Meta, -1};
                 _Else ->
                     NewLst = edit_sublist(Lst, Child, 
-                            fun ([_H|Tl]) -> [repeat_path(Parent, Child, N_reps)|Tl] end),
+                            fun ([_H|Tl]) -> io:format("sed_tree_stutter 6.5~n", []), R = [repeat_path(Parent, Child, N_reps)|Tl], io:format("/sed_tree_stutter 6.5~n", []), R end),
                     {fun sed_tree_stutter/2, 
                         [list_to_binary(flatten(NewLst, [])) | T], 
                         [{tree_stutter, 1} | Meta], 1}
@@ -896,12 +897,11 @@ mux_fuzzers_loop(Ll, [], Out, Meta) -> {mux_fuzzers(Out), Ll, Meta};
 mux_fuzzers_loop(Ll, [Node|Tail], Out, Meta) ->
     {Mscore, MPri, Fn, Mname} = Node,
     Res = Fn(Ll, Meta),
-    {MFn, Mll, MMeta, Delta} = Res, %% in radamsa (mfn rs mll mmeta delta) = Fn(...), that strange, TODO: check it
+    {MFn, Mll, MMeta, Delta} = Res, %% in radamsa (mfn rs mll mmeta delta) = Fn(...), that strange, TODO: check it    
     NOut = [{adjust_priority(Mscore, Delta), MPri, MFn, Mname} | Out], %% in radamsa mfn instead of fn
     IsMllPair = erlamsa_utils:is_pair(Mll),
-    IsHEq = (hd(Mll) == hd(Ll)),
     if
-        IsMllPair andalso IsHEq -> mux_fuzzers_loop(Ll, Tail, NOut, MMeta);
+        IsMllPair andalso (hd(Mll) == hd(Ll)) -> mux_fuzzers_loop(Ll, Tail, NOut, MMeta);
         true -> {mux_fuzzers(NOut ++ Tail), Mll, [{used, Mname} | MMeta]}
     end.
 
@@ -955,7 +955,7 @@ make_mutator(Lst) ->
             end
         end,
         [],
-        mutations()),
+        mutations()),    
     mutators_mutator(Mutas).
 
 -spec mutators_mutator([mutation()]) -> fun().

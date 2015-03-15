@@ -36,7 +36,7 @@
 -endif.
 
 %% API
--export([make_generator/4, default/0]).
+-export([make_generator/5, default/0]).
 
 %% fill the rest of the stream with padding random bytes
 -spec finish(non_neg_integer()) -> [binary()].
@@ -116,7 +116,10 @@ file_streamer(Paths) ->
         end
     end.
 
-
+-spec direct_generator(binary()) -> fun().
+direct_generator(Input) ->
+    %% TODO: divide into random chunks
+    fun () -> {[Input], {generator, direct}} end.
 
 %% Random input stream
 -spec random_stream() -> [binary()].
@@ -135,6 +138,7 @@ random_stream() ->
 %% random generator
 -spec random_generator() -> {[binary()], [meta()]}.
 random_generator() ->
+    io:format("RANDOM!!!!~n",[]),
     {random_stream(), [{generator, random}]}.  
 
 %% [{Pri, Gen}, ...] -> Gen(rs) -> output end
@@ -149,8 +153,8 @@ mux_generators(Generators, _) ->
     end.
 
 %% create a lambda-generator function based on the array
--spec make_generator_fun(list(), fun(), non_neg_integer()) -> fun().
-make_generator_fun(Args, Fail, N) ->
+-spec make_generator_fun(list(), binary() | nil, fun(), non_neg_integer()) -> fun().
+make_generator_fun(Args, Inp, Fail, N) ->
     fun (false) -> Fail("Bad generator priority!");
         ({Name, Pri}) ->
             case Name of
@@ -158,10 +162,14 @@ make_generator_fun(Args, Fail, N) ->
                     {Pri, stdin_generator(N == 0)}; %% TODO: <<-- 1 in Radamsa
                 stdin ->
                     false;
-                file when Args =/= [] ->
+                file when Args =/= [] andalso Args =/= [direct] ->
                     {Pri, file_streamer(Args)};
                 file ->
                     false;
+                direct when Inp =:= nil ->
+                    false;
+                direct ->
+                    {Pri, direct_generator(Inp)};
                 random ->
                     {Pri, fun random_generator/0};
                 _Else ->
@@ -171,10 +179,10 @@ make_generator_fun(Args, Fail, N) ->
     end.
 
 %% get a list of {GenAtom, Pri} and output the list of {Pri, Gen}
--spec make_generator(prioritized_list(), list(), fun(), non_neg_integer()) -> fun() | false.
-make_generator(Pris, Args, Fail, N) ->
-    Gs = [ A || A <- [(make_generator_fun(Args, Fail, N))(V1) || V1 <- Pris], A =/= false],
+-spec make_generator(prioritized_list(), list(), binary() | nil, fun(), non_neg_integer()) -> fun() | false.
+make_generator(Pris, Args, Inp, Fail, N) ->
+    Gs = [ A || A <- [(make_generator_fun(Args, Inp, Fail, N))(V1) || V1 <- Pris], A =/= false],
     mux_generators(Gs, Fail).
 
 -spec default() -> list().
-default() -> [{random, 1}, {file, 1000}, {stdin, 100000}].
+default() -> [{random, 1}, {direct, 500}, {file, 1000}, {stdin, 100000}].

@@ -40,7 +40,7 @@
 -export([uncons/2, extract_function/1, forcell/1, last/1, get/3,
         merge/2, hd_bin/1, tl_bin/1, choose_pri/2, is_pair/1,
         flush_bvecs/2, applynth/3, sort_by_priority/1, 
-        check_empty/1, stderr_probe/2, halve/1]). 
+        check_empty/1, stderr_probe/2, halve/1, verb/2]). 
 
 %% l -> hd l' | error
 -spec uncons(list() | binary() | fun(), any()) -> any().
@@ -48,6 +48,12 @@ uncons([L|T], _) -> {L, T};
 uncons([], D) -> {D, []};
 uncons(B, _) when is_binary(B) -> {B, []};
 uncons(L, D) when is_function(L) -> uncons(L(), D).
+
+-spec verb(file:io_device() | standard_error | standard_io, non_neg_integer()) -> fun().
+verb(_Fd, 0) -> fun(X) -> X end;
+verb(stdout, _I) -> fun(X) -> io:write(X) end;  
+verb(stderr, _I) -> fun(X) -> io:write(standard_error, X) end;
+verb(Fd, _I) -> fun(X) -> io:write(Fd, X) end.
 
 %% extract function value
 -spec extract_function(any()) -> any().
