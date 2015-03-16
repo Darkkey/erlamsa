@@ -49,13 +49,14 @@ cmdline_optsspec() ->
 	 {seed		, $s, 	"seed",			string, 				"<arg>, random seed {int,int,int}"},
 	 {mutations , $m,   "mutations",	{string, 
 	  					 	erlamsa_mutations:default_string()},"<arg>, which mutations to use"},
-	 % {patterns	, $p,	"patterns",		{string, "od,nd,bu"},	"<arg>, which mutation patterns to use"},
+	 {patterns	, $p,	"patterns",		{string, 
+	 						erlamsa_patterns:default_string()},	"<arg>, which mutation patterns to use"},
 	 % {generators, $g,	"generators",	{string, ""},			"<arg>, which data generators to use"},
 	 % {meta		, $M, 	"meta",			{string, ""},			"<arg>, save metadata about fuzzing process to this file"},
 	 {logger	, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename"},
 	 {workers	, $w, 	"workers",		{integer, 10},			"<arg>, number of workers in server mode"},
 %	 {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},
-	 {doverbose	, $v,	"verbose",		undefined,				"show progress during generation"},
+	 {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose"},
 	 {list		, $l,	"list",			undefined,				"list mutations, patterns and generators"}].
 
 usage() ->
@@ -97,6 +98,14 @@ parse_mutas_list(Mutators, Dict) ->
 			fail(Reason)
 	end.
 
+parse_patterns_list(Patterns, Dict) ->
+	case erlamsa_mutations:string_to_mutators(Patterns) of
+		{ok, Pl} ->			
+			maps:put(patterns, Pl, Dict);
+		{fail, Reason} ->
+			fail(Reason)
+	end.
+
 %% TODO: seed
 parse_seed_opt(Seed, Dict) ->
 	maps:puts(seed, list_to_tuple(Seed), Dict).
@@ -123,10 +132,16 @@ parse_opts([list|_T], _Dict) ->
 		,[],
 		lists:sort(fun ({_,_,_,N1,_}, {_,_,_,N2,_}) -> N1 >= N2 end, 
 			erlamsa_mutations:mutations())),
-	io:format("Mutations (-m)~n~s", [Ms]),
+	Ps = lists:foldl(
+			fun({_,_,N,D}, Acc) ->
+				[io_lib:format("    ~-3s: ~s~n",[atom_to_list(N),D])|Acc]
+			end
+		,[],
+		erlamsa_patterns:patterns()),
+	io:format("Mutations (-m)~n~s~nPatterns (-p)~n~s", [Ms, Ps]),
 	halt(0);
-parse_opts([doverbose|T], Dict) -> 	
-	parse_opts(T, maps:put(verbose, 1, Dict));
+parse_opts([{verbose, Lvl}|T], Dict) -> 	
+	parse_opts(T, maps:put(verbose, Lvl, Dict));
 parse_opts([recursive|T], Dict) -> 
 	parse_opts(T, maps:put(recursive, 1, Dict));
 parse_opts([{count, N}|T], Dict) -> 
@@ -143,6 +158,8 @@ parse_opts([{input, InputOpts}|T], Dict) ->
 	parse_opts(T, parse_input_opts(InputOpts, Dict));
 parse_opts([{mutations, Mutators}|T], Dict) -> 
 	parse_opts(T, parse_mutas_list(Mutators, Dict));
+parse_opts([{patterns, Patterns}|T], Dict) -> 
+	parse_opts(T, parse_patterns_list(Patterns, Dict));
 % parse_opts([{output, OutputOpts}|T], Dict) -> 
 % 	parse_opts(T, parse_input_opts(OutputOpts, Dict));
 parse_opts([{seed, SeedOpts}|T], Dict) -> 
