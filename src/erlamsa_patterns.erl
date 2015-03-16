@@ -49,7 +49,7 @@
 -spec mutate_once(any(), mutator(), meta_list(), mutator_cont_fun()) -> list().
 mutate_once(Ll, Mutator, Meta, Cont) ->
     Ip = erlamsa_rnd:rand(?INITIAL_IP),
-    {This, LlN} =  erlamsa_utils:uncons(Ll, false),
+    {This, LlN} = erlamsa_utils:uncons(Ll, false),
     if
         This /= false ->
             mutate_once_loop(Mutator, Meta, Cont, Ip, This, LlN);

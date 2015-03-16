@@ -61,7 +61,7 @@ port_stream(Port) ->
     fun () -> stream_port(Port, false, rand_block_size(), 0) end.
 
 -spec stream_port(input_inc(), binary() | false, non_neg_integer(), non_neg_integer()) -> [binary()].
-stream_port(Port, Last, Wanted, Len) ->
+stream_port(Port, Last, Wanted, Len) ->    
     case file:read(Port, Wanted) of
         {ok, Data} ->
             DataLen = byte_size(Data),
@@ -90,7 +90,9 @@ stream_port(Port, Last, Wanted, Len) ->
 -spec stdin_generator(true | false) -> fun().
 stdin_generator(Online) ->
     %% TODO: investigate what is  (stdin-generator rs online?) in radamsa code and how force-ll correctly works...
-    Ll = port_stream(stdin),
+    io:setopts(standard_io, [binary]),
+    Ll = port_stream(standard_io),
+    io:setopts(standard_io, []),
     LlM = if
               Online =:= true andalso is_function(Ll) -> erlamsa_utils:forcell(Ll); %% TODO: ugly, rewrite
               true -> Ll
@@ -138,8 +140,7 @@ random_stream() ->
 %% random generator
 -spec random_generator() -> {[binary()], [meta()]}.
 random_generator() ->
-    io:format("RANDOM!!!!~n",[]),
-    {random_stream(), [{generator, random}]}.  
+    {random_stream(), {generator, random}}.  
 
 %% [{Pri, Gen}, ...] -> Gen(rs) -> output end
 -spec mux_generators(prioritized_list(), fun()) -> fun() | false.
@@ -158,8 +159,8 @@ make_generator_fun(Args, Inp, Fail, N) ->
     fun (false) -> Fail("Bad generator priority!");
         ({Name, Pri}) ->
             case Name of
-                stdin when hd(Args) == "-" ->
-                    {Pri, stdin_generator(N == 0)}; %% TODO: <<-- 1 in Radamsa
+                stdin when hd(Args) == "-" ->  
+                    {Pri, stdin_generator(N == 1)}; %% TODO: <<-- 1 in Radamsa
                 stdin ->
                     false;
                 file when Args =/= [] andalso Args =/= [direct] ->

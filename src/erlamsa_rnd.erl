@@ -77,6 +77,8 @@ rand_bit() -> round(random:uniform()).
 
 %% check if random occurs with some probability
 -spec rand_occurs(any()) -> true | false.
+rand_occurs({Nom, Denom}) when is_integer(Nom), is_integer(Denom) ->
+    rand_occurs_fixed(Nom, Denom);
 rand_occurs(Prob) when is_float(Prob) ->
     PreNom = trunc(Prob * 100),
     G = gcd(PreNom, 100),

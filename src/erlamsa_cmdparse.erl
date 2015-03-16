@@ -47,16 +47,16 @@ cmdline_optsspec() ->
 %	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, :80 or 127.0.0.1:80 [-]"},
 	 {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
 	 {seed		, $s, 	"seed",			string, 				"<arg>, random seed {int,int,int}"},
-	 % {mutations , $m,   "mutations",	{string, 
-	 % 					 	erlamsa_mutations:default_string()},"<arg>, which mutations to use"},
+	 {mutations , $m,   "mutations",	{string, 
+	  					 	erlamsa_mutations:default_string()},"<arg>, which mutations to use"},
 	 % {patterns	, $p,	"patterns",		{string, "od,nd,bu"},	"<arg>, which mutation patterns to use"},
 	 % {generators, $g,	"generators",	{string, ""},			"<arg>, which data generators to use"},
 	 % {meta		, $M, 	"meta",			{string, ""},			"<arg>, save metadata about fuzzing process to this file"},
 	 {logger	, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename"},
 	 {workers	, $w, 	"workers",		{integer, 10},			"<arg>, number of workers in server mode"},
 %	 {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},
-%	 {list		, $l,	"list",			undefined,				"list mutations, patterns and generators"},
-	 {verbose	, $v,	"verbose",		undefined,				"show progress during generation"}].
+	 {doverbose	, $v,	"verbose",		undefined,				"show progress during generation"},
+	 {list		, $l,	"list",			undefined,				"list mutations, patterns and generators"}].
 
 usage() ->
 	getopt:usage(cmdline_optsspec(), "erlamsa", "[file ...]").
@@ -89,6 +89,14 @@ parse_input_opts(InputOpts, Dict) ->
 		_Else -> fail(io_lib:format("invalid input specification: '~s'", [InputOpts]))
 	end.
 
+parse_mutas_list(Mutators, Dict) ->
+	case erlamsa_mutations:string_to_mutators(Mutators) of
+		{ok, Ml} ->			
+			maps:put(mutations, Ml, Dict);
+		{fail, Reason} ->
+			fail(Reason)
+	end.
+
 %% TODO: seed
 parse_seed_opt(Seed, Dict) ->
 	maps:puts(seed, list_to_tuple(Seed), Dict).
@@ -99,13 +107,25 @@ parse(Args) ->
 		_Else -> usage(), halt(-1)
 	end.
 
+parse_tokens(Opts, []) ->
+	parse_opts(Opts, maps:put(paths, ["-"], maps:new()));
 parse_tokens(Opts, Paths) ->
 	parse_opts(Opts, maps:put(paths, Paths, maps:new())).
 
 parse_opts([help|_T], _Dict) ->
 	usage(),
 	halt(0);
-parse_opts([verbose|T], Dict) -> 
+parse_opts([list|_T], _Dict) ->
+	Ms = lists:foldl(
+			fun({_,_,_,N,D}, Acc) ->
+				[io_lib:format("    ~-3s: ~s~n",[atom_to_list(N),D])|Acc]
+			end
+		,[],
+		lists:sort(fun ({_,_,_,N1,_}, {_,_,_,N2,_}) -> N1 >= N2 end, 
+			erlamsa_mutations:mutations())),
+	io:format("Mutations (-m)~n~s", [Ms]),
+	halt(0);
+parse_opts([doverbose|T], Dict) -> 	
 	parse_opts(T, maps:put(verbose, 1, Dict));
 parse_opts([recursive|T], Dict) -> 
 	parse_opts(T, maps:put(recursive, 1, Dict));
@@ -121,6 +141,8 @@ parse_opts([{proxyprob, ProxyProbOpts}|T], Dict) ->
 	parse_opts(T, parse_proxyprob_opts(ProxyProbOpts, Dict));
 parse_opts([{input, InputOpts}|T], Dict) -> 
 	parse_opts(T, parse_input_opts(InputOpts, Dict));
+parse_opts([{mutations, Mutators}|T], Dict) -> 
+	parse_opts(T, parse_mutas_list(Mutators, Dict));
 % parse_opts([{output, OutputOpts}|T], Dict) -> 
 % 	parse_opts(T, parse_input_opts(OutputOpts, Dict));
 parse_opts([{seed, SeedOpts}|T], Dict) -> 

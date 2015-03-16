@@ -42,12 +42,13 @@
 urandom_seed() -> list_to_tuple(lists:map(fun(_) -> lists:foldl(fun(X, A) -> X + (A bsl 8) end, 0, binary_to_list(crypto:rand_bytes(2))) end, lists:seq(1,3))).
 
 -spec maybe_meta_logger(string() | atom(), non_neg_integer(), fun()) -> fun().
-maybe_meta_logger(Path, Verbose, _) ->  
-  case Path of
+maybe_meta_logger(Path, Verbose, _) ->    
+  Verb = case Path of
       stderr -> erlamsa_utils:verb(stderr, Verbose);
       stdout -> erlamsa_utils:verb(stdout, Verbose);
       _Else -> fun (X) -> X end
-  end.
+  end,    
+  fun (X) -> Verb(io_lib:format("~p", [X])) end.
 
 -spec test() -> list().
 test() -> fuzzer(maps:put(paths, ["test.1"], maps:put(verbose, 0,  maps:put(output, return, maps:new())))).
@@ -65,7 +66,7 @@ test(Seed) -> fuzzer(
                             maps:put(seed, Seed, maps:new()))))).
 
 -spec fuzzer(#{}) -> [binary()].
-fuzzer(Dict) ->
+fuzzer(Dict) ->    
     Seed = maps:get(seed, Dict, default),
     Mutas = maps:get(mutations, Dict, default),
     N = maps:get(n, Dict, default),
@@ -80,12 +81,12 @@ fuzzer(Dict) ->
         true ->
             random:seed(maps:get(seed, Dict)),
             %io:write(maps:get(seed, Dict)),
-            file:write_file("C:/Users/key/last_seed.txt", io_lib:format("~p", [maps:get(seed, Dict)])),
+            file:write_file("./last_seed.txt", io_lib:format("~p", [maps:get(seed, Dict)])),
             Fail = fun(Why) -> io:write(Why), throw(Why) end,
             Muta = erlamsa_mutations:make_mutator(Mutas),
             DirectInput = maps:get(input, Dict, nil),
             Gen = erlamsa_gen:make_generator(maps:get(generators, Dict, erlamsa_gen:default()), Paths, DirectInput, Fail, N),
-            Record_Meta = maybe_meta_logger( maps:get(metadata, Dict, stderr), maps:get(verbose, Dict, 1), Fail),
+            Record_Meta = maybe_meta_logger( maps:get(metadata, Dict, stderr), maps:get(verbose, Dict, 0), Fail),
             Record_Meta({seed, maps:get(seed, Dict)}),            
             Pat = erlamsa_patterns:make_pattern(maps:get(patterns, Dict, erlamsa_patterns:default())),
             Out = erlamsa_out:string_outputs(maps:get(output, Dict, "-"), N),
@@ -103,7 +104,7 @@ fuzzer_loop(Muta, Gen, Pat, Out, RecordMetaFun, I, N, Acc) ->
     {NewOut, Fd, OutMeta} = Out([{nth, I}, GenMeta]),    
     Tmp = Pat(Ll, Muta, OutMeta),
     {NewMuta, Meta, Written, Data} = erlamsa_out:output(Tmp, Fd),
-    RecordMetaFun([{written, Written}, Meta]),    
+    RecordMetaFun([{written, Written}| Meta]),    
     fuzzer_loop(NewMuta, Gen, Pat, NewOut, RecordMetaFun, I + 1, N, record_result(Data, Acc)).
 
 

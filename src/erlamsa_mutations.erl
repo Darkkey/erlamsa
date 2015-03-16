@@ -36,7 +36,7 @@
 -include("erlamsa.hrl").
 
 %% API
--export([make_mutator/1, default/0, default_string/0, string_to_mutators/1]).
+-export([make_mutator/1, default/0, default_string/0, string_to_mutators/1, mutations/0]).
  
 
 -define(MIN_SCORE, 2).
@@ -907,59 +907,75 @@ mux_fuzzers_loop(Ll, [Node|Tail], Out, Meta) ->
 
 -spec mutations() -> [mutation()].
 %% default mutations list
-mutations() ->          [{10, 5, fun sed_num/2, num},
-                        {10, 1, fun sed_utf8_widen/2, uw},
-                        {10, 2, fun sed_utf8_insert/2, ui},
-                        {10, 1, construct_ascii_bad_mutator(), ab},
-                        {10, 1, construct_ascii_delimeter_mutator(), ad},
-                        {10, 1, sed_tree_dup(), tr2},
-                        {10, 1, sed_tree_del(), td},
-                        {10, 1, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1},
-                        {10, 1, construct_st_line_muta(fun erlamsa_generic:st_list_ins/2, list_ins, [0]), lis},
-                        {10, 1, construct_st_line_muta(fun erlamsa_generic:st_list_replace/2, list_replace, [0]), lrs},
-                        {10, 7, fun sed_tree_stutter/2, tr},
-                        {10, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2},
-                        {10, 1, construct_sed_byte_drop(), bd},
-                        {10, 1, construct_sed_byte_inc(), bei},
-                        {10, 1, construct_sed_byte_dec(), bed},
-                        {10, 1, construct_sed_byte_flip(), bf},
-                        {10, 1, construct_sed_byte_insert(), bi},
-                        {10, 1, construct_sed_byte_random(), ber},
-                        {10, 1, construct_sed_byte_repeat(), br},
-                        {10, 1, construct_sed_bytes_perm(), sp},
-                        {10, 1, construct_sed_bytes_repeat(), sr},
-                        {10, 1, construct_sed_bytes_drop(), sd},
-                        {10, 1, construct_line_muta(fun erlamsa_generic:list_del/2, line_del), ld},
-                        {10, 1, construct_line_muta(fun erlamsa_generic:list_del_seq/2, line_del_seq), lds},
-                        {10, 1, construct_line_muta(fun erlamsa_generic:list_dup/2, line_dup), lr2},
-                        {10, 1, construct_line_muta(fun erlamsa_generic:list_clone/2, line_clone), lri},
-                        {10, 1, construct_line_muta(fun erlamsa_generic:list_repeat/2, line_repeat), lr},
-                        {10, 1, construct_line_muta(fun erlamsa_generic:list_swap/2, line_swap), ls},
-                        {10, 1, construct_line_muta(fun erlamsa_generic:list_perm/2, line_perm), lp},
-                        {10, 2, fun sed_fuse_this/2, ft},
-                        {10, 1, fun sed_fuse_next/2, fn},
-                        {10, 2, fun sed_fuse_old/2, fo}].
+mutations() ->          [{10, 5, fun sed_num/2, num, "try to modify a textual number"},
+                        {10, 1, fun sed_utf8_widen/2, uw, "try to make a code point too wide"},
+                        {10, 2, fun sed_utf8_insert/2, ui, "insert funny unicode"},
+                        {10, 1, construct_ascii_bad_mutator(), ab, "enhance silly issues in ASCII string data handling"},
+                        {10, 1, construct_ascii_delimeter_mutator(), ad, "play with delimeters in ASCII string data"},
+                        {10, 1, sed_tree_dup(), tr2, "duplicate a node"},
+                        {10, 1, sed_tree_del(), td, "delete a node"},
+                        {10, 1, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1, "swap one node with another one"},
+                        {10, 1, construct_st_line_muta(fun erlamsa_generic:st_list_ins/2, list_ins, [0]), lis, "insert a line from elsewhere"},
+                        {10, 1, construct_st_line_muta(fun erlamsa_generic:st_list_replace/2, list_replace, [0]), lrs, "replace a line with one from elsewhere"},
+                        {10, 1, fun sed_tree_stutter/2, tr, "repeat a path of the parse tree"},
+                        {10, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2, "swap two nodes pairwise"},
+                        {10, 1, construct_sed_byte_drop(), bd, "drop a byte"},
+                        {10, 1, construct_sed_byte_inc(), bei, "increment a byte by one"},
+                        {10, 1, construct_sed_byte_dec(), bed, "decrement a byte by one"},
+                        {10, 1, construct_sed_byte_flip(), bf, "flip one bit"},
+                        {10, 1, construct_sed_byte_insert(), bi, "insert a random byte"},
+                        {10, 1, construct_sed_byte_random(), ber, "insert a random byte"},
+                        {10, 1, construct_sed_byte_repeat(), br, "repeat a byte"},
+                        {10, 1, construct_sed_bytes_perm(), sp, "permute a sequence of bytes"},
+                        {10, 1, construct_sed_bytes_repeat(), sr, "repeat a sequence of bytes"},
+                        {10, 1, construct_sed_bytes_drop(), sd, "delete a sequence of bytes"},
+                        {10, 1, construct_line_muta(fun erlamsa_generic:list_del/2, line_del), ld, "delete a line"},
+                        {10, 1, construct_line_muta(fun erlamsa_generic:list_del_seq/2, line_del_seq), lds, "delete many lines"},
+                        {10, 1, construct_line_muta(fun erlamsa_generic:list_dup/2, line_dup), lr2, "duplicate a line"},
+                        {10, 1, construct_line_muta(fun erlamsa_generic:list_clone/2, line_clone), lri, "copy a line closeby"},
+                        {10, 1, construct_line_muta(fun erlamsa_generic:list_repeat/2, line_repeat), lr, "repeat a line"},
+                        {10, 1, construct_line_muta(fun erlamsa_generic:list_swap/2, line_swap), ls, "swap two lines"},
+                        {10, 1, construct_line_muta(fun erlamsa_generic:list_perm/2, line_perm), lp, "swap order of lines"},
+                        {10, 2, fun sed_fuse_this/2, ft, "jump to a similar position in block"},
+                        {10, 1, fun sed_fuse_next/2, fn, "likely clone data between similar positions"},
+                        {10, 2, fun sed_fuse_old/2, fo, "fuse previously seen data elsewhere"}].
 
 -spec default() -> [{atom(), non_neg_integer()}].
-default() -> lists:map(fun ({_, Pri, _, Name}) -> {Name, Pri} end, mutations()).
+default() -> lists:map(fun ({_, Pri, _, Name, _Desc}) -> {Name, Pri} end, mutations()).
 
 -spec default_string() -> string().
-default_string() -> lists:foldl(fun ({_, Pri, _, Name}, Acc) -> 
+default_string() -> lists:foldl(fun ({_, Pri, _, Name, _Desc}, Acc) -> 
     case Pri of
         1 -> atom_to_list(Name) ++ "," ++ Acc;
         _Else -> atom_to_list(Name) ++ "=" ++ integer_to_list(Pri) ++ "," ++ Acc
     end
  end, [], mutations()).
 
--spec string_to_mutators([string()]) -> [{atom(), non_neg_integer()}].
-string_to_mutators([H|T]) ->
-    [{a,1}].
+%% TODO: check for errors
+-spec string_to_mutators(string()) -> {ok, [{atom(), non_neg_integer()}]} | {fail, string()}.
+string_to_mutators(Lst) ->
+    Tokens = string:tokens(Lst, ","),
+    try {ok, string_to_mutators_loop(lists:map(fun (X) -> string:tokens(X, "=") end, Tokens), [])} 
+    catch
+        error:badarg -> {fail, "Invalid mutation list specification!"}
+    end.
+
+%% TODO: check if mutation name exist
+-spec string_to_mutators_loop([list(string())], list()) -> [{atom(), non_neg_integer()}].
+string_to_mutators_loop([[N, P]|T], Acc) ->
+    Name = list_to_atom(N),
+    Pri = list_to_integer(P),
+    string_to_mutators_loop(T, [{Name, Pri} | Acc]);
+string_to_mutators_loop([[N]|T], Acc) ->
+    Name = list_to_atom(N),
+    string_to_mutators_loop(T, [{Name, 1} | Acc]);
+string_to_mutators_loop([], Acc) -> Acc.
 
 -spec make_mutator([{atom(), non_neg_integer()}]) -> fun().
 make_mutator(Lst) ->
     SelectedMutas = maps:from_list(Lst),
     Mutas = lists:foldl(
-        fun ({Score, _Pri, F, Name}, Acc) ->
+        fun ({Score, _Pri, F, Name, _Desc}, Acc) ->
             Val = maps:get(Name, SelectedMutas, notfound),
             case Val of 
                 notfound -> Acc;
@@ -967,7 +983,7 @@ make_mutator(Lst) ->
             end
         end,
         [],
-        mutations()),    
+        mutations()),   
     mutators_mutator(Mutas).
 
 -spec mutators_mutator([mutation()]) -> fun().

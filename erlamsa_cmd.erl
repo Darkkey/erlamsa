@@ -1,6 +1,6 @@
 #!/usr/bin/env escript
 %% -*- erlang -*-
-%%! -smp enable -name erlamsa -sname erlamsa_cmd
+%%! -smp enable -sname erlamsa_cmd
 -mode(compile).
 
 sleep() ->
@@ -12,8 +12,11 @@ main(Args) ->
                        ++ "/src"),
     Dict = erlamsa_cmdparse:parse(Args),
     case maps:get(mode, Dict, stdio) of
-    	proxy -> 
+    	proxy ->     	
     		erlamsa_fuzzproxy:start(Dict),
     		sleep();
-    	_Else -> io:format("Mode not supported yet!")
+    	stdio ->    		
+    		erlamsa_main:fuzzer(Dict), timer:sleep(1);
+    	_Else -> 
+    		io:format("Mode not supported yet!")
     end.
