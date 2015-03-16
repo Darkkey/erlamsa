@@ -71,7 +71,7 @@ parse_logger_opts(LogOpts, Dict) ->
 	case string:tokens(LogOpts, "=") of
 		["file", FName] -> 
 			maps:put(logger_file, FName,
-				maps:put(logger_type, logger_file, Dict));
+				maps:put(logger_type, file, Dict));
 		_Else -> fail(io_lib:format("invalid logger specification: '~s'", [LogOpts]))
 	end.
 
