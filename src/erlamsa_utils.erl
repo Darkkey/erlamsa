@@ -50,7 +50,7 @@ uncons(B, _) when is_binary(B) -> {B, []};
 uncons(L, D) when is_function(L) -> uncons(L(), D).
 
 -spec verb(file:io_device() | standard_error | standard_io, non_neg_integer()) -> fun().
-verb(_Fd, 0) -> fun(X) -> X end;
+verb(_Fd, V) when V < 1 -> fun(X) -> X end;
 verb(stdout, _I) -> fun(X) -> io:format("~s", [X]) end;  
 verb(stderr, _I) -> fun(X) -> io:format(standard_error, "~s", [X]) end;
 verb(Fd, _I) -> fun(X) -> io:format(Fd, "~s", [X]) end.

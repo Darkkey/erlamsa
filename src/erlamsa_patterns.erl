@@ -36,7 +36,7 @@
 -endif.
 
 %% API
--export([make_pattern/1, default/0]).
+-export([make_pattern/1, default/0, patterns/0, default_string/0, string_to_patterns/1]).
 
 -define(MAX_BURST_MUTATIONS, 16).
 
@@ -126,13 +126,35 @@ pat_burst(Ll, Mutator, Meta) ->
 %% /Patterns
 
 -spec patterns() -> [pattern()].
-patterns() -> [{1, fun pat_once_dec/3, od, "Mutate patterns"},
+patterns() -> [{1, fun pat_once_dec/3, od, "Mutate once pattern"},
                {1, fun pat_many_dec/3, nd, "Mutate possibly many times"},
                {1, fun pat_burst/3, bu, "Make several mutations closeby once"}
                 ].
 
 -spec default() -> [{atom(), non_neg_integer()}].
 default() -> lists:map(fun ({Pri, _, Name, _}) -> {Name, Pri} end, patterns()).
+
+-spec default_string() -> string().
+default_string() -> 
+    lists:foldl(fun ({_Pri, _Fun, Name, _Desc}, Acc) -> 
+        atom_to_list(Name) ++ "," ++ Acc
+    end, [], patterns()).
+
+%% TODO: check for errors
+-spec string_to_patterns(string()) -> {ok, [{atom(), non_neg_integer()}]} | {fail, string()}.
+string_to_patterns(Lst) ->
+    Tokens = string:tokens(Lst, ","),
+    try {ok, string_to_patterns_loop(lists:map(fun (X) -> string:tokens(X, "=") end, Tokens), [])} 
+    catch
+        error:badarg -> {fail, "Invalid mutation list specification!"}
+    end.
+
+%% TODO: check if mutation name exist
+-spec string_to_patterns_loop([list(string())], list()) -> [{atom(), non_neg_integer()}].
+string_to_patterns_loop([[N]|T], Acc) ->
+    Name = list_to_atom(N),
+    string_to_patterns_loop(T, [{Name, 1} | Acc]);
+string_to_patterns_loop([], Acc) -> Acc.
 
 %% TODO: rewrite?
 %-spec string_patterns([pattern()]) -> fun((any(), mutator(), meta_list()) -> list()).

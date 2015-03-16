@@ -44,8 +44,8 @@ urandom_seed() -> list_to_tuple(lists:map(fun(_) -> lists:foldl(fun(X, A) -> X +
 -spec maybe_meta_logger(string() | atom(), non_neg_integer(), fun()) -> fun().
 maybe_meta_logger(Path, Verbose, _) ->    
   Verb = case Path of
-      stderr -> erlamsa_utils:verb(stderr, Verbose);
-      stdout -> erlamsa_utils:verb(stdout, Verbose);
+      stderr -> erlamsa_utils:verb(stderr, Verbose-1);
+      stdout -> erlamsa_utils:verb(stdout, Verbose-1);
       _Else -> fun (X) -> X end
   end,    
   fun (X) -> Verb(io_lib:format("~p", [X])) end.
