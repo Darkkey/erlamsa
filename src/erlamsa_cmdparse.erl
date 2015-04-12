@@ -52,15 +52,15 @@ cmdline_optsspec() ->
 	 {version	, $V, 	"version",		undefined, 				"show program version"},
 	 {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. lport:rhost:rport (fuzzing proxy) or :port, host:port for data input from net"},
 	 {proxyprob	, $P,	"proxyprob",	{string, "0.0,0.0"},	"<arg>, fuzzing probability for proxy mode s->c,c->s"},
-%	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, :80 or 127.0.0.1:80 [-]"},
+	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://:80 or udp://127.0.0.1:80 [-]"},
 	 {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
 	 {seed		, $s, 	"seed",			string, 				"<arg>, random seed {int,int,int}"},
 	 {mutations , $m,   "mutations",	{string, 
-	  					 	erlamsa_mutations:default_string()},"<arg>, which mutations to use"},
+	  					 	erlamsa_mutations:tostring(	erlamsa_mutations:mutations())}, 	"<arg>, which mutations to use"},
 	 {patterns	, $p,	"patterns",		{string, 
-	 						erlamsa_patterns:default_string()},	"<arg>, which mutation patterns to use"},
+	 						erlamsa_patterns:tostring(	erlamsa_patterns:patterns())},	"<arg>, which mutation patterns to use"},
 	 {generators, $g,	"generators",	{string, 
-	 						erlamsa_gen:default_string()},		"<arg>, which data generators to use"},
+	 						erlamsa_gen:tostring(		erlamsa_gen:generators())},		"<arg>, which data generators to use"},
 	 % {meta		, $M, 	"meta",			{string, ""},			"<arg>, save metadata about fuzzing process to this file"},
 	 {logger	, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename"},
 	 {workers	, $w, 	"workers",		{integer, 10},			"<arg>, number of workers in server mode"},
@@ -197,8 +197,8 @@ parse_opts([{patterns, Patterns}|T], Dict) ->
 	parse_opts(T, parse_actions(Patterns, patterns, erlamsa_patterns:default(), Dict));
 parse_opts([{generators, Generators}|T], Dict) -> 
 	parse_opts(T, parse_actions(Generators, generators, erlamsa_gen:default(), Dict));
-% parse_opts([{output, OutputOpts}|T], Dict) -> 
-% 	parse_opts(T, parse_input_opts(OutputOpts, Dict));
+parse_opts([{output, OutputOpts}|T], Dict) -> 
+ 	parse_opts(T, maps:put(output, OutputOpts, Dict));
 parse_opts([{seed, SeedOpts}|T], Dict) -> 
 	parse_opts(T, parse_seed_opt(SeedOpts, Dict));
 parse_opts([_|T], Dict) ->

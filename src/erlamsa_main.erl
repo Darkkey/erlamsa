@@ -89,7 +89,7 @@ fuzzer(Dict) ->
             Record_Meta = maybe_meta_logger( maps:get(metadata, Dict, stderr), maps:get(verbose, Dict, 0), Fail),
             Record_Meta({seed, maps:get(seed, Dict)}),            
             Pat = erlamsa_patterns:make_pattern(maps:get(patterns, Dict, erlamsa_patterns:default())),
-            Out = erlamsa_out:string_outputs(maps:get(output, Dict, "-"), N),
+            Out = erlamsa_out:string_outputs(maps:get(output, Dict, "-")),
             fuzzer_loop(Muta, Gen, Pat, Out, Record_Meta, 1, N, [])
     end.
 
@@ -101,7 +101,7 @@ record_result(X, Acc) -> [X | Acc].
 fuzzer_loop(_, _, _, _, RecordMetaFun, I, N, Acc) when is_integer(N) andalso N < I -> RecordMetaFun({close, ok}), lists:reverse(Acc); 
 fuzzer_loop(Muta, Gen, Pat, Out, RecordMetaFun, I, N, Acc) ->
     {Ll, GenMeta} = Gen(), 
-    {NewOut, Fd, OutMeta} = Out([{nth, I}, GenMeta]),    
+    {NewOut, Fd, OutMeta} = Out(I, [{nth, I}, GenMeta]),    
     Tmp = Pat(Ll, Muta, OutMeta),
     {NewMuta, Meta, Written, Data} = erlamsa_out:output(Tmp, Fd),
     RecordMetaFun([{written, Written}| Meta]),    

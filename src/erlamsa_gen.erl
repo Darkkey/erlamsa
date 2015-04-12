@@ -43,7 +43,7 @@
 finish(Len) ->
     N = erlamsa_rnd:rand(Len + 1), %% 1/(n+1) probability of possibly adding extra data
     if
-        N =:= 0 ->
+        N =:= Len ->
             Bits = erlamsa_rnd:rand_range(1,16),
             NLen = erlamsa_rnd:rand(1 bsl Bits),
             erlamsa_utils:check_empty([list_to_binary(erlamsa_rnd:random_numbers(256, NLen))]);
@@ -94,8 +94,8 @@ stdin_generator(Online) ->
     Ll = port_stream(standard_io),
     io:setopts(standard_io, []),
     LlM = if
-              Online =:= true andalso is_function(Ll) -> erlamsa_utils:forcell(Ll); %% TODO: ugly, rewrite
-              true -> Ll
+              Online =:= true andalso is_function(Ll) -> Ll; %% TODO: ugly, rewrite
+              true -> erlamsa_utils:forcell(Ll)
           end,
     fun () -> {LlM, {generator, stdin}} end.
 
@@ -103,7 +103,7 @@ stdin_generator(Online) ->
 -spec file_streamer([string()]) -> fun().
 file_streamer(Paths) ->
     N = length(Paths),
-    fun () ->
+    fun () ->        
         P = random:uniform(N), %% lists indexing from 1 in erlang
         Path = lists:nth(P, Paths),
         {Res, Port} = file:open(Path, [read, raw, binary]), %% TODO: FIXME: could we use raw?
@@ -112,9 +112,8 @@ file_streamer(Paths) ->
                 Ll = port_stream(Port),
                 {Ll, [{generator, file}, {source, path}]};
             _Else ->
-                Err = "Error opening file",  %% TODO: add printing filename, handling -r and other things...
-                io:format("Error: ~s~n~n", [Err]),
-                throw(Err)
+                Err = lists:flatten(io_lib:format("Error opening file '~s'", [Path])),  %% TODO: add printing filename, handling -r and other things...
+                erlamsa_utils:error(Err)
         end
     end.
 
@@ -163,7 +162,7 @@ make_generator_fun(Args, Inp, Fail, N) ->
                     {Pri, stdin_generator(N == 1)}; %% TODO: <<-- 1 in Radamsa
                 stdin ->
                     false;
-                file when Args =/= [] andalso Args =/= "-" andalso Args =/= [direct] ->
+                file when Args =/= [] andalso Args =/= ["-"] andalso Args =/= [direct] ->
                     {Pri, file_streamer(Args)};
                 file ->
                     false;
@@ -186,31 +185,14 @@ make_generator(Pris, Args, Inp, Fail, N) ->
     mux_generators(Gs, Fail).
 
 -spec generators() -> list().
-generators() -> [{random, 1, "read data from standard input if no paths are given or - is among them"}, 
+generators() -> [{random, 1, "generate random data"}, 
                 {direct, 500, "read data directly from erlang function call arguments"}, 
                 {file, 1000, "read data from given files"}, 
-                {stdin, 100000, "generate random data"}].
+                {stdin, 100000, "read data from standard input if no paths are given or - is among them"}].
 
 -spec default() -> list().
-default() -> lists:map(fun ({Name, Pri, _}) -> {Name, Pri} end, generators()).
+default() -> lists:map(fun ({Name, Pri, _Desc}) -> {Name, Pri} end, generators()).
 
 -spec tostring(list()) -> string().
 tostring(Lst) ->
-    lists:foldl(fun ({Name, _}, Acc) -> atom_to_list(Name) ++ "," ++ Acc end, [], Lst).
-
-% %% TODO: check for errors
-% -spec string_to_generators(string()) -> {ok, [{atom(), non_neg_integer()}]} | {fail, string()}.
-% string_to_generators(Lst) ->
-%     Tokens = string:tokens(Lst, ","),
-%     OriginGens = maps:from_list(default()), 
-%     try {ok, string_to_generators_loop(Tokens, OriginGens, [])} 
-%     catch
-%         error:badarg -> {fail, "Invalid generators list specification!"}
-%     end.
-
-% %% TODO: check if generator name exist
-% -spec string_to_generators_loop([list(string())], any(), list()) -> [{atom(), non_neg_integer()}].
-% string_to_generators_loop([N|T], OriginGens, Acc) ->
-%     Name = list_to_atom(N),
-%     string_to_generators_loop(T, OriginGens, [{Name, maps:get(Name, OriginGens), ""} | Acc]);
-% string_to_generators_loop([], _OriginGens, Acc) -> Acc.
+    lists:foldl(fun ({Name, _Pri, _Desc}, Acc) -> atom_to_list(Name) ++ "," ++ Acc end, [], Lst).

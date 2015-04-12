@@ -944,12 +944,13 @@ mutations() ->          [{10, 5, fun sed_num/2, num, "try to modify a textual nu
 default() -> lists:map(fun ({_, Pri, _, Name, _Desc}) -> {Name, Pri} end, mutations()).
 
 -spec tostring(list()) -> string().
-tostring(Lst) -> lists:foldl(fun ({_, Pri, _, Name, _Desc}, Acc) -> 
-    case Pri of
-        1 -> atom_to_list(Name) ++ "," ++ Acc;
-        _Else -> atom_to_list(Name) ++ "=" ++ integer_to_list(Pri) ++ "," ++ Acc
-    end
- end, [], Lst).
+tostring(Lst) -> 
+    lists:foldl(fun ({_, Pri, _, Name, _Desc}, Acc) -> 
+        case Pri of
+            1 -> atom_to_list(Name) ++ "," ++ Acc;
+            _Else -> atom_to_list(Name) ++ "=" ++ integer_to_list(Pri) ++ "," ++ Acc
+        end
+    end, [], Lst).
 
 -spec make_mutator([{atom(), non_neg_integer()}]) -> fun().
 make_mutator(Lst) ->

@@ -40,7 +40,7 @@
 -export([uncons/2, extract_function/1, forcell/1, last/1, get/3,
         merge/2, hd_bin/1, tl_bin/1, choose_pri/2, is_pair/1,
         flush_bvecs/2, applynth/3, sort_by_priority/1, 
-        check_empty/1, stderr_probe/2, halve/1, verb/2]). 
+        check_empty/1, stderr_probe/2, halve/1, verb/2, error/1]). 
 
 %% l -> hd l' | error
 -spec uncons(list() | binary() | fun(), any()) -> any().
@@ -166,3 +166,8 @@ get(Key, DefaultValue, Tree) ->
         {value, Value} -> Value;
         none -> DefaultValue
     end.
+
+-spec error(any()) -> any().
+error(Err) -> 
+    io:format("Error: ~s~n~n", [Err]),
+    throw(Err).
