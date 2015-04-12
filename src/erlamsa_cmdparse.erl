@@ -38,10 +38,18 @@
 % API
 -export([parse/1, usage/0]).
 
+about() ->
+	"Erlamsa is an erlang port of famous Radams fuzzer. Radamsa is
+a general purpose fuzzer. It modifies given sample data in ways,
+which might expose errors in programs intended to process the data.
+
+Radamsa was written by Aki Helin at OUSPG.
+Erlamsa is written by Alexander Bolshev (@dark_k3y).~n".
+
 cmdline_optsspec() ->
 	[{help		, $h, 	"help", 		undefined, 				"show this thing"},
-%	 {about		, $a, 	"about", 		undefined, 				"what is this thing"},
-%	 {version	, $V, 	"version",		undefined, 				"show program version"},
+	 {about		, $a, 	"about", 		undefined, 				"what is this thing"},
+	 {version	, $V, 	"version",		undefined, 				"show program version"},
 	 {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. lport:rhost:rport (fuzzing proxy) or :port, host:port for data input from net"},
 	 {proxyprob	, $P,	"proxyprob",	{string, "0.0,0.0"},	"<arg>, fuzzing probability for proxy mode s->c,c->s"},
 %	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, :80 or 127.0.0.1:80 [-]"},
@@ -51,7 +59,8 @@ cmdline_optsspec() ->
 	  					 	erlamsa_mutations:default_string()},"<arg>, which mutations to use"},
 	 {patterns	, $p,	"patterns",		{string, 
 	 						erlamsa_patterns:default_string()},	"<arg>, which mutation patterns to use"},
-	 % {generators, $g,	"generators",	{string, ""},			"<arg>, which data generators to use"},
+	 {generators, $g,	"generators",	{string, 
+	 						erlamsa_gen:default_string()},		"<arg>, which data generators to use"},
 	 % {meta		, $M, 	"meta",			{string, ""},			"<arg>, save metadata about fuzzing process to this file"},
 	 {logger	, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename"},
 	 {workers	, $w, 	"workers",		{integer, 10},			"<arg>, number of workers in server mode"},
@@ -63,9 +72,44 @@ usage() ->
 	getopt:usage(cmdline_optsspec(), "erlamsa", "[file ...]").
 
 fail(Reason) ->
-	io:format("~s~n", [Reason]),
+	io:format("Error: ~s~n~n", [Reason]),
 	usage(),
-	halt(-1).
+	halt(1).
+
+parse_actions(List, OptionName, Default, Dict) ->
+	case string_to_actions(List, atom_to_list(OptionName), Default) of
+		{ok, L} ->
+			maps:put(OptionName, L, Dict);
+		{fail, Reason} ->
+			fail(Reason)
+	end.
+
+-spec string_to_actions(string(), string(), [tuple()]) -> {ok, [tuple()]} | {fail, string()}.
+string_to_actions(Lst, What, DefaultLst) -> 
+    Tokens = string:tokens(Lst, ","),
+    Default = maps:from_list(DefaultLst), 
+    try 
+    	{ok, string_to_action_loop(lists:map(fun (X) -> string:tokens(X, "=") end, Tokens), Default, [])} 
+    catch
+        error:badarg -> 
+        	{fail, "Invalid " ++ What ++ " list specification!"};
+        notfound -> 
+        	{fail, "No such " ++ What ++ "!"}
+    end.
+%% TODO: check if mutation name exist
+-spec string_to_action_loop([list(string())], maps:map(), list()) -> [{atom(), non_neg_integer()}].
+string_to_action_loop([H|T], Default, Acc) ->
+	Name = list_to_atom(hd(H)),
+	Item = process_action(Name, H, maps:get(Name, Default, notfound)),
+	string_to_action_loop(T, Default, [Item | Acc]);
+string_to_action_loop([], _Default, Acc) -> Acc.
+
+process_action(_Name, _, notfound) ->  
+	throw(notfound);
+process_action(Name, [_, Pri], _DefaultPri) ->
+	{Name, list_to_integer(Pri)};
+process_action(Name, _, DefaultPri) ->
+	{Name, DefaultPri}.
 
 parse_logger_opts(LogOpts, Dict) ->
 	case string:tokens(LogOpts, "=") of
@@ -90,21 +134,6 @@ parse_input_opts(InputOpts, Dict) ->
 		_Else -> fail(io_lib:format("invalid input specification: '~s'", [InputOpts]))
 	end.
 
-parse_mutas_list(Mutators, Dict) ->
-	case erlamsa_mutations:string_to_mutators(Mutators) of
-		{ok, Ml} ->			
-			maps:put(mutations, Ml, Dict);
-		{fail, Reason} ->
-			fail(Reason)
-	end.
-
-parse_patterns_list(Patterns, Dict) ->
-	case erlamsa_mutations:string_to_mutators(Patterns) of
-		{ok, Pl} ->			
-			maps:put(patterns, Pl, Dict);
-		{fail, Reason} ->
-			fail(Reason)
-	end.
 
 %% TODO: seed
 parse_seed_opt(Seed, Dict) ->
@@ -124,6 +153,12 @@ parse_tokens(Opts, Paths) ->
 parse_opts([help|_T], _Dict) ->
 	usage(),
 	halt(0);
+parse_opts([version|_T], _Dict) ->
+	io:format("Erlamsa ~s~n", [?VERSION]),
+	halt(0);
+parse_opts([about|_T], _Dict) ->
+	io:format(about(), []),
+	halt(0);
 parse_opts([list|_T], _Dict) ->
 	Ms = lists:foldl(
 			fun({_,_,_,N,D}, Acc) ->
@@ -139,7 +174,7 @@ parse_opts([list|_T], _Dict) ->
 		,[],
 		erlamsa_patterns:patterns()),
 	io:format("Mutations (-m)~n~s~nPatterns (-p)~n~s", [Ms, Ps]),
-	halt(0);
+	halt(0);   
 parse_opts([{verbose, Lvl}|T], Dict) -> 	
 	parse_opts(T, maps:put(verbose, Lvl, Dict));
 parse_opts([recursive|T], Dict) -> 
@@ -157,9 +192,11 @@ parse_opts([{proxyprob, ProxyProbOpts}|T], Dict) ->
 parse_opts([{input, InputOpts}|T], Dict) -> 
 	parse_opts(T, parse_input_opts(InputOpts, Dict));
 parse_opts([{mutations, Mutators}|T], Dict) -> 
-	parse_opts(T, parse_mutas_list(Mutators, Dict));
+	parse_opts(T, parse_actions(Mutators, mutations, erlamsa_mutations:default(), Dict));
 parse_opts([{patterns, Patterns}|T], Dict) -> 
-	parse_opts(T, parse_patterns_list(Patterns, Dict));
+	parse_opts(T, parse_actions(Patterns, patterns, erlamsa_patterns:default(), Dict));
+parse_opts([{generators, Generators}|T], Dict) -> 
+	parse_opts(T, parse_actions(Generators, generators, erlamsa_gen:default(), Dict));
 % parse_opts([{output, OutputOpts}|T], Dict) -> 
 % 	parse_opts(T, parse_input_opts(OutputOpts, Dict));
 parse_opts([{seed, SeedOpts}|T], Dict) -> 

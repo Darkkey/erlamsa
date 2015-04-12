@@ -36,7 +36,7 @@
 -endif.
 
 %% API
--export([make_generator/5, default/0]).
+-export([make_generator/5, generators/0, default/0, tostring/1]).
 
 %% fill the rest of the stream with padding random bytes
 -spec finish(non_neg_integer()) -> [binary()].
@@ -113,7 +113,7 @@ file_streamer(Paths) ->
                 {Ll, [{generator, file}, {source, path}]};
             _Else ->
                 Err = "Error opening file",  %% TODO: add printing filename, handling -r and other things...
-                io:write(Err),
+                io:format("Error: ~s~n~n", [Err]),
                 throw(Err)
         end
     end.
@@ -163,7 +163,7 @@ make_generator_fun(Args, Inp, Fail, N) ->
                     {Pri, stdin_generator(N == 1)}; %% TODO: <<-- 1 in Radamsa
                 stdin ->
                     false;
-                file when Args =/= [] andalso Args =/= [direct] ->
+                file when Args =/= [] andalso Args =/= "-" andalso Args =/= [direct] ->
                     {Pri, file_streamer(Args)};
                 file ->
                     false;
@@ -180,10 +180,37 @@ make_generator_fun(Args, Inp, Fail, N) ->
     end.
 
 %% get a list of {GenAtom, Pri} and output the list of {Pri, Gen}
--spec make_generator(prioritized_list(), list(), binary() | nil, fun(), non_neg_integer()) -> fun() | false.
+-spec make_generator(list(), list(), binary() | nil, fun(), non_neg_integer()) -> fun() | false.
 make_generator(Pris, Args, Inp, Fail, N) ->
     Gs = [ A || A <- [(make_generator_fun(Args, Inp, Fail, N))(V1) || V1 <- Pris], A =/= false],
     mux_generators(Gs, Fail).
 
+-spec generators() -> list().
+generators() -> [{random, 1, "read data from standard input if no paths are given or - is among them"}, 
+                {direct, 500, "read data directly from erlang function call arguments"}, 
+                {file, 1000, "read data from given files"}, 
+                {stdin, 100000, "generate random data"}].
+
 -spec default() -> list().
-default() -> [{random, 1}, {direct, 500}, {file, 1000}, {stdin, 100000}].
+default() -> lists:map(fun ({Name, Pri, _}) -> {Name, Pri} end, generators()).
+
+-spec tostring(list()) -> string().
+tostring(Lst) ->
+    lists:foldl(fun ({Name, _}, Acc) -> atom_to_list(Name) ++ "," ++ Acc end, [], Lst).
+
+% %% TODO: check for errors
+% -spec string_to_generators(string()) -> {ok, [{atom(), non_neg_integer()}]} | {fail, string()}.
+% string_to_generators(Lst) ->
+%     Tokens = string:tokens(Lst, ","),
+%     OriginGens = maps:from_list(default()), 
+%     try {ok, string_to_generators_loop(Tokens, OriginGens, [])} 
+%     catch
+%         error:badarg -> {fail, "Invalid generators list specification!"}
+%     end.
+
+% %% TODO: check if generator name exist
+% -spec string_to_generators_loop([list(string())], any(), list()) -> [{atom(), non_neg_integer()}].
+% string_to_generators_loop([N|T], OriginGens, Acc) ->
+%     Name = list_to_atom(N),
+%     string_to_generators_loop(T, OriginGens, [{Name, maps:get(Name, OriginGens), ""} | Acc]);
+% string_to_generators_loop([], _OriginGens, Acc) -> Acc.

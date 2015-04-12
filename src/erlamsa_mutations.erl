@@ -36,7 +36,7 @@
 -include("erlamsa.hrl").
 
 %% API
--export([make_mutator/1, default/0, default_string/0, string_to_mutators/1, mutations/0]).
+-export([make_mutator/1, mutations/0, default/0, tostring/1]).
  
 
 -define(MIN_SCORE, 2).
@@ -943,33 +943,13 @@ mutations() ->          [{10, 5, fun sed_num/2, num, "try to modify a textual nu
 -spec default() -> [{atom(), non_neg_integer()}].
 default() -> lists:map(fun ({_, Pri, _, Name, _Desc}) -> {Name, Pri} end, mutations()).
 
--spec default_string() -> string().
-default_string() -> lists:foldl(fun ({_, Pri, _, Name, _Desc}, Acc) -> 
+-spec tostring(list()) -> string().
+tostring(Lst) -> lists:foldl(fun ({_, Pri, _, Name, _Desc}, Acc) -> 
     case Pri of
         1 -> atom_to_list(Name) ++ "," ++ Acc;
         _Else -> atom_to_list(Name) ++ "=" ++ integer_to_list(Pri) ++ "," ++ Acc
     end
- end, [], mutations()).
-
-%% TODO: check for errors
--spec string_to_mutators(string()) -> {ok, [{atom(), non_neg_integer()}]} | {fail, string()}.
-string_to_mutators(Lst) ->
-    Tokens = string:tokens(Lst, ","),
-    try {ok, string_to_mutators_loop(lists:map(fun (X) -> string:tokens(X, "=") end, Tokens), [])} 
-    catch
-        error:badarg -> {fail, "Invalid mutation list specification!"}
-    end.
-
-%% TODO: check if mutation name exist
--spec string_to_mutators_loop([list(string())], list()) -> [{atom(), non_neg_integer()}].
-string_to_mutators_loop([[N, P]|T], Acc) ->
-    Name = list_to_atom(N),
-    Pri = list_to_integer(P),
-    string_to_mutators_loop(T, [{Name, Pri} | Acc]);
-string_to_mutators_loop([[N]|T], Acc) ->
-    Name = list_to_atom(N),
-    string_to_mutators_loop(T, [{Name, 1} | Acc]);
-string_to_mutators_loop([], Acc) -> Acc.
+ end, [], Lst).
 
 -spec make_mutator([{atom(), non_neg_integer()}]) -> fun().
 make_mutator(Lst) ->

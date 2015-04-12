@@ -26,7 +26,7 @@ start(Opts) ->
     Workers = maps:get(workers, Opts, 10),
     Verbose = erlamsa_utils:verb(stdout, maps:get(verbose, Opts, 0)),
     {LocalPort, _, _} = maps:get(proxy_address, Opts),
-    case gen_tcp:listen(LocalPort, [binary, {active, true}, {packet,0}]) of
+    case gen_tcp:listen(LocalPort, [binary, {active, true}, {reuseaddr, true}, {packet,0}]) of
         {ok, ListenSock} ->
             start_servers(Workers, ListenSock, Opts, Verbose, Log),
             {ok, Port} = inet:port(ListenSock),

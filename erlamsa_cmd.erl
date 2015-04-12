@@ -1,6 +1,8 @@
 #!/usr/bin/env escript
 %% -*- erlang -*-
-%%! -smp enable -sname erlamsa_cmd
+%%! -smp enable 
+
+%% -sname erlamsa_cmd
 -mode(compile).
 
 sleep() ->

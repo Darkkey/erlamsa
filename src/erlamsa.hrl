@@ -7,6 +7,8 @@
 %%%-------------------------------------------------------------------
 -author("dark_k3y"). 
 
+-define(VERSION, "0.1").
+
 -define(INITIAL_IP,24).              %% initial max 1/n for basic patterns)
 -define(REMUTATE_PROBABILITY, {4, 5}).
 -define(MIN_BLOCK_SIZE, 256).

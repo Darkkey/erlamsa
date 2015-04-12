@@ -20,7 +20,7 @@
 %% convert list-of-bvecs to one big binary
 -spec flush(list(nil | binary())) -> any(). 
 flush([]) -> <<>>;
-flush([H|T]) when is_binary(H) -> R = flush(T), <<R/binary, H/binary>>.
+flush([H|T]) when is_binary(H) -> R = flush(T), <<H/binary, R/binary>>.
 
 -spec output(lazy_list_of_bins(), output_dest()) -> {fun(), meta(), integer(), binary()}.
 output(Ll, Fd) ->
