@@ -81,18 +81,22 @@ interesting_numbers() ->
         [],
         [1, 7, 8, 15, 16, 31, 32, 63, 64, 127, 128]).
 
+-spec sign(integer()) -> integer().
+sign(X) when X >= 0 -> 1;
+sign(_) -> -1.
+
 -spec mutate_num(integer()) -> integer().
 mutate_num(Num) -> mutate_num(Num, erlamsa_rnd:rand(12)).
 
 -spec mutate_num(integer(), 0..12) -> integer().
-mutate_num(Num, 0) -> Num + 1; %% in randamsa n + 1 which is exactly 1; Bug in Radamsa?
-mutate_num(Num, 1) -> Num - 1; %% in randamsa n - 1 which is exactly 0; Bug in Radamsa?
+mutate_num(Num, 0) -> Num + 1; 
+mutate_num(Num, 1) -> Num - 1; 
 mutate_num(_, 2) -> 0;
 mutate_num(_, 3) -> 1;
 mutate_num(_, N) when N > 2 andalso N < 7 -> erlamsa_rnd:rand_elem(interesting_numbers());
 mutate_num(Num, 7) -> Num + erlamsa_rnd:rand_elem(interesting_numbers());
 mutate_num(Num, 8) -> Num - erlamsa_rnd:rand_elem(interesting_numbers());
-mutate_num(Num, 9) -> Num - erlamsa_rnd:rand(Num*2); %% in radamsa n*2 which is exactly 18 (9*2); Bug in Radamsa?
+mutate_num(Num, 9) -> Num - erlamsa_rnd:rand(erlang:abs(Num)*2) * sign(Num); 
 mutate_num(Num, _) ->
     N = erlamsa_rnd:rand_range(1, 129),
     L = erlamsa_rnd:rand_log(N),
@@ -103,15 +107,17 @@ mutate_num(Num, _) ->
     end.
 
 -spec get_num(binary()) -> {integer() | false, binary()}.
-get_num(Bin) -> get_num(Bin, 0, 0).
+get_num(Bin) -> get_num(Bin, 0, 0, 1).
 
--spec get_num(binary(), integer(), non_neg_integer()) -> {integer() | false, binary()}.
-get_num(<<>>, _, 0) -> {false, <<>>};
-get_num(<<>>, N, _) -> {N, <<>>};
-get_num(<<D:8,T/binary>>, N, Digits) when (D >= 48) and (D =< 57) ->
-    get_num(T, D - 48 + N*10, Digits + 1);
-get_num(Lst, _, 0) -> {false, Lst};
-get_num(Lst, N, _) -> {N, Lst}.
+-spec get_num(binary(), integer(), non_neg_integer(), 1 | -1) -> {integer() | false, binary()}.
+get_num(<<>>, _, 0, _) -> {false, <<>>};
+get_num(<<>>, N, _, Sign) -> {N * Sign, <<>>};
+get_num(<<D:8,T/binary>>, N, Digits, Sign) when (D >= 48) and (D =< 57) ->
+    get_num(T, D - 48 + N*10, Digits + 1, Sign);
+get_num(<<D:8,T/binary>>, N, Digits, _) when (D =:= 45) and (Digits =:= 0) ->
+    get_num(T, N, Digits, -1);
+get_num(Lst, _, 0, _) -> {false, Lst};
+get_num(Lst, N, _, Sign) -> {N * Sign, Lst}.
 
 -spec copy_range(binary(), binary(), binary()) -> binary().
 copy_range(Pos, Pos, Tail) -> Tail;
@@ -861,6 +867,13 @@ sed_utf8_insert([H|T], Meta) ->
         fun (B) -> <<B:8, Bin/binary>> end)
       | T], [{sed_utf8_insert, D}|Meta], D}.
 
+%% Null debug mutator -- passes data "as is" -- for testing
+
+-spec nomutation(list_of_bins(), meta_list()) -> mutation_res().
+nomutation(Ll, Meta) ->    
+    {fun nomutation/2, Ll, [{nomutation, -1}|Meta], -1}.
+
+
 %%
 %%  Main Mutation Functions
 %%
@@ -938,7 +951,8 @@ mutations() ->          [{10, 5, fun sed_num/2, num, "try to modify a textual nu
                         {10, 1, construct_line_muta(fun erlamsa_generic:list_perm/2, line_perm), lp, "swap order of lines"},
                         {10, 2, fun sed_fuse_this/2, ft, "jump to a similar position in block"},
                         {10, 1, fun sed_fuse_next/2, fn, "likely clone data between similar positions"},
-                        {10, 2, fun sed_fuse_old/2, fo, "fuse previously seen data elsewhere"}].
+                        {10, 2, fun sed_fuse_old/2, fo, "fuse previously seen data elsewhere"},
+                        {10, 0, fun nomutation/2, nil, "no mutation will occur (debugging purposes)"}].
 
 -spec default() -> [{atom(), non_neg_integer()}].
 default() -> lists:map(fun ({_, Pri, _, Name, _Desc}) -> {Name, Pri} end, mutations()).
