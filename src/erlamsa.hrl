@@ -15,6 +15,7 @@
 -define(AVG_BLOCK_SIZE, 2048).
 -define(AVG_BLOCK_SIZE_BITS, 16384).
 -define(MAX_BLOCK_SIZE, 2*?AVG_BLOCK_SIZE).
+-define(TCP_TIMEOUT, 5000).
 
 %% Common inter-module types.
 

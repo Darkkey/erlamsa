@@ -27,8 +27,9 @@ output(Ll, Fd) ->
     {NLl, NewFd, Data, N} = blocks_port(Ll, Fd),
     %% (ok? (and (pair? ll) (tuple? (car ll)))) ;; all written? <-- do we really need to check this?
     {Muta, Meta} = erlamsa_utils:last(NLl),
-    close_port(NewFd),
-    {Muta, Meta, N, flush(Data)}.
+    FlushedData = flush(Data),
+    close_port(FlushedData, NewFd),
+    {Muta, Meta, N, FlushedData}.
 
 -spec stdout_stream(non_neg_integer(), meta()) -> {fun(), output_dest(), meta_list()}.
 stdout_stream(_, Meta) -> {fun stdout_stream/2, stdout, [{output, stdout} | Meta]}.
@@ -50,11 +51,95 @@ file_writer(Str) ->
         Filename = build_name(Tokens, integer_to_list(N), []),
         {Res, Fd} = file:open(Filename, [write, raw, binary]),
         case Res of 
-            ok -> {F, Fd, [{output, return} | Meta]};
+            ok -> {F, Fd, [{output, file} | Meta]};
             _Else ->
                 Err = lists:flatten(io_lib:format("Error opening file '~s'", [Filename])),  %% TODO: add printing filename, handling -r and other things...
                 erlamsa_utils:error(Err)
         end
+    end.
+
+-spec tcpsock_writer(inet:ip_address(), inet:port_number()) -> fun().
+tcpsock_writer(Addr, Port) ->
+    fun F(_N, Meta) ->
+        {Res, Sock} = gen_tcp:connect(Addr, Port, [binary, {active, true}], ?TCP_TIMEOUT),
+        case Res of 
+            ok -> {F, {net, 
+                fun (Data) -> gen_tcp:send(Sock, Data) end,
+                fun () -> gen_tcp:close(Sock) end
+                }, [{output, tcpsock} | Meta]};
+            _Else -> 
+                Err = lists:flatten(io_lib:format("Error opening tcp socket to ~s:~p '~s'", [Addr, Port, Sock])), 
+                erlamsa_utils:error(Err)
+        end
+    end.
+     
+-spec udpsock_writer(inet:ip_address(), inet:port_number()) -> fun().
+udpsock_writer(Addr, Port) ->
+    fun F(_N, Meta) ->
+        {Res, Sock} = gen_udp:open(Port, [binary, {active, true}, {reuseaddr, true}]),
+        case Res of 
+            ok -> {F, {net, 
+                fun (Data) -> gen_udp:send(Sock, Addr, Port, Data) end,
+                fun () -> gen_udp:close(Sock) end
+                }, [{output, udpsock} | Meta]};
+            _Else -> 
+                Err = lists:flatten(io_lib:format("Error opening udp port ~p: '~s'", [Port, Sock])), 
+                erlamsa_utils:error(Err)
+        end
+    end.
+
+-spec http_writer(tuple()) -> fun().   
+http_writer({Host, Port, Path, Query, []}) -> 
+    make_http_writer(Host, Port, Path, Query, "GET", "", []);
+http_writer({Host, Port, Path, Query, ["GET",Param|T]}) -> 
+    make_http_writer(Host, Port, Path, Query, "GET", Param, T);
+http_writer({Host, Port, Path, Query, [Type | T]}) -> 
+    make_http_writer(Host, Port, Path, Query, Type, "", T).
+
+%% TODO: add spec
+make_host_header(Host) ->
+    list_to_binary("Host: " ++ Host ++ [13,10]).
+
+%% TODO: add spec
+create_http_header_maker(Host, "GET", "", Path, Query, Headers) ->
+    First = "GET " ++ Path ++ Query,  
+    HostHeader = make_host_header(Host),
+    fun (Data) ->
+        flush([list_to_binary(First), Data, list_to_binary(" HTTP/1.1"), <<13,10>>, HostHeader, Headers, <<13,10>>])
+    end;
+create_http_header_maker(Host, "GET", Param, Path, Query, Headers) ->
+    First = "GET " ++ Path ++ Query ++ "&" ++ Param ++ "=",    
+    HostHeader = make_host_header(Host),
+    fun (Data) ->
+        flush([list_to_binary(First), Data, list_to_binary(" HTTP/1.1"), <<13,10>>, HostHeader, Headers, <<13,10>>])
+    end;
+create_http_header_maker(Host, "POST", _, Path, Query, Headers) ->
+    First = "POST " ++ Path ++ Query,   
+    HostHeader = make_host_header(Host), 
+    fun (Data) ->
+        CL = "Content-length: " ++ integer_to_list(byte_size(Data)) ++ [13,10],    
+        flush([list_to_binary(First), list_to_binary(" HTTP/1.1"), <<13,10>>, Headers, HostHeader, list_to_binary(CL), <<13,10>>, Data])
+    end.
+
+http_headers([H|T], Acc) ->
+    http_headers(T, [list_to_binary(H), <<13,10>> | Acc]);
+http_headers([], Acc) ->
+    flush(Acc).
+    
+%% TODO: FIXME: check correct format of data
+-spec make_http_writer(inet:ip_address(), inet:port_number(), string(), string(), string(), string(), list(string())) -> fun().
+make_http_writer(Host, Port, Path, Query, Type, Param, Options) ->
+    Maker = create_http_header_maker(Host, Type, Param, Path, Query, http_headers(Options, [])), %% TODO:fixme with re
+    fun F(_N, Meta) -> 
+        {F, {http, 
+            fun (Data) -> 
+                Packet = Maker(Data),
+                {ok, Sock} = gen_tcp:connect(Host, Port, [binary, {active, true}], ?TCP_TIMEOUT),
+                gen_tcp:send(Sock, Packet),
+                gen_tcp:close(Sock)
+            end
+        },
+        [{output, http} | Meta]}
     end.
 
 %% TODO: possibly add tcp, udp, files, multiple files output.
@@ -63,6 +148,9 @@ string_outputs(Str) ->
     case Str of
         "-" -> fun stdout_stream/2;
         return -> fun return_stream/2;
+        {tcp, {Addr, Port}} -> tcpsock_writer(Addr, Port);
+        {udp, {Addr, Port}} -> udpsock_writer(Addr, Port);
+        {http, Params} -> http_writer(Params);
         _Else -> file_writer(Str)
     end.
 
@@ -83,11 +171,13 @@ blocks_port(Ll = [H|T], Fd, Data, N) when is_binary(H) ->
 blocks_port(Ll, Fd, Data, N) -> {Ll, Fd, Data, N}.
 
 
-%% closes the port
--spec close_port(output_dest()) -> ok | {'error', file:posix() | badarg | terminated}.
-close_port(stdout) -> ok;
-close_port(return) -> ok;
-close_port(Fd) -> file:close(Fd).
+%% closes the port (and possibly writes the data in case of HTTP)
+-spec close_port(binary(), output_dest()) -> ok | {'error', file:posix() | badarg | terminated}.
+close_port(_, stdout) -> ok;
+close_port(_, return) -> ok;
+close_port(_, {net, _Writer, Closer}) -> Closer();
+close_port(Data, {http, Final}) -> Final(Data);
+close_port(_, Fd) -> file:close(Fd).
 
 %% write to Fd or stdout
 %% TODO: UGLY, need rewrite and handle errors, also rewrite spec
@@ -96,4 +186,6 @@ close_port(Fd) -> file:close(Fd).
 -spec write_really(binary(), output_dest()) -> {any(), binary()}.
 write_really(Data, return) -> {ok, Data};
 write_really(Data, stdout) -> {file:write(standard_io, Data), <<>>};
+write_really(Data, {http, _Final}) -> {ok, Data};
+write_really(Data, {net, Writer, _Closer}) -> {Writer(Data), <<>>};
 write_really(Data, Fd) -> {file:write(Fd, Data), <<>>}.

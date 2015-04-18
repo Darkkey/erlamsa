@@ -90,22 +90,24 @@ fuzzer(Dict) ->
             Record_Meta({seed, maps:get(seed, Dict)}),            
             Pat = erlamsa_patterns:make_pattern(maps:get(patterns, Dict, erlamsa_patterns:default())),
             Out = erlamsa_out:string_outputs(maps:get(output, Dict, "-")),
-            fuzzer_loop(Muta, Gen, Pat, Out, Record_Meta, 1, N, [])
+            Sleep = maps:get(sleep, Dict, 0),
+            fuzzer_loop(Muta, Gen, Pat, Out, Record_Meta, 1, N, Sleep, [])
     end.
 
 -spec record_result(binary(), list()) -> list().
 record_result(<<>>, Acc) -> Acc;
 record_result(X, Acc) -> [X | Acc].
 
--spec fuzzer_loop(fun(), fun(), fun(), fun(), fun(), non_neg_integer(), non_neg_integer() | inf, list()) -> [binary()].
-fuzzer_loop(_, _, _, _, RecordMetaFun, I, N, Acc) when is_integer(N) andalso N < I -> RecordMetaFun({close, ok}), lists:reverse(Acc); 
-fuzzer_loop(Muta, Gen, Pat, Out, RecordMetaFun, I, N, Acc) ->
+-spec fuzzer_loop(fun(), fun(), fun(), fun(), fun(), non_neg_integer(), non_neg_integer(), non_neg_integer() | inf, list()) -> [binary()].
+fuzzer_loop(_, _, _, _, RecordMetaFun, I, N, _, Acc) when is_integer(N) andalso N < I -> RecordMetaFun({close, ok}), lists:reverse(Acc); 
+fuzzer_loop(Muta, Gen, Pat, Out, RecordMetaFun, I, N, Sleep, Acc) ->
     {Ll, GenMeta} = Gen(), 
     {NewOut, Fd, OutMeta} = Out(I, [{nth, I}, GenMeta]),    
     Tmp = Pat(Ll, Muta, OutMeta),
     {NewMuta, Meta, Written, Data} = erlamsa_out:output(Tmp, Fd),
     RecordMetaFun([{written, Written}| Meta]),    
-    fuzzer_loop(NewMuta, Gen, Pat, NewOut, RecordMetaFun, I + 1, N, record_result(Data, Acc)).
+    timer:sleep(Sleep),
+    fuzzer_loop(NewMuta, Gen, Pat, NewOut, RecordMetaFun, I + 1, N, Sleep, record_result(Data, Acc)).
 
 
 
