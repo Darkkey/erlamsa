@@ -5,7 +5,7 @@
 %%%
 %%% @end
 %%%-------------------------------------------------------------------
--author("dark_k3y"). 
+-author("dark_k3y").
 
 -define(VERSION, "0.1").
 
@@ -16,6 +16,7 @@
 -define(AVG_BLOCK_SIZE_BITS, 16384).
 -define(MAX_BLOCK_SIZE, 2*?AVG_BLOCK_SIZE).
 -define(TCP_TIMEOUT, 5000).
+-define(DEFAULT_UDPPROXY_CLIENTPORT, 44443).
 
 %% Common inter-module types.
 

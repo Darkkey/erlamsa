@@ -59,23 +59,23 @@ cmdline_optsspec() ->
 	[{help		, $h, 	"help", 		undefined, 				"show this thing"},
 	 {about		, $a, 	"about", 		undefined, 				"what is this thing"},
 	 {version	, $V, 	"version",		undefined, 				"show program version"},
-	 {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:rhost:rport (fuzzing proxy) or :port, host:port for data input from net"},
+	 {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or :port, host:port for data input from net"},
 	 {proxyprob	, $P,	"proxyprob",	{string, "0.0,0.0"},	"<arg>, fuzzing probability for proxy mode s->c,c->s"},
 	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or http://example.com [-]"},
 	 {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
 	 {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},
 	 {seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int"},
-	 {mutations , $m,   "mutations",	{string, 
+	 {mutations , $m,   "mutations",	{string,
 	  					 	erlamsa_mutations:tostring(	erlamsa_mutations:mutations())}, 	"<arg>, which mutations to use"},
-	 {patterns	, $p,	"patterns",		{string, 
+	 {patterns	, $p,	"patterns",		{string,
 	 						erlamsa_patterns:tostring(	erlamsa_patterns:patterns())},	"<arg>, which mutation patterns to use"},
-	 {generators, $g,	"generators",	{string, 
+	 {generators, $g,	"generators",	{string,
 	 						erlamsa_gen:tostring(		erlamsa_gen:generators())},		"<arg>, which data generators to use"},
 	 % {meta		, $M, 	"meta",			{string, ""},			"<arg>, save metadata about fuzzing process to this file"},
 	 {logger	, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename"},
 	 {workers	, $w, 	"workers",		{integer, 10},			"<arg>, number of workers in server mode"},
 %	 {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},
-	 {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose"},	 
+	 {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose"},
 	 {list		, $l,	"list",			undefined,				"list i/o options, mutations, patterns and generators"}].
 
 usage() ->
@@ -95,15 +95,15 @@ parse_actions(List, OptionName, Default, Dict) ->
 	end.
 
 -spec string_to_actions(string(), string(), [tuple()]) -> {ok, [tuple()]} | {fail, string()}.
-string_to_actions(Lst, What, DefaultLst) -> 
+string_to_actions(Lst, What, DefaultLst) ->
     Tokens = string:tokens(Lst, ","),
-    Default = maps:from_list(DefaultLst), 
-    try 
-    	{ok, string_to_action_loop(lists:map(fun (X) -> string:tokens(X, "=") end, Tokens), Default, [])} 
+    Default = maps:from_list(DefaultLst),
+    try
+    	{ok, string_to_action_loop(lists:map(fun (X) -> string:tokens(X, "=") end, Tokens), Default, [])}
     catch
-        error:badarg -> 
+        error:badarg ->
         	{fail, "Invalid " ++ What ++ " list specification!"};
-        notfound -> 
+        notfound ->
         	{fail, "No such " ++ What ++ "!"}
     end.
 %% TODO: check if mutation name exist
@@ -114,7 +114,7 @@ string_to_action_loop([H|T], Default, Acc) ->
 	string_to_action_loop(T, Default, [Item | Acc]);
 string_to_action_loop([], _Default, Acc) -> Acc.
 
-process_action(_Name, _, notfound) ->  
+process_action(_Name, _, notfound) ->
 	throw(notfound);
 process_action(Name, [_, Pri], _DefaultPri) ->
 	{Name, list_to_integer(Pri)};
@@ -123,7 +123,7 @@ process_action(Name, _, DefaultPri) ->
 
 parse_logger_opts(LogOpts, Dict) ->
 	case string:tokens(LogOpts, "=") of
-		["file", FName] -> 
+		["file", FName] ->
 			maps:put(logger_file, FName,
 				maps:put(logger_type, file, Dict));
 		_Else -> fail(io_lib:format("invalid logger specification: '~s'", [LogOpts]))
@@ -131,23 +131,34 @@ parse_logger_opts(LogOpts, Dict) ->
 
 parse_proxyprob_opts(ProxyProbOpts, Dict) ->
 	case string:tokens(ProxyProbOpts, ",") of
-		[SC, CS] -> 
+		[SC, CS] ->
 			maps:put(proxy_probs, {list_to_float(SC), list_to_float(CS)}, Dict);
 		_Else -> fail(io_lib:format("invalid proxy fuzzing probability specification: '~s'", [ProxyProbOpts]))
 	end.
 
 parse_input_opts(InputOpts, Dict) ->
 	case string:tokens(InputOpts, ":") of
-		[Proto, LPortD, RHost, RPort] -> 
-			maps:put(proxy_address, {Proto, list_to_integer(hd(string:tokens(LPortD, "/"))), RHost, list_to_integer(RPort)}, 
+		[Proto, LPortD, RHost, RPort] ->
+			maps:put(proxy_address, {Proto,
+				list_to_integer(hd(string:tokens(LPortD, "/"))),
+				?DEFAULT_UDPPROXY_CLIENTPORT,
+				erlamsa_utils:resolve_addr(RHost),
+				list_to_integer(RPort)},
 			maps:put(mode, proxy, Dict));
+		["udp", LPortD, UDPClientPort, RHost, RPort] ->
+				maps:put(proxy_address, {"udp",
+				list_to_integer(hd(string:tokens(LPortD, "/"))),
+				UDPClientPort,
+				erlamsa_utils:resolve_addr(RHost), 
+				list_to_integer(RPort)},
+				maps:put(mode, proxy, Dict));
 		_Else -> fail(io_lib:format("invalid input specification: '~s'", [InputOpts]))
 	end.
 
 
 parse_sock_addr(SockType, Addr) ->
 	Tokens = string:tokens(Addr, ":"),
-	case length(Tokens) of 
+	case length(Tokens) of
 		2 ->
 			{SockType, {hd(Tokens), list_to_integer(hd(tl(Tokens)))}};
 		_Else ->
@@ -155,7 +166,7 @@ parse_sock_addr(SockType, Addr) ->
 	end.
 
 %% TODO: catch exception in case of incorrect...
-parse_http_addr(URL) -> 
+parse_http_addr(URL) ->
 	Tokens = string:tokens(URL, ","),
 	{ok, {Scheme, _UserInfo, Host, Port, Path, Query}} = http_uri:parse(hd(Tokens)),
 	{Scheme, {Host, Port, Path, Query, tl(Tokens)}}.
@@ -165,17 +176,17 @@ parse_url([<<"udp">>|T], _URL) ->
 parse_url([<<"tcp">>|T], _URL) ->
 	parse_sock_addr(tcp, binary_to_list(hd(T)));
 parse_url([<<"http">>|_T], URL) ->
-	parse_http_addr(URL);	 
+	parse_http_addr(URL);
 parse_url(_, URL) ->
 	fail(io_lib:format("invalid URL specification: '~s'", [URL])).
 
 parse_output(Output) ->
-	{ok, SRe} = re:compile(":\\/\\/"),	
+	{ok, SRe} = re:compile(":\\/\\/"),
 	Tokens = re:split(Output, SRe),
 	case length(Tokens) of
-		1 -> 
+		1 ->
 			Output; %% file or stdout
-		2 -> 
+		2 ->
 			parse_url(Tokens, Output); %% url
 		_Else ->
 			fail(io_lib:format("invalid output specification: '~s'", [Output]))
@@ -186,11 +197,11 @@ parse_seed_opt(Seed, Dict) ->
 	try
 		maps:put(seed, list_to_tuple(lists:map(fun (X) -> list_to_integer(X) end, string:tokens(Seed, ","))), Dict)
 	catch
-        error:badarg -> 
+        error:badarg ->
         	fail("Invalid seed format! Usage: int,int,int")
     end.
-	
-parse(Args) -> 
+
+parse(Args) ->
 	case getopt:parse(cmdline_optsspec(), Args) of
 		{ok, {Opts, Files}} -> parse_tokens(Opts, Files);
 		_Else -> usage(), halt(-1)
@@ -226,14 +237,14 @@ parse_opts([list|_T], _Dict) ->
 				[io_lib:format("    ~-6s: ~s~n",[atom_to_list(N),D])|Acc]
 			end
 		,[],
-		lists:sort(fun ({_,N1,_}, {_,N2,_}) -> N1 =< N2 end, 
+		lists:sort(fun ({_,N1,_}, {_,N2,_}) -> N1 =< N2 end,
 			erlamsa_gen:generators())),
 	Ms = lists:foldl(
 			fun({_,_,_,N,D}, Acc) ->
 				[io_lib:format("    ~-3s: ~s~n",[atom_to_list(N),D])|Acc]
 			end
 		,[],
-		lists:sort(fun ({_,_,_,N1,_}, {_,_,_,N2,_}) -> N1 >= N2 end, 
+		lists:sort(fun ({_,_,_,N1,_}, {_,_,_,N2,_}) -> N1 >= N2 end,
 			erlamsa_mutations:mutations())),
 	Ps = lists:foldl(
 			fun({_,_,N,D}, Acc) ->
@@ -241,36 +252,36 @@ parse_opts([list|_T], _Dict) ->
 			end
 		,[],
 		erlamsa_patterns:patterns()),
-	io:format("Inputs (-i)~n~s~nOutputs (-o)~n~s~nGenerators (-g)~n~s~nMutations (-m)~n~s~nPatterns (-p)~n~s", 
+	io:format("Inputs (-i)~n~s~nOutputs (-o)~n~s~nGenerators (-g)~n~s~nMutations (-m)~n~s~nPatterns (-p)~n~s",
 		[Is, Os, Gs, Ms, Ps]),
-	halt(0);   
-parse_opts([{verbose, Lvl}|T], Dict) -> 	
+	halt(0);
+parse_opts([{verbose, Lvl}|T], Dict) ->
 	parse_opts(T, maps:put(verbose, Lvl, Dict));
-parse_opts([recursive|T], Dict) -> 
+parse_opts([recursive|T], Dict) ->
 	parse_opts(T, maps:put(recursive, 1, Dict));
-parse_opts([{count, N}|T], Dict) -> 
+parse_opts([{count, N}|T], Dict) ->
 	parse_opts(T, maps:put(n, N, Dict));
-parse_opts([{workers, W}|T], Dict) -> 
+parse_opts([{workers, W}|T], Dict) ->
 	parse_opts(T, maps:put(workers, W, Dict));
-parse_opts([{sleep, Sleep}|T], Dict) -> 
+parse_opts([{sleep, Sleep}|T], Dict) ->
 	parse_opts(T, maps:put(sleep, Sleep, Dict));
-parse_opts([{meta, FName}|T], Dict) -> 
+parse_opts([{meta, FName}|T], Dict) ->
 	parse_opts(T, maps:put(metadata, FName, Dict));
-parse_opts([{logger, LogOpts}|T], Dict) -> 
+parse_opts([{logger, LogOpts}|T], Dict) ->
 	parse_opts(T, parse_logger_opts(LogOpts, Dict));
-parse_opts([{proxyprob, ProxyProbOpts}|T], Dict) -> 
+parse_opts([{proxyprob, ProxyProbOpts}|T], Dict) ->
 	parse_opts(T, parse_proxyprob_opts(ProxyProbOpts, Dict));
-parse_opts([{input, InputOpts}|T], Dict) -> 
+parse_opts([{input, InputOpts}|T], Dict) ->
 	parse_opts(T, parse_input_opts(InputOpts, Dict));
-parse_opts([{mutations, Mutators}|T], Dict) -> 
+parse_opts([{mutations, Mutators}|T], Dict) ->
 	parse_opts(T, parse_actions(Mutators, mutations, erlamsa_mutations:default(), Dict));
-parse_opts([{patterns, Patterns}|T], Dict) -> 
+parse_opts([{patterns, Patterns}|T], Dict) ->
 	parse_opts(T, parse_actions(Patterns, patterns, erlamsa_patterns:default(), Dict));
-parse_opts([{generators, Generators}|T], Dict) -> 
+parse_opts([{generators, Generators}|T], Dict) ->
 	parse_opts(T, parse_actions(Generators, generators, erlamsa_gen:default(), Dict));
-parse_opts([{output, OutputOpts}|T], Dict) -> 
+parse_opts([{output, OutputOpts}|T], Dict) ->
  	parse_opts(T, maps:put(output, parse_output(OutputOpts), Dict));
-parse_opts([{seed, SeedOpts}|T], Dict) -> 
+parse_opts([{seed, SeedOpts}|T], Dict) ->
 	parse_opts(T, parse_seed_opt(SeedOpts, Dict));
 parse_opts([_|T], Dict) ->
 	parse_opts(T, Dict);

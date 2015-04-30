@@ -39,8 +39,9 @@
 %% API
 -export([uncons/2, extract_function/1, forcell/1, last/1, get/3,
         merge/2, hd_bin/1, tl_bin/1, choose_pri/2, is_pair/1,
-        flush_bvecs/2, applynth/3, sort_by_priority/1, 
-        check_empty/1, stderr_probe/2, halve/1, verb/2, error/1]). 
+        flush_bvecs/2, applynth/3, sort_by_priority/1,
+        check_empty/1, stderr_probe/2, halve/1, verb/2, error/1,
+        resolve_addr/1]).
 
 %% l -> hd l' | error
 -spec uncons(list() | binary() | fun(), any()) -> any().
@@ -51,7 +52,7 @@ uncons(L, D) when is_function(L) -> uncons(L(), D).
 
 -spec verb(file:io_device() | standard_error | standard_io, non_neg_integer()) -> fun().
 verb(_Fd, V) when V < 1 -> fun(X) -> X end;
-verb(stdout, _I) -> fun(X) -> io:format("~s", [X]) end;  
+verb(stdout, _I) -> fun(X) -> io:format("~s", [X]) end;
 verb(stderr, _I) -> fun(X) -> io:format(standard_error, "~s", [X]) end;
 verb(Fd, _I) -> fun(X) -> io:format(Fd, "~s", [X]) end.
 
@@ -100,9 +101,9 @@ halve(Lst) -> list_halves_walk(Lst, Lst, []).
 
 -spec list_halves_walk(list(), list(), list()) -> {list(), list()}.
 %% TODO: ugly, need refactor
-list_halves_walk(T, [], Acc) -> 
+list_halves_walk(T, [], Acc) ->
     {lists:reverse(Acc), T};
-list_halves_walk(T, [_Head|Tail], Acc) when Tail =:= [] -> 
+list_halves_walk(T, [_Head|Tail], Acc) when Tail =:= [] ->
     {lists:reverse(Acc), T};
 list_halves_walk([A|B], [_Head|Tail], Acc) ->
     list_halves_walk(B, tl(Tail), [A | Acc]).
@@ -139,10 +140,10 @@ check_empty([<<>>]) -> [];
 check_empty(X) when is_list(X) -> X.
 
 %% More effective operations for changing at a position of a list
-%% for explanaction while we're not using lists:... see 
+%% for explanaction while we're not using lists:... see
 %% http://stackoverflow.com/questions/4776033/how-to-change-an-element-in-a-list-in-erlang
 %% , comment by rvirding. Thank you, rvirding!
-%% WARN: it's not tail-recursive, so could consume some memory, 
+%% WARN: it's not tail-recursive, so could consume some memory,
 %% but it's really faster on LONG lists
 
 %% applynth(Index, List, Fun) -> List.
@@ -168,6 +169,10 @@ get(Key, DefaultValue, Tree) ->
     end.
 
 -spec error(any()) -> any().
-error(Err) -> 
+error(Err) ->
     io:format("Error: ~s~n~n", [Err]),
     throw(Err).
+
+resolve_addr(Host) ->
+    {ok, Address} = inet:getaddr(Host, inet),
+    Address.
