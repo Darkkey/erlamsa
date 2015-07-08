@@ -229,8 +229,8 @@ construct_sed_bytes_muta(F, Name) ->
     fun 
     Self([<<>>|BTail], Meta) -> 
         {Self, BTail, [{Name, -1}|Meta], -1};
-    Self([BVec|BTail], Meta) ->
-        BSize = byte_size(BVec),
+    Self([BVec|BTail], Meta) ->        
+        BSize = byte_size(BVec),        
         S = erlamsa_rnd:rand(BSize), 
         L = erlamsa_rnd:rand_range(1, BSize - S + 1),  %% FIXME: here any (min 2), in radamsa 20: fixme: magic constant, should use something like repeat-len
                                                    %% ^^ check may be max(20, ...) with "MAGIX" could be MORE effective
@@ -240,7 +240,7 @@ construct_sed_bytes_muta(F, Name) ->
         <<H:H_bits, P:P_bits, T/binary>> = BVec,      
         C = F(<<H:H_bits>>, <<P:P_bits>>, T, BTail),
         D = erlamsa_rnd:rand_delta(),
-        {Self, C, [{Name, D}|Meta], D}
+        {Self, C, [{Name, BSize}|Meta], D}
     end.
 
 -spec construct_sed_bytes_perm() -> mutation_fun().
@@ -271,6 +271,46 @@ construct_sed_bytes_drop() -> %% drop a seq
         fun (H, _Bs, T, BTail) -> 
             [<<H/binary, T/binary>> | BTail] end, seq_drop).
 
+
+-spec randmask(fun(), list()) -> list().
+%% randomly applies maskfunction byte-per-byte to list with pre-randomized prob.
+randmask(MaskFun, Ll) ->
+    MaskProb = erlamsa_rnd:erand(100),
+    randmask_loop(MaskFun, MaskProb, erlamsa_rnd:rand_occurs_fixed(MaskProb, 100), Ll, []).
+
+-spec randmask_loop(fun(), non_neg_integer(), non_neg_integer(), list(), list()) -> list().
+randmask_loop(_MaskFun, _MaskProb, _, [], Out) ->
+    lists:reverse(Out);
+randmask_loop(MaskFun, MaskProb, true, [H | T], Out) -> 
+    randmask_loop(MaskFun, MaskProb, erlamsa_rnd:rand_occurs_fixed(MaskProb, 100), T, [MaskFun(H) | Out]);
+randmask_loop(MaskFun, MaskProb, false, [H | T], Out) -> 
+    randmask_loop(MaskFun, MaskProb, erlamsa_rnd:rand_occurs_fixed(MaskProb, 100), T, [H | Out]).
+
+-spec mask_nand(byte()) -> byte().
+mask_nand(B) ->
+    B band (bnot (1 bsl erlamsa_rnd:rand(8))).
+
+-spec mask_or(byte()) -> byte().
+mask_or(B) ->
+    B bor (1 bsl erlamsa_rnd:rand(8)).
+
+-spec mask_xor(byte()) -> byte().
+mask_xor(B) ->
+    B bxor (1 bsl erlamsa_rnd:rand(8)).
+
+-spec mask_replace(byte()) -> byte().
+mask_replace(_) ->
+    erlamsa_rnd:rand(256).
+
+-spec construct_sed_bytes_randmask(fun()) -> mutation_fun().
+%% WARNING: in radamsa max permutation block could not exceed length 20, here could be any length
+construct_sed_bytes_randmask(MaskFun) -> %% permute a few bytes
+    construct_sed_bytes_muta(
+        fun (H, Bs, T, BTail) -> 
+            C = list_to_binary(
+                      randmask(MaskFun, binary_to_list(Bs))),
+            [<<H/binary, C/binary, T/binary>> | BTail]
+        end, seq_perm).
 
 %%
 %% Lines
@@ -680,7 +720,8 @@ partial_parse([H|T], Rout) ->
     end.
 
 -spec flatten(list(), list()) -> list().
-flatten([], Tl) -> Tl;
+flatten([], Tl) -> 
+    Tl;
 flatten([H|T], Tl) ->
     flatten(H, flatten(T, Tl));
 flatten(Node, Tl) ->
@@ -783,7 +824,7 @@ sed_tree_stutter(Ll = [H|T], Meta) ->
                 false -> {fun sed_tree_stutter/2, Ll, Meta, -1};
                 _Else ->
                     NewLst = edit_sublist(Lst, Child, 
-                            fun ([_H|Tl]) -> io:format("sed_tree_stutter 6.5~n", []), R = [repeat_path(Parent, Child, N_reps)|Tl], io:format("/sed_tree_stutter 6.5~n", []), R end),
+                            fun ([_H|Tl]) -> [repeat_path(Parent, Child, N_reps)|Tl] end),
                     {fun sed_tree_stutter/2, 
                         [list_to_binary(flatten(NewLst, [])) | T], 
                         [{tree_stutter, 1} | Meta], 1}
@@ -888,7 +929,7 @@ adjust_priority(Pri, Delta) ->
 %% [{Score, Priority, _, _}, ...] -> [{Rand(S*P), {...}}, ...] -> sort -> [{...}, ...]
 weighted_permutations([]) -> [];
 weighted_permutations(Pris) ->
-    PPris = lists:map(fun (X = {S, P, _, _}) -> {erlamsa_rnd:rand(S*P), X} end, Pris),
+    PPris = lists:map(fun (X = {S, P, _, _}) -> {erlamsa_rnd:rand(trunc(S*P)), X} end, Pris),
     SPPris = lists:sort(fun ({A,_},{B,_}) -> A>=B end, PPris),
     lists:map(fun ({_, X}) -> X end, SPPris).
 
@@ -940,8 +981,12 @@ mutations() ->         [{?MAX_SCORE, 1, fun sed_utf8_widen/2, uw, "try to make a
                         {?MAX_SCORE, 1, construct_sed_byte_random(), ber, "insert a random byte"},
                         {?MAX_SCORE, 1, construct_sed_byte_repeat(), br, "repeat a byte"},
                         {?MAX_SCORE, 1, construct_sed_bytes_perm(), sp, "permute a sequence of bytes"},
-                        {?MAX_SCORE, 1, construct_sed_bytes_repeat(), sr, "repeat a sequence of bytes"},
+                        {?MAX_SCORE, 1, construct_sed_bytes_repeat(), sr, "repeat a sequence of bytes"},                        
                         {?MAX_SCORE, 1, construct_sed_bytes_drop(), sd, "delete a sequence of bytes"},
+                        {?MAX_SCORE, 1, construct_sed_bytes_randmask(fun mask_nand/1), snand, "NAND random bytes from block with 2^random values"},
+                        {?MAX_SCORE, 1, construct_sed_bytes_randmask(fun mask_or/1), sor, "OR random bytes from block with 2^random values"},
+                        {?MAX_SCORE, 1, construct_sed_bytes_randmask(fun mask_xor/1), sxor, "XOR random bytes from block with 2^random values"},
+                        {?MAX_SCORE, 1, construct_sed_bytes_randmask(fun mask_replace/1), srnd, "replace random bytes from block with random values"},                        
                         {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_del/2, line_del), ld, "delete a line"},
                         {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_del_seq/2, line_del_seq), lds, "delete many lines"},
                         {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_dup/2, line_dup), lr2, "duplicate a line"},
@@ -990,7 +1035,7 @@ mutators_mutator(Mutas) ->
 mutators_mutator([], Out) ->
     mux_fuzzers(Out);
 mutators_mutator([{_, Pri, F, Name}|T], Out) ->
-    N = erlamsa_rnd:rand(?MAX_SCORE),
+    N = erlamsa_rnd:rand(trunc(?MAX_SCORE)),
     mutators_mutator(T, [{max(2, N), Pri, F, Name} | Out]).
 
 

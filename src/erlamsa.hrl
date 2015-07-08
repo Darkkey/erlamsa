@@ -12,9 +12,9 @@
 -define(INITIAL_IP,24).              %% initial max 1/n for basic patterns)
 -define(REMUTATE_PROBABILITY, {4, 5}).
 -define(MIN_BLOCK_SIZE, 256).
--define(AVG_BLOCK_SIZE, 2048).
--define(AVG_BLOCK_SIZE_BITS, 16384).
--define(MAX_BLOCK_SIZE, 2*?AVG_BLOCK_SIZE).
+-define(AVG_BLOCK_SIZE, 2048). %% 2048 in radamsa
+-define(AVG_BLOCK_SIZE_BITS, 16384). %% 2048 * 8
+-define(MAX_BLOCK_SIZE, 2*?AVG_BLOCK_SIZE). %% 
 -define(TCP_TIMEOUT, 5000).
 -define(DEFAULT_UDPPROXY_CLIENTPORT, 44443).
 
