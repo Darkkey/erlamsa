@@ -11,7 +11,7 @@ sleep() ->
 
 main(Args) ->
 	true = code:add_pathz(filename:dirname(escript:script_name()) 
-                       ++ "/src"),
+                       ++ "/ebin"),
     Dict = erlamsa_cmdparse:parse(Args),
     case maps:get(mode, Dict, stdio) of
     	proxy ->     	

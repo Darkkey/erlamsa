@@ -39,8 +39,8 @@
 -export([make_mutator/1, mutations/0, default/0, tostring/1]).
  
 
--define(MIN_SCORE, 2).
--define(MAX_SCORE, 10).
+-define(MIN_SCORE, 2.0).
+-define(MAX_SCORE, 10.0).
 -define(RAND_DELTA, 18446744073709551616).
 
 -type byte_edit_fun() :: fun((byte()) -> binary()).
@@ -147,15 +147,15 @@ mutate_a_num(Lst = <<H:8, T/binary>>, NFound) ->
 
 -spec sed_num(list_of_bins(), meta_list()) -> mutation_res().
 sed_num([H|T], Meta) ->
-    {N, Lst} = mutate_a_num(H, 0),
+    {N, Lst} = mutate_a_num(H, 0),  
     IsBin = binarish(Lst),
     FlushedLst = erlamsa_utils:flush_bvecs(Lst, T),
     if
         N =:= 0 ->
             R = erlamsa_rnd:rand(10), %% low priority negative, because could be textual with less frequent numbers
             case R of
-                0 -> {fun sed_num/2, FlushedLst, [{muta_num, 1}|Meta], -1};
-                _Else -> {fun sed_num/2, FlushedLst, [{muta_num, 1}|Meta], 0}
+                0 -> {fun sed_num/2, FlushedLst, [{muta_num, 0}|Meta], -1};
+                _Else -> {fun sed_num/2, FlushedLst, [{muta_num, 0}|Meta], 0}
             end;
         IsBin =:= true ->
             {fun sed_num/2, FlushedLst, [{muta_num, 1}|Meta], -1};
@@ -902,7 +902,7 @@ mux_fuzzers(Fs) ->
     fun L([], Meta) -> {mux_fuzzers(Fs), <<>>, Meta};
         L(Ll, Meta) when is_list(Ll) ->
             mux_fuzzers_loop(Ll, weighted_permutations(Fs), [], Meta) ;
-        L(Ll, Meta) -> L(Ll(), Meta) %% TODO: strange behaviour
+        L(Ll, Meta) when is_function(Ll) -> L(Ll(), Meta) %% TODO: strange behaviour
     end.
 
 -spec mux_fuzzers_loop(lazy_list_of_bins(), [mutation()], [mutation()], meta_list()) -> {fun(), lazy_list_of_bins(), meta_list()}.
@@ -912,47 +912,47 @@ mux_fuzzers_loop(Ll, [Node|Tail], Out, Meta) ->
     Res = Fn(Ll, Meta),
     {MFn, Mll, MMeta, Delta} = Res, %% in radamsa (mfn rs mll mmeta delta) = Fn(...), that strange, TODO: check it    
     NOut = [{adjust_priority(Mscore, Delta), MPri, MFn, Mname} | Out], %% in radamsa mfn instead of fn
-    IsMllPair = erlamsa_utils:is_pair(Mll),
+    IsMll = is_list(Mll),
     if
-        IsMllPair andalso (hd(Mll) == hd(Ll)) -> mux_fuzzers_loop(Ll, Tail, NOut, MMeta);
+        IsMll andalso (hd(Mll) == hd(Ll)) -> mux_fuzzers_loop(Ll, Tail, NOut, [{failed, Mname} | MMeta]);
         true -> {mux_fuzzers(NOut ++ Tail), Mll, [{used, Mname} | MMeta]}
     end.
 
 -spec mutations() -> [mutation()].
 %% default mutations list
-mutations() ->          [{10, 5, fun sed_num/2, num, "try to modify a textual number"},
-                        {10, 1, fun sed_utf8_widen/2, uw, "try to make a code point too wide"},
-                        {10, 2, fun sed_utf8_insert/2, ui, "insert funny unicode"},
-                        {10, 1, construct_ascii_bad_mutator(), ab, "enhance silly issues in ASCII string data handling"},
-                        {10, 1, construct_ascii_delimeter_mutator(), ad, "play with delimeters in ASCII string data"},
-                        {10, 1, sed_tree_dup(), tr2, "duplicate a node"},
-                        {10, 1, sed_tree_del(), td, "delete a node"},
-                        {10, 1, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1, "swap one node with another one"},
-                        {10, 1, construct_st_line_muta(fun erlamsa_generic:st_list_ins/2, list_ins, [0]), lis, "insert a line from elsewhere"},
-                        {10, 1, construct_st_line_muta(fun erlamsa_generic:st_list_replace/2, list_replace, [0]), lrs, "replace a line with one from elsewhere"},
-                        {10, 1, fun sed_tree_stutter/2, tr, "repeat a path of the parse tree"},
-                        {10, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2, "swap two nodes pairwise"},
-                        {10, 1, construct_sed_byte_drop(), bd, "drop a byte"},
-                        {10, 1, construct_sed_byte_inc(), bei, "increment a byte by one"},
-                        {10, 1, construct_sed_byte_dec(), bed, "decrement a byte by one"},
-                        {10, 1, construct_sed_byte_flip(), bf, "flip one bit"},
-                        {10, 1, construct_sed_byte_insert(), bi, "insert a random byte"},
-                        {10, 1, construct_sed_byte_random(), ber, "insert a random byte"},
-                        {10, 1, construct_sed_byte_repeat(), br, "repeat a byte"},
-                        {10, 1, construct_sed_bytes_perm(), sp, "permute a sequence of bytes"},
-                        {10, 1, construct_sed_bytes_repeat(), sr, "repeat a sequence of bytes"},
-                        {10, 1, construct_sed_bytes_drop(), sd, "delete a sequence of bytes"},
-                        {10, 1, construct_line_muta(fun erlamsa_generic:list_del/2, line_del), ld, "delete a line"},
-                        {10, 1, construct_line_muta(fun erlamsa_generic:list_del_seq/2, line_del_seq), lds, "delete many lines"},
-                        {10, 1, construct_line_muta(fun erlamsa_generic:list_dup/2, line_dup), lr2, "duplicate a line"},
-                        {10, 1, construct_line_muta(fun erlamsa_generic:list_clone/2, line_clone), lri, "copy a line closeby"},
-                        {10, 1, construct_line_muta(fun erlamsa_generic:list_repeat/2, line_repeat), lr, "repeat a line"},
-                        {10, 1, construct_line_muta(fun erlamsa_generic:list_swap/2, line_swap), ls, "swap two lines"},
-                        {10, 1, construct_line_muta(fun erlamsa_generic:list_perm/2, line_perm), lp, "swap order of lines"},
-                        {10, 2, fun sed_fuse_this/2, ft, "jump to a similar position in block"},
-                        {10, 1, fun sed_fuse_next/2, fn, "likely clone data between similar positions"},
-                        {10, 2, fun sed_fuse_old/2, fo, "fuse previously seen data elsewhere"},
-                        {10, 0, fun nomutation/2, nil, "no mutation will occur (debugging purposes)"}].
+mutations() ->         [{?MAX_SCORE, 1, fun sed_utf8_widen/2, uw, "try to make a code point too wide"},
+                        {?MAX_SCORE, 2, fun sed_utf8_insert/2, ui, "insert funny unicode"},
+                        {?MAX_SCORE, 1, construct_ascii_bad_mutator(), ab, "enhance silly issues in ASCII string data handling"},
+                        {?MAX_SCORE, 1, construct_ascii_delimeter_mutator(), ad, "play with delimeters in ASCII string data"},
+                        {?MAX_SCORE, 1, sed_tree_dup(), tr2, "duplicate a node"},
+                        {?MAX_SCORE, 1, sed_tree_del(), td, "delete a node"},
+                        {?MAX_SCORE, 2, fun sed_num/2, num, "try to modify a textual number"},                        
+                        {?MAX_SCORE, 1, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1, "swap one node with another one"},
+                        {?MAX_SCORE, 1, construct_st_line_muta(fun erlamsa_generic:st_list_ins/2, list_ins, [0]), lis, "insert a line from elsewhere"},
+                        {?MAX_SCORE, 1, construct_st_line_muta(fun erlamsa_generic:st_list_replace/2, list_replace, [0]), lrs, "replace a line with one from elsewhere"},
+                        {?MAX_SCORE, 1, fun sed_tree_stutter/2, tr, "repeat a path of the parse tree"},
+                        {?MAX_SCORE, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2, "swap two nodes pairwise"},
+                        {?MAX_SCORE, 1, construct_sed_byte_drop(), bd, "drop a byte"},
+                        {?MAX_SCORE, 1, construct_sed_byte_inc(), bei, "increment a byte by one"},
+                        {?MAX_SCORE, 1, construct_sed_byte_dec(), bed, "decrement a byte by one"},
+                        {?MAX_SCORE, 1, construct_sed_byte_flip(), bf, "flip one bit"},
+                        {?MAX_SCORE, 1, construct_sed_byte_insert(), bi, "insert a random byte"},
+                        {?MAX_SCORE, 1, construct_sed_byte_random(), ber, "insert a random byte"},
+                        {?MAX_SCORE, 1, construct_sed_byte_repeat(), br, "repeat a byte"},
+                        {?MAX_SCORE, 1, construct_sed_bytes_perm(), sp, "permute a sequence of bytes"},
+                        {?MAX_SCORE, 1, construct_sed_bytes_repeat(), sr, "repeat a sequence of bytes"},
+                        {?MAX_SCORE, 1, construct_sed_bytes_drop(), sd, "delete a sequence of bytes"},
+                        {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_del/2, line_del), ld, "delete a line"},
+                        {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_del_seq/2, line_del_seq), lds, "delete many lines"},
+                        {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_dup/2, line_dup), lr2, "duplicate a line"},
+                        {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_clone/2, line_clone), lri, "copy a line closeby"},
+                        {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_repeat/2, line_repeat), lr, "repeat a line"},
+                        {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_swap/2, line_swap), ls, "swap two lines"},
+                        {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_perm/2, line_perm), lp, "swap order of lines"},
+                        {?MAX_SCORE, 2, fun sed_fuse_this/2, ft, "jump to a similar position in block"},
+                        {?MAX_SCORE, 1, fun sed_fuse_next/2, fn, "likely clone data between similar positions"},
+                        {?MAX_SCORE, 2, fun sed_fuse_old/2, fo, "fuse previously seen data elsewhere"},
+                        {?MAX_SCORE, 0, fun nomutation/2, nil, "no mutation will occur (debugging purposes)"}].
 
 -spec default() -> [{atom(), non_neg_integer()}].
 default() -> lists:map(fun ({_, Pri, _, Name, _Desc}) -> {Name, Pri} end, mutations()).
@@ -978,7 +978,7 @@ make_mutator(Lst) ->
             end
         end,
         [],
-        mutations()),   
+        mutations()),  
     mutators_mutator(Mutas).
 
 -spec mutators_mutator([mutation()]) -> fun().

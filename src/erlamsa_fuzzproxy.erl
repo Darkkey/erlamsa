@@ -62,7 +62,7 @@ start_tcp_servers(Workers, ListenSock, Opts, Verbose, Log) ->
     start_tcp_servers(Workers - 1, ListenSock, Opts, Verbose, Log).
 
 server_tcp(ListenSock, Opts, Verbose, Log) ->
-    {Proto, _, DHost, DPort} = maps:get(proxy_address, Opts),
+    {Proto, _, _, DHost, DPort} = maps:get(proxy_address, Opts),
     Verbose(io_lib:format("Proxy worker process started ~n", [])),
     random:seed(now()),
     case gen_tcp:accept(ListenSock) of
@@ -95,22 +95,20 @@ loop_udp(SrvSocket, ClSocket, ClientHost, ClientPort, Opts, Verbose, Log) ->
     {ProbToClient, ProbToServer} = maps:get(proxy_probs, Opts, {0.0, 0.0}),
     receive
         {udp, SrvSocket, Host, Port, Data} = Msg ->
-            io:format("1!!!!!"),
-            Verbose(io_lib:format("read tcp client->server ~p ~p ~n",[Data, Msg])),
+            Verbose(io_lib:format("read udp client->server ~p ~p ~n",[Data, Msg])),
             Ret = fuzz(udp, ProbToServer, Opts, Data),
-            Verbose(io_lib:format("wrote tcp client->server ~p ~n",[Ret])),
+            Verbose(io_lib:format("wrote udp client->server ~p ~n",[Ret])),
             gen_udp:send(ClSocket, ServerHost, ServerPort, Ret),
             loop_udp(SrvSocket, ClSocket, Host, Port, Opts, Verbose, Log);
         {udp, ClSocket, ServerHost, ServerPort, Data} = Msg ->
-            io:format("2!!!!!"),
-            Verbose(io_lib:format("read tcp server:->client ~p ~p ~n",[Data, Msg])),
+            Verbose(io_lib:format("read udp server:->client ~p ~p ~n",[Data, Msg])),
             case ClientHost of
                 [] ->
                     loop_udp(SrvSocket, ClSocket, [], 0, Opts, Verbose, Log);
                 _Else ->
                     Ret = fuzz(udp, ProbToClient, Opts, Data),
                     gen_udp:send(SrvSocket, ClientHost, ClientPort, Ret),
-                    Verbose(io_lib:format("wrote tcp client->server ~p ~n",[Ret])),
+                    Verbose(io_lib:format("wrote udp server->client ~p ~n",[Ret])),
                     loop_udp(SrvSocket, ClSocket, ClientHost, ClientPort, Opts, Verbose, Log)
             end
     end.
