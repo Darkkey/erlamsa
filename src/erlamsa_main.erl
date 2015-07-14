@@ -41,12 +41,27 @@
 -spec urandom_seed() -> {non_neg_integer(), non_neg_integer(), non_neg_integer()}.
 urandom_seed() -> list_to_tuple(lists:map(fun(_) -> lists:foldl(fun(X, A) -> X + (A bsl 8) end, 0, binary_to_list(crypto:rand_bytes(2))) end, lists:seq(1,3))).
 
--spec maybe_meta_logger(string() | atom(), non_neg_integer(), fun()) -> fun().
-maybe_meta_logger(Path, Verbose, _) ->    
+-spec maybe_meta_logger(string() | atom(), fun()) -> fun().
+maybe_meta_logger(Path, _) ->  
   Verb = case Path of
-      stderr -> erlamsa_utils:verb(stderr, Verbose-1);
-      stdout -> erlamsa_utils:verb(stdout, Verbose-1);
-      _Else -> fun (X) -> X end
+      nil -> fun (X) -> X end;
+      stderr -> erlamsa_utils:verb(stderr, 10);
+      stdout -> erlamsa_utils:verb(stdout, 10);
+      _Else -> 
+        {Res, Fd} = file:open(Path, [write]),
+        case Res of 
+            ok -> 
+                OutputFun = erlamsa_utils:verb(Fd, 10), 
+                fun 
+                    ({close, ok}) -> file:close(Fd);
+                    (X) -> OutputFun(X)
+                end;
+            _Else ->
+                Err = lists:flatten(io_lib:format("Error opening file '~s'", [Path])),  %% TODO: add printing filename, handling -r and other things...
+                erlamsa_utils:error(Err),
+                fun(X) -> X end
+        end
+
   end,    
   fun (X) -> Verb(io_lib:format("~p", [X])) end.
 
@@ -86,7 +101,7 @@ fuzzer(Dict) ->
             Muta = erlamsa_mutations:make_mutator(Mutas),
             DirectInput = maps:get(input, Dict, nil),
             Gen = erlamsa_gen:make_generator(maps:get(generators, Dict, erlamsa_gen:default()), Paths, DirectInput, Fail, N),
-            Record_Meta = maybe_meta_logger( maps:get(metadata, Dict, stderr), maps:get(verbose, Dict, 0), Fail),
+            Record_Meta = maybe_meta_logger( maps:get(metadata, Dict, nil), Fail),
             Record_Meta({seed, maps:get(seed, Dict)}),            
             Pat = erlamsa_patterns:make_pattern(maps:get(patterns, Dict, erlamsa_patterns:default())),
             Out = erlamsa_out:string_outputs(maps:get(output, Dict, "-")),

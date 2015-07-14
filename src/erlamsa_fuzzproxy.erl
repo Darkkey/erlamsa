@@ -120,20 +120,24 @@ loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose, Log) ->
     inet:setopts(ClientSocket, [{active,once}]),
     receive
         {tcp, ClientSocket, Data} ->
-	        Verbose(io_lib:format("read tcp client->server ~p ~n",[Data])),
+	    Verbose(io_lib:format("read tcp client->server ~p ~n",[Data])),
             Log("from client(c->s): ~p", [Data]),
+            io:format("from client(c->s): ~p~n", [Data]),
             Ret = fuzz(Proto, ProbToServer, Opts, Data),
             Verbose(io_lib:format("wrote tcp client->server ~p ~n",[Ret])),
             gen_tcp:send(ServerSocket, Ret),
             Log("from fuzzer(c->s): ~p", [Data]),
+            io:format("from fuzzer(c->s): ~p~n", [Data]),
             loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose, Log);
         {tcp, ServerSocket, Data} ->
             Verbose(io_lib:format("read tcp server->client ~p ~n", [Data])),
             Log("from server(s->c): ~p", [Data]),
+            io:format("from server(s->c): ~p~n", [Data]),
             Ret = fuzz(Proto, ProbToClient, Opts, Data),
             Verbose(io_lib:format("wrote tcp server->client ~p ~n", [Ret])),
             gen_tcp:send(ClientSocket, Ret),
             Log("from server(s->c): ~p", [Data]),
+            io:format("from server(s->c): ~p~n", [Data]),
             loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose, Log);
         {tcp_closed, ClientSocket} ->
             gen_tcp:close(ServerSocket),
@@ -159,7 +163,7 @@ fuzz(http, Prob, Opts, Data) ->
 fuzz(_Proto, Prob, Opts, Data) ->
     call_fuzzer(Prob, erlamsa_rnd:rand_float(), Opts, Data).
 
-call_fuzzer(Prob, Rnd, _Opts, Data) when Rnd >= Prob -> Data;
+call_fuzzer(Prob, Rnd, _Opts, Data) when Rnd >= Prob -> io:format("no fuzz~n"), Data;
 call_fuzzer(_Prob, _Rnd, Opts, Data) ->
     NewOpts = maps:put(paths, [direct],
                maps:put(output, return,

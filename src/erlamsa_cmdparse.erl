@@ -71,7 +71,7 @@ cmdline_optsspec() ->
 	 						erlamsa_patterns:tostring(	erlamsa_patterns:patterns())},	"<arg>, which mutation patterns to use"},
 	 {generators, $g,	"generators",	{string,
 	 						erlamsa_gen:tostring(		erlamsa_gen:generators())},		"<arg>, which data generators to use"},
-	 % {meta		, $M, 	"meta",			{string, ""},			"<arg>, save metadata about fuzzing process to this file"},
+	 {meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"},
 	 {logger	, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename"},
 	 {workers	, $w, 	"workers",		{integer, 10},			"<arg>, number of workers in server mode"},
 %	 {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},
@@ -192,6 +192,13 @@ parse_output(Output) ->
 			fail(io_lib:format("invalid output specification: '~s'", [Output]))
 	end.
 
+convert_metapath("nil") -> nil;
+convert_metapath("stdout") -> stdout;
+convert_metapath("-") -> stdout;
+convert_metapath("stderr") -> stderr;
+convert_metapath("-err") -> stderr;
+convert_metapath(Path) -> Path.
+
 %% TODO: seed
 parse_seed_opt(Seed, Dict) ->
 	try
@@ -257,6 +264,8 @@ parse_opts([list|_T], _Dict) ->
 	halt(0);
 parse_opts([{verbose, Lvl}|T], Dict) ->
 	parse_opts(T, maps:put(verbose, Lvl, Dict));
+parse_opts([{meta, Path}|T], Dict) ->
+	parse_opts(T, maps:put(metadata, convert_metapath(Path), Dict));	
 parse_opts([recursive|T], Dict) ->
 	parse_opts(T, maps:put(recursive, 1, Dict));
 parse_opts([{count, N}|T], Dict) ->
@@ -265,8 +274,6 @@ parse_opts([{workers, W}|T], Dict) ->
 	parse_opts(T, maps:put(workers, W, Dict));
 parse_opts([{sleep, Sleep}|T], Dict) ->
 	parse_opts(T, maps:put(sleep, Sleep, Dict));
-parse_opts([{meta, FName}|T], Dict) ->
-	parse_opts(T, maps:put(metadata, FName, Dict));
 parse_opts([{logger, LogOpts}|T], Dict) ->
 	parse_opts(T, parse_logger_opts(LogOpts, Dict));
 parse_opts([{proxyprob, ProxyProbOpts}|T], Dict) ->

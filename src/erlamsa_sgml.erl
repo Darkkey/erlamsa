@@ -178,66 +178,81 @@ push_till([], _) -> [].
 parse(Str) ->
 	Tokens = tokenize(Str),
 	io:format("~w~n", [Tokens]),
-	build_ast2(Tokens, [], []).
+	build_ast2(Tokens, [], [], 0).
 
-% list(token()), list(ast_elem()), list(strings) -> atom(), list(ast_elem()), list(ast_elem())
-build_ast2([{open, Tag, Params}|T], Ast, Tags) ->
+% list(token()), list(ast_elem()), list(strings) -> atom(), list(ast_elem()), list(ast_elem(), non_neg_int())
+build_ast2([{open, Tag, Params}|T], Ast, Tags, N) ->
 	io:format("Open ~s, ~w, ~w~n", [Tag, Ast, Tags]),
-	Test =  build_ast2(T, [], [string:to_lower(Tag) | Tags]),
+	Test = build_ast2(T, [], [string:to_lower(Tag) | Tags], 0),
 	io:format("!!!Open ~s, ~w, ~w~n", [Tag, Ast, Tags]),	
 	case Test of 
-		{ok, [{tagclose, TagClose} | TagInternals], TagOuters} ->
+		{ok, [{tagclose, TagClose} | TagInternals], TagOuters, K} ->
 			io:format("open_ok for ~w: ~w, ~w, ~w~n", [Tag, TagInternals, TagOuters, Tags]),	
-			build_ast2(TagOuters, [{tag, Tag, TagClose, Params, TagInternals}|Ast], Tags);
-		{error, no_pair_tag, Tokens, NewAst, [Tag]} -> 
+			build_ast2(TagOuters, [{tag, Tag, TagClose, Params, TagInternals}|Ast], Tags, N + K + 1);
+		{error, no_pair_tag, Tokens, NewAst, [Tag], K} -> 
 			io:format("Last tag ~w, ~w, ~s~n", [Tokens, NewAst, Tag]),			
 			io:format("Go d33per ~w, ~w, ~w, ~w, ~w~n", [Tokens, Ast, NewAst, [{open, Tag, Params}], Tag]),						
-			build_ast2(Tokens, NewAst ++ [{open, Tag, Params}] ++ Ast , []);	
-		{error, no_pair_tag, Tokens, NewAst, NewTags} -> 
+			build_ast2(Tokens, NewAst ++ [{open, Tag, Params}] ++ Ast , [], N + K + 1);	
+		{error, no_pair_tag, Tokens, NewAst, NewTags, K} -> 
 			io:format("No_pair tag ~w, ~w, ~w~n", [Tokens, NewAst, NewTags]),			
 			io:format("Go d33per ~w, ~w, ~w, ~w, ~w~n", [Tokens, Ast, NewAst, [{open, Tag, Params}], Tag]),						
-			build_ast2(Tokens, NewAst ++ [{open, Tag, Params}] ++ Ast , NewTags);
-		{error, closed_earlier, Tag, Tokens, NewAst, NewTags} -> 
+			build_ast2(Tokens, NewAst ++ [{open, Tag, Params}] ++ Ast , NewTags, N + K + 1);
+		{error, closed_earlier, {Tag, CloseTag}, Tokens, NewAst, NewTags, K} -> 
 			io:format("Err_close_earlier ~w, ~w, ~w~n", [Tokens, NewAst, NewTags]),			
-			build_ast2(Tokens, [{tag, Tag, Tag, Params, lists:reverse(NewAst)}|Ast], NewTags);
-		{error, closed_earlier, NewTag, Tokens, NewAst, NewTags} -> 
+			build_ast2(Tokens, [{tag, Tag, CloseTag, Params, lists:reverse(NewAst)}|Ast], NewTags, N + K + 1);
+		{error, closed_earlier, {NewTag, NewCloseTag}, Tokens, NewAst, NewTags, K} -> 
 			io:format("Err_close_earlier upper pass ~w, ~w, ~w~n", [Tokens, NewAst, NewTags]),			
-			{error, closed_earlier, NewTag, Tokens, NewAst ++ [{open, Tag, Params}] ++ Ast, NewTags}			
+			{error, closed_earlier, {NewTag, NewCloseTag}, Tokens, NewAst ++ [{open, Tag, Params}] ++ Ast, NewTags, N + K + 1}			
 	end;
-build_ast2([{close, Tag, TagName}|T], Ast, [TagName|_Tags]) ->
+build_ast2([{close, Tag, TagName}|T], Ast, [TagName|_Tags], N) ->
 	io:format("Close ~s, ~w, ~w~n", [Tag, Ast, [TagName|_Tags]]),
-	{ok, [{tagclose, Tag} | lists:reverse(Ast)], T};
-build_ast2([{close, Tag, _TagName}|T], Ast, [_OtherTag|Tags] = AllTags) ->
+	{ok, [{tagclose, Tag} | lists:reverse(Ast)], T, N};
+build_ast2([{close, Tag, TagName}|T], Ast, [_OtherTag|Tags] = AllTags, N) ->
 	io:format("Close no pair ~s, ~w, ~w~n", [Tag, Ast, AllTags]),
-	case lists:member(Tag, Tags) of
+	case lists:member(TagName, Tags) of
 		false -> 
 			io:format("Close invalid ~s~n", [Tag]),
-			build_ast2(T, [{close, Tag} | Ast], AllTags);
+			build_ast2(T, [{close, Tag} | Ast], AllTags, N + 1);
 		true ->
 			io:format("Close earlier ~s~n", [Tag]),			
-			{error, closed_earlier, Tag, T, Ast, push_till(Tags, Tag)}  
+			{error, closed_earlier, {TagName, Tag}, T, Ast, push_till(Tags, TagName), N}  
 	end;
-build_ast2([{close, Tag, _TagName}|T], Ast, []) ->
+build_ast2([{close, Tag, _TagName}|T], Ast, [], N) ->
 	io:format("Close no pair empty ~s, ~w, ~w~n", [Tag, Ast, []]),
-	build_ast2(T, [{close, Tag} | Ast], []);	
-build_ast2([{text, Text}|T], Ast, Tags) ->
+	build_ast2(T, [{close, Tag} | Ast], [], N+1);	
+build_ast2([{text, Text}|T], Ast, Tags, N) ->
 	io:format("Text ~w, ~w, ~w~n", [Text, Ast, Tags]),
-	build_ast2(T, [{text, Text}|Ast], Tags);
-build_ast2([{'!', Params}|T], Ast, Tags) ->
+	build_ast2(T, [{text, Text}|Ast], Tags, N);
+build_ast2([{'!', Params}|T], Ast, Tags, N) ->
 	io:format("! ~w, ~w, ~w~n", [Params, Ast, Tags]),
-	build_ast2(T, [{'!', Params}|Ast], Tags);	
-build_ast2([{sc, Text, Params}|T], Ast, Tags) ->
+	build_ast2(T, [{'!', Params}|Ast], Tags, N+1);	
+build_ast2([{sc, Text, Params}|T], Ast, Tags, N) ->
 	io:format("SingleTag ~w, ~w, ~w~n", [Text, Ast, Tags]),
-	build_ast2(T, [{sc, Text, Params}|Ast], Tags);		
-build_ast2([{eof, {text, Text}}|_T], Ast, []) ->
+	build_ast2(T, [{sc, Text, Params}|Ast], Tags, N+1);		
+build_ast2([{eof, {text, Text}}|_T], Ast, [], N) ->
 	io:format("Eof ~w, ~w, Tags: ~w~n", [Text, Ast, []]),
-	{ok, lists:reverse([{text, Text}|Ast]), []};
-build_ast2([{eof, {text, Text}}|_T] = Tokens, Ast, [Tag|Tags]) ->
+	{ok, lists:reverse([{text, Text}|Ast]), [], N};
+build_ast2([{eof, {text, Text}}|_T] = Tokens, Ast, [Tag|Tags], N) ->
 	io:format("Eof no_pair ~w, ~w, ~w, Tag: ~s ~n", [Text, Ast, Tags, Tag]),
-	{error, no_pair_tag, Tokens, Ast, Tags}.
+	{error, no_pair_tag, Tokens, Ast, Tags, N}.
 
 %%%
 %%% /AST builder
+%%%
+
+%%%
+%%% AST walker
+%%%
+
+walk([{tag, OpenName, CloseName, Params, Internals} = H | T], Acc) ->
+	walk(T, [{tag, OpenName, CloseName, Params, walk(Internals, [])} | Acc]);	
+walk([H|T], Acc) ->
+	walk(T, [H|Acc]);
+walk([], Acc) ->
+	lists:reverse(Acc).
+
+%%%
+%%% /AST walker
 %%%
 
 %%%
@@ -268,7 +283,7 @@ fold_ast([{'!', Params}| T], Acc) ->
 fold_ast([{open, Tag, Params} | T], Acc) -> 
 	fold_ast(T, [list_to_binary([<<"<">>, Tag, fold_params(Params, []), <<">">>]) | Acc]);
 fold_ast([{close, Tag} | T], Acc) -> 
-	fold_ast(T, [list_to_binary([<<"<">>, Tag, <<">">>]) | Acc]);
+	fold_ast(T, [list_to_binary([<<"</">>, Tag, <<">">>]) | Acc]);
 fold_ast([{tagclose, _Tag} | T], Acc) -> 
 	fold_ast(T, Acc);
 fold_ast([], Acc) -> 
@@ -284,7 +299,7 @@ fold_ast([], Acc) ->
 
 verify(Str) ->
 	BinStr = list_to_binary(Str),
-	{ok, ParsedStr, _} = parse(BinStr),
+	{ok, ParsedStr, _, _} = parse(BinStr),
 	BinStr = fold_ast(ParsedStr, []).
 
 -ifdef(TEST).
