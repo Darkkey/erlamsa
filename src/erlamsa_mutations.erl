@@ -961,7 +961,8 @@ mux_fuzzers_loop(Ll, [Node|Tail], Out, Meta) ->
 
 -spec mutations() -> [mutation()].
 %% default mutations list
-mutations() ->         [{?MAX_SCORE, 1, fun sed_utf8_widen/2, uw, "try to make a code point too wide"},
+mutations() ->         [{?MAX_SCORE, 10, fun erlamsa_sgml:sgml_mutate/2, sgml, "SGML tree mutations"},
+                        {?MAX_SCORE, 1, fun sed_utf8_widen/2, uw, "try to make a code point too wide"},
                         {?MAX_SCORE, 2, fun sed_utf8_insert/2, ui, "insert funny unicode"},
                         {?MAX_SCORE, 1, construct_ascii_bad_mutator(), ab, "enhance silly issues in ASCII string data handling"},
                         {?MAX_SCORE, 1, construct_ascii_delimeter_mutator(), ad, "play with delimeters in ASCII string data"},

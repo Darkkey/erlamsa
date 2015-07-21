@@ -64,8 +64,8 @@ tcpsock_writer(Addr, Port) ->
         {Res, Sock} = gen_tcp:connect(Addr, Port, [binary, {active, true}], ?TCP_TIMEOUT),
         case Res of 
             ok -> {F, {net, 
-                fun (Data) -> gen_tcp:send(Sock, Data) end,
-                fun () -> gen_tcp:close(Sock) end
+                fun (Data) -> gen_tcp:send(Sock, Data) end,                
+                fun () -> timer:sleep(50), gen_tcp:close(Sock), ok end %% TODO: ugly timeout before closing..., should be in another thread
                 }, [{output, tcpsock} | Meta]};
             _Else -> 
                 Err = lists:flatten(io_lib:format("Error opening tcp socket to ~s:~p '~s'", [Addr, Port, Sock])), 
