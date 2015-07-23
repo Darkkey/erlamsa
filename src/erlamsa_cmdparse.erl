@@ -63,6 +63,7 @@ cmdline_optsspec() ->
 	 {proxyprob	, $P,	"proxyprob",	{string, "0.0,0.0"},	"<arg>, fuzzing probability for proxy mode s->c,c->s"},
 	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or http://example.com [-]"},
 	 {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
+	 {blockscale, $b, 	"blockscale",	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize"},
 	 {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},
 	 {seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int"},
 	 {mutations , $m,   "mutations",	{string,
@@ -270,6 +271,8 @@ parse_opts([recursive|T], Dict) ->
 	parse_opts(T, maps:put(recursive, 1, Dict));
 parse_opts([{count, N}|T], Dict) ->
 	parse_opts(T, maps:put(n, N, Dict));
+parse_opts([{blockscale, B}|T], Dict) ->
+	parse_opts(T, maps:put(blockscale, B, Dict));	
 parse_opts([{workers, W}|T], Dict) ->
 	parse_opts(T, maps:put(workers, W, Dict));
 parse_opts([{sleep, Sleep}|T], Dict) ->

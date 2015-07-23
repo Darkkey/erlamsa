@@ -52,7 +52,9 @@
 -define(M(X,B),<<X,_/binary>> = B). % match
 -define(D(X,B),<<X:8/integer,_/binary>> = B). % decompose
 
--define(ok(X),$a=<X,X=<$z;$A=<X,X=<$Z;$0=<X,X=<$9;X==$_;X==$-;X==$:).
+%TODO: original
+%-define(ok(X),$a=<X,X=<$z;$A=<X,X=<$Z;$0=<X,X=<$9;X==$_;X==$-;X==$:). 
+-define(ok(X),X=/=$>;X=/=$<;X=/=$';X=/=$";X=/=$!;X=/=$/).
 -define(ws(X),X==$\s;X==$\r;X==$\n;X==$\t).
 -define(dq(X),X==$").
 -define(sq(X),X==$').
@@ -97,6 +99,7 @@ tokenize({TZ,Str,Token}) ->
 
 tz(nil,?m("<",Str))                       -> {{tag,""},ws(Str)};
 tz(nil,?d(_,Str))                         -> {nil,Str};
+tz(nil, <<>>)                         	  -> throw(incorrect_sgml);
 
 tz({tag,""},?m("!--",Str))                -> {{comm,""},Str};
 tz({tag,""},?m("!",Str))                  -> {{'!',""},ws(Str)};
@@ -105,28 +108,26 @@ tz({tag,""},?m("/",Str))                  -> {{end_tag,""},ws(Str)};
 tz({tag,Tag},?m("/>",Str))                -> {text,Str,{sc,Tag,[]}};
 tz({tag,Tag},?D(X,S)) when ?ev(X)         -> {{attr,"",{Tag,[]}},ws(S)};
 tz({tag,Tag},?d(X,Str)) when ?ok(X)       -> {{tag,Tag++[X]},Str};
+tz({tag,_}, <<>>)                     	  -> throw(incorrect_sgml);
 
 tz({'!',DT},?m(">",Str))                  -> {text,Str,{'!',DT}};
 tz({'!',DT},?d(X,Str))                    -> {{'!',DT++[X]},Str};
 
-tz({que,DT},?m("?>",Str))                 -> {text,Str,{'?',DT}};
-tz({que,DT},?d(X,Str))                    -> {{que,DT++[X]},Str};
-
-tz({comm,Comm},?m("-->",Str))             -> {text,Str,{comment,Comm}};
-tz({comm,Comm},?d(X,Str))                 -> {{comm,Comm++[X]},Str};
-
 tz({etag,Tag,Attrs},?m("/>",Str))         -> {text,Str,{sc,Tag,Attrs}};
 tz({etag,Tag,Attrs},?m(">",Str))          -> {text,Str,{open,Tag,Attrs}};
+tz({etag,_Tag,_Attrs}, _)          		  -> throw(incorrect_sgml);
 
 tz({end_tag,Tag},?D(X,S)) when ?ev(X)     -> {{end_tag,Tag,'>'},ws(S)};
 tz({end_tag,Tag,'>'},?m(">",Str))         -> {text,Str,{close,Tag,string:to_lower(Tag)}};
 tz({end_tag,Tag},?d(X,Str))               -> {{end_tag,Tag++[X]},Str};
+tz({end_tag,_},_)              			  -> throw(incorrect_sgml);
 
 tz({attr,"",{Tag,As}},?D(X,S))when ?ev(X) -> {{etag,Tag,As},S};
 tz({attr,"",{Tag,As}},?M("/>",S))         -> {{etag,Tag,As},S};
 tz({attr,A,{T,As}},?D(X,S))when ?ev(X)    -> {{eatt,{A,T,As}},ws(S)};
 tz({attr,A,{T,As}},?M("/>",S))            -> {{eatt,{A,T,As}},ws(S)};
 tz({attr,A,TAs},?d(X,Str))when ?ok(X)     -> {{attr,A++[X],TAs},Str};
+tz({attr,_,_},_)						  -> throw(incorrect_sgml); % if '/"" unclose
 
 tz({eatt,ATAs},?m("=",Str))               -> {{val,ATAs},ws(Str)};
 tz({eatt,{A,T,As}},S)                     -> {{attr,"",{T,As++[{A,"",[]}]}},ws(S)};
@@ -137,9 +138,12 @@ tz({val,ATAs},Str)                        -> {{uqval,"",ATAs},Str}; % unquoted
 
 tz({sqval,V,{A,T,As}},?m("'",S))          -> {{attr,"",{T,As++[{A,V,"'"}]}},ws(S)};
 tz({sqval,V,ATAs},?d(X,Str))              -> {{sqval,V++[X],ATAs},Str};
+tz({sqval,_,_},_)						  -> throw(incorrect_sgml); % if ' unclose
 
 tz({dqval,V,{A,T,As}},?m("\"",S))         -> {{attr,"",{T,As++[{A,V,"\""}]}},ws(S)};
 tz({dqval,V,ATAs},?d(X,Str))              -> {{dqval,V++[X],ATAs},Str};
+tz({dqval,_,_},_)						  -> throw(incorrect_sgml); % if ' unclose
+
 
 tz({uqval,V,{A,T,As}},?D(X,S))when ?ev(X) -> {{attr,"",{T,As++[{A,V,[]}]}},ws(S)};
 tz({uqval,V,{A,T,As}},?M("/>",S))         -> {{attr,"",{T,As++[{A,V,[]}]}},ws(S)};
@@ -182,22 +186,23 @@ parse(Str) ->
 % list(token()), list(ast_elem()), list(strings) -> atom(), list(ast_elem()), list(ast_elem(), {non_neg_int(), non_neg_int()})
 % non_neg_int() is tag (paired)
 build_ast2([{open, Tag, Params}|T], Ast, Tags, {N, NT}) ->
-	%io:format("Open ~s, ~w, ~w~n", [Tag, Ast, Tags]),
-	Test = build_ast2(T, [], [string:to_lower(Tag) | Tags], {0, 0}),
-	%io:format("!!!Open ~s, ~w, ~w~n", [Tag, Ast, Tags]),	
+	TolowerTag = string:to_lower(Tag),
+	%io:format("!!! Open ~s (~s), >>~w<<, ~w~n", [Tag, TolowerTag, Ast, Tags]),	
+	Test = build_ast2(T, [], [TolowerTag | Tags], {0, 0}),
+	%io:format("Test is ~w~n", [Test]),	
 	case Test of 
 		{ok, [{tagclose, TagClose} | TagInternals], TagOuters, {K, KT}} ->
 			%io:format("open_ok for ~w: ~w, ~w, ~w, +1~n", [Tag, TagInternals, TagOuters, Tags]),	
 			build_ast2(TagOuters, [{tag, Tag, TagClose, Params, TagInternals}|Ast], Tags, {N + K + 1, NT + KT + 1});
-		{error, no_pair_tag, Tokens, NewAst, [Tag], {K, KT}} -> 
-			%io:format("Last tag ~w, ~w, ~s~n", [Tokens, NewAst, Tag]),			
-			%io:format("Go d33per ~w, ~w, ~w, ~w, ~w~n", [Tokens, Ast, NewAst, [{open, Tag, Params}], Tag]),						
-			build_ast2(Tokens, NewAst ++ [{open, Tag, Params}] ++ Ast , [], {N + K + 1, NT + KT});	
+		% {error, no_pair_tag, Tokens, NewAst, TagsTail, {K, KT}} -> 
+		% 	io:format("Last tag ~w, ~w, ~s~n", [Tokens, NewAst, Tag]),			
+		% 	io:format("Go d33per ~w, ~w, ~w, ~w, ~w, tags: ~w~n", [Tokens, Ast, NewAst, [{open, Tag, Params}], Tag, TagsTail]),						
+		% 	build_ast2(Tokens, NewAst ++ [{open, Tag, Params}] ++ Ast , TagsTail, {N + K + 1, NT + KT});	%% [] -- ????
 		{error, no_pair_tag, Tokens, NewAst, NewTags, {K, KT}} -> 
 			%io:format("No_pair tag ~w, ~w, ~w~n", [Tokens, NewAst, NewTags]),			
 			%io:format("Go d33per ~w, ~w, ~w, ~w, ~w~n", [Tokens, Ast, NewAst, [{open, Tag, Params}], Tag]),						
 			build_ast2(Tokens, NewAst ++ [{open, Tag, Params}] ++ Ast , NewTags, {N + K + 1, NT + KT});
-		{error, closed_earlier, {Tag, CloseTag}, Tokens, NewAst, NewTags, {K, KT}} -> 
+		{error, closed_earlier, {TolowerTag, CloseTag}, Tokens, NewAst, NewTags, {K, KT}} -> 
 			%io:format("Err_close_earlier ~w, ~w, ~w, +1~n", [Tokens, NewAst, NewTags]),			
 			build_ast2(Tokens, [{tag, Tag, CloseTag, Params, lists:reverse(NewAst)}|Ast], NewTags, {N + K + 1, NT + KT + 1});
 		{error, closed_earlier, {NewTag, NewCloseTag}, Tokens, NewAst, NewTags, {K, KT}} -> 
@@ -211,10 +216,10 @@ build_ast2([{close, Tag, TagName}|T], Ast, [_OtherTag|Tags] = AllTags, {N, NT}) 
 	%io:format("Close no pair ~s, ~w, ~w~n", [Tag, Ast, AllTags]),
 	case lists:member(TagName, Tags) of
 		false -> 
-			%io:format("Close invalid ~s, +1~n", [Tag]),
+			% io:format("Close invalid ~s, +1~n", [Tag]),
 			build_ast2(T, [{close, Tag} | Ast], AllTags, {N + 1, NT});
 		true ->
-			%io:format("Close earlier ~s~n", [Tag]),			
+			% io:format("Close earlier ~s~n", [Tag]),			
 			{error, closed_earlier, {TagName, Tag}, T, Ast, push_till(Tags, TagName), {N, NT}}  
 	end;
 build_ast2([{close, Tag, _TagName}|T], Ast, [], {N, NT}) ->
@@ -238,7 +243,7 @@ build_ast2([{eof, {text, <<>>}}|_T], Ast, [], {N, NT}) ->
 build_ast2([{eof, {text, Text}}|_T], Ast, [], {N, NT}) ->
 	%io:format("Eof ~w, ~w, Tags: ~w, +1~n", [Text, Ast, []]),
 	{ok, lists:reverse([{text, Text}|Ast]), [], {N + 1, NT}};
-build_ast2([{eof, {text, Text}}|_T] = Tokens, Ast, [Tag|Tags], {N, NT}) ->
+build_ast2([{eof, {text, _Text}}|_T] = Tokens, Ast, [_Tag|Tags], {N, NT}) ->
 	%io:format("Eof no_pair ~w, ~w, ~w, Tag: ~s ~n", [Text, Ast, Tags, Tag]),
 	{error, no_pair_tag, Tokens, Ast, Tags, {N, NT}}.
 
@@ -337,7 +342,7 @@ select(Ast, Selector) ->
 
 test_walk(Ast) ->
 	walk(Ast,
-		fun  (E, Acc, T, N) -> 
+		fun  (_E, Acc, _T, _N) -> 
 			%io:format("~w is ~w (if tag then ~w)~n", [E, N, T]), 
 				Acc end,
 		[]).
@@ -431,6 +436,7 @@ pump_path(Start, End, N) ->
 	pump_path(hd(PumpedTag), End*2 - 1, N - 1).
 
 
+sgml_pump(Ast, 0) -> {Ast, 0, 0};
 sgml_pump(Ast, T) ->
 	%io:format("Cnt: ~w ~w~n", [Ast, N]),
 	R = erlamsa_rnd:erand(T),	
@@ -443,7 +449,7 @@ sgml_pump(Ast, T) ->
 	%io:format("E:!!!!!!!!!!!!!!!!!! ~w~n", [E]),	
 	%{End, _, _} = select_elem([Start], E),
 	%io:format("End:!!!!!!!!!!!!!!!!!! ~w~n", [End]),	
-	PumpCnt = erlamsa_rnd:erand(10),
+	PumpCnt = erlamsa_rnd:erand( trunc(1000.0/(100.0 + SubElems)) ), % limiting the depth of the pump
 	%io:format("PumpCnt:!!!!!!!!!!!!!!!!!! ~w~n", [PumpCnt]),		
 	Pumped = pump_path(Start, E, PumpCnt),
 	%io:format("PUMPED!!!!!!!!!! ~w~n", [Pumped]),
@@ -527,39 +533,48 @@ sgml_mutation(Ast, {N, NT}) ->
 
 sgml_mutation(Ast, {N, _NT}, 0) -> 
 	{Res, _, _} = sgml_swap(Ast, N),
-	{sgml_swap, Res};
+	{sgml_swap, Res, 1};
 sgml_mutation(Ast, {N, _NT}, 1) -> 
 	{Res, _, _} = sgml_dup(Ast, N),
-	{sgml_dup, Res};
+	{sgml_dup, Res, 1};
 sgml_mutation(Ast, {_N, NT}, 2) -> 
 	{Res, _, _} = sgml_pump(Ast, NT),
-	{sgml_pump, Res};
+	{sgml_pump, Res, -2}; %% don't allow too much pumps...
 sgml_mutation(Ast, {N, _NT}, 3) -> 
 	{Res, _, _} = sgml_repeat(Ast, N),
-	{sgml_repeat, Res};
+	{sgml_repeat, Res, 1};
 sgml_mutation(Ast, {N, _NT}, 4) -> 
 	{Res, _, _} = sgml_insert2(Ast, N),
-	{sgml_insert2, Res};
+	{sgml_insert2, Res, 1};
 sgml_mutation(Ast, {_N, NT}, 5) -> 
 	{Res, _, _} = sgml_permparams(Ast, NT),
-	{sgml_permparams, Res};
+	{sgml_permparams, Res, 1};
 sgml_mutation(Ast, {_N, NT}, 6) -> 
 	{Res, _, _} = sgml_breaktag(Ast, NT),
-	{sgml_breaktag, Res};		
+	{sgml_breaktag, Res, 1};		
 sgml_mutation(Ast, {N, _NT}, _R) -> 
 	{Res, _, _} = sgml_insert(Ast, N),
-	{sgml_insert, Res}.
+	{sgml_insert, Res, 1}.
 
 sgml_mutate(Ll = [H|T], Meta) ->
-	io:format("Trying to parse... ~w~n~n", [H]),
-	{ok, ParsedStr, _, Cnts} = parse(H),
-    {Name, Res} = sgml_mutation(ParsedStr, Cnts),    
-    NewBinStr = fold_ast(Res, []),
-    if
-        NewBinStr =:= H ->
-            {fun sgml_mutate/2, Ll, Meta, -1};
-        true ->
-        	{fun sgml_mutate/2, [NewBinStr | T], [{Name, 1} | Meta], 1}
+	%io:format("Trying to parse... ~n~n"),
+	%file:write_file("./last_sgml.txt", H),
+	try parse(H) of
+		{ok, ParsedStr, _, Cnts} ->
+			%io:format("Ast ready~n~n"),	
+    		{Name, Res, D} = sgml_mutation(ParsedStr, Cnts),   
+    		%io:format("Mutated ~w~n~n", [Name]), 
+    		NewBinStr = fold_ast(Res, []),
+    		%io:format("Folded~n~n"),
+    		if
+        		NewBinStr =:= H ->
+            	{fun sgml_mutate/2, Ll, Meta, -1};
+        	true ->
+        		{fun sgml_mutate/2, [NewBinStr | T], [{Name, 1} | Meta], D}
+    		end
+    catch
+    	incorrect_sgml ->
+    		{fun sgml_mutate/2, Ll, Meta, -1}
     end.
 
 %%%
@@ -574,7 +589,9 @@ sgml_mutate(Ll = [H|T], Meta) ->
 verify(Str) ->
 	BinStr = list_to_binary(Str),
 	{ok, ParsedStr, _, _} = parse(BinStr),
-	BinStr = fold_ast(ParsedStr, []).
+	BinStr2 = fold_ast(ParsedStr, []),
+	%io:format("~s~n~n~s~n~n", [BinStr, BinStr2]),
+	BinStr = BinStr2.
 
 verify_mutation(Str, R) ->
 	BinStr = list_to_binary(Str),
@@ -602,84 +619,3 @@ walk_verify(Ast) ->
 %%% 
 %%% /Test functions
 %%%
-	
-% build_ast2([{open, Tag, Params}|T], Ast, Tags) ->
-% 	io:format("Open ~s, ~w, ~w~n", [Tag, Ast, Tags]),
-% 	case build_ast2(T, [], [string:to_lower(Tag) | Tags]) of
-% 		{ok, TagInternals, TagOuters} ->
-% 			build_ast2(TagOuters, [{tag, Tag, Tag, Params, TagInternals}|Ast], Tags);
-% 		{error, no_pair_tag} -> 
-% 			build_ast2(T, [{open, Tag, Params}|Ast], Tags)
-% 	end;
-% build_ast2([{close, Tag, TagName}|T], Ast, [TagName|_Tags]) ->
-% 	io:format("Close ~s, ~w, ~w~n", [Tag, Ast, [TagName|_Tags]]),
-% 	{ok, lists:reverse([{tagclose, Tag} | Ast]), T};
-% build_ast2([{close, Tag, TagName}|T], Ast, [_OtherTag|Tags] = AllTags) ->
-% 	io:format("Close no pair~s, ~w, ~w~n", [Tag, Ast, AllTags]),
-% 	case lists:member(Tag, Tags) of
-% 		false -> 
-% 			build_ast2(T, [{close, Tag} | Ast], AllTags);
-% 		true ->
-% 			{error, no_pair_tag}  
-% 	end;
-% build_ast2([{close, Tag, TagName}|T], Ast, []) ->
-% 	io:format("Close no pair empty ~s, ~w, ~w~n", [Tag, Ast, []]),
-% 	build_ast2(T, [{close, Tag} | Ast], []);	
-% build_ast2([{text, Text}|T], Ast, Tags) ->
-% 	io:format("Text ~w, ~w, ~w~n", [Text, Ast, Tags]),
-% 	build_ast2(T, [{text, Text}|Ast], Tags);
-% build_ast2([{eof, {text, Text}}|_T], Ast, []) ->
-% 	io:format("Eof ~w, ~w, ~w~n", [Text, Ast, []]),
-% 	{ok, lists:reverse([{text, Text}|Ast]), []};
-% build_ast2([{eof, {text, Text}}|_T], Ast, Tags) ->
-% 	io:format("Eof no_pair ~w, ~w, ~w~n", [Text, Ast, Tags]),
-% 	{error, no_pair_tag}.
-
-%% list(token()), list(ast_elem()), list(strings) -> list(ast_elem()), list(ast_elem()), atom()
-% build_ast([{open, Tag, Params}|T], Ast, Tags) ->
-% 	io:format("o!!!!!! ~s ~w ~n", [Tag, Tag]),
-% 	case build_ast(T, [], [string:to_lower(Tag) | Tags]) of
-% 		{ok, [{tagclose, TagClose}|TagInternals], TagOuters} ->
-% 			io:format("k!!!!!! ~w~n", [Tags]),
-% 			build_ast(TagOuters, [{tag, Tag, TagClose, Params, TagInternals}|Ast], Tags);	
-% 		{ok, TagInternals, TagOuters} ->
-% 			io:format("kN!!!!!! ~w~n", [{TagInternals, TagOuters, Tags}]),
-% 			build_ast(TagOuters, [{tag, Tag, Tag, Params, TagInternals}|Ast], Tags);				
-% 			%%{ok, [{open, Tag, Params} | TagInternals] ++ Ast, TagOuters};
-% 		{brokenseq, TagInternals, TagOuters} ->
-% 			io:format("b!!!!!! ~w~n", [Tags]),
-% 			{ok, [{open, Tag, Params} | lists:reverse(TagInternals)] ++ Ast, TagOuters}
-% 	end;
-% build_ast([{text, Text}|T], Ast, Tags) ->
-% 	io:format("ct!!!!!!! ~w~n", [Tags]),
-% 	build_ast(T, [{text, Text}|Ast], Tags);
-% build_ast([{'!', Params}|T], Ast, Tags) ->
-% 	io:format("cD!!!!!!! ~w~n", [Tags]),
-% 	build_ast(T, [{'!', Params}|Ast], Tags);	
-% build_ast([{sc, Text, Params}|T], Ast, Tags) ->
-% 	io:format("cs!!!!!!! ~w~n", [Tags]),
-% 	build_ast(T, [{sc, Text, Params}|Ast], Tags);	
-% build_ast([{close, Tag, TagName}|T], Ast, [TagName|_Tags]) ->
-% 	io:format("cc!!!!!!! ~s~n", [Tag]),
-% 	{ok, [{tagclose, Tag} | lists:reverse(Ast)], T};
-% build_ast([{close, Tag, _TagName}|T], Ast, [NonMatchedTag|Tags] = AllTags) ->
-% 	io:format("cI!!!!!!! ~w~n", [{Tag, [NonMatchedTag|Tags]}]),
-% 	case lists:member(Tag, Tags) of
-% 		false -> 
-% 			io:format("cu!!!!!!! ~w~n", [{Tag, NonMatchedTag}]),
-% 			build_ast(T, [{close, Tag} | Ast], AllTags);
-% 		true ->
-% 			io:format("cb!!!!!!! ~w~n", [{Tag, NonMatchedTag}]),
-% 			{brokenseq, [{tagclose, Tag} | Ast], T}  
-% 	end;
-% build_ast([{eof, {text, Text}}|_T], Ast, []) ->
-% 	{ok, lists:reverse([{text, Text}|Ast]), []};
-% build_ast([{eof, {text, Text}}|_T], Ast, _Tags) ->
-% 	io:format("cE!!!!!!! ~w~n", [_Tags]),
-% 	{brokenseq, lists:reverse([{text, Text}|Ast]), []};
-% build_ast([], Ast, []) ->
-% 	{ok, [], Ast};
-% build_ast([], Ast, _Tags) ->
-% 	io:format("c !!!!!!! ~w~n", [_Tags]),
-% 	{brokenseq, [], Ast}.
-

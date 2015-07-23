@@ -36,7 +36,7 @@
 -endif.
 
 %% API
--export([make_generator/5, generators/0, default/0, tostring/1]).
+-export([make_generator/6, generators/0, default/0, tostring/1]).
 
 %% fill the rest of the stream with padding random bytes
 -spec finish(non_neg_integer()) -> [binary()].
@@ -51,28 +51,26 @@ finish(Len) ->
     end.
 
 %% get random size of block
--spec rand_block_size() -> non_neg_integer().
-rand_block_size() ->
-    max(erlamsa_rnd:rand(?MAX_BLOCK_SIZE), ?MIN_BLOCK_SIZE).
+-spec rand_block_size(float()) -> non_neg_integer().
+rand_block_size(BlockScale) ->
+    max(erlamsa_rnd:rand(round(?MAX_BLOCK_SIZE*BlockScale)), round(?MIN_BLOCK_SIZE*BlockScale)).
 
 %% work with input stream (from file/other stream)
--spec port_stream(input_inc()) -> fun().
-port_stream(Port) ->
-    fun () -> stream_port(Port, false, rand_block_size(), 0) end.
+-spec port_stream(input_inc(), float()) -> fun().
+port_stream(Port, BlockScale) ->
+    fun () -> stream_port(Port, false, rand_block_size(BlockScale), BlockScale, 0) end.
 
--spec stream_port(input_inc(), binary() | false, non_neg_integer(), non_neg_integer()) -> [binary()].
-stream_port(Port, Last, Wanted, Len) ->    
+-spec stream_port(input_inc(), binary() | false, non_neg_integer(), float(), non_neg_integer()) -> [binary()].
+stream_port(Port, Last, Wanted, BlockScale, Len) ->    
     case file:read(Port, Wanted) of
         {ok, Data} ->
             DataLen = byte_size(Data),
             if
                 DataLen =:= Wanted ->
                     Block = erlamsa_utils:merge(Last, Data),
-                    Next = rand_block_size(),
-                    [Block | 
-                        stream_port(Port, false, Next, Len + byte_size(Block))];
+                    [Block | stream_port(Port, false, rand_block_size(BlockScale), BlockScale, Len + byte_size(Block))];
                 true ->
-                    stream_port(Port, erlamsa_utils:merge(Last, Data), Wanted - DataLen, Len)
+                    stream_port(Port, erlamsa_utils:merge(Last, Data), Wanted - DataLen, BlockScale, Len)
             end;
         eof ->
             file:close(Port),
@@ -87,11 +85,11 @@ stream_port(Port, Last, Wanted, Len) ->
     end.
 
 %% stdin input
--spec stdin_generator(true | false) -> fun().
-stdin_generator(Online) ->
+-spec stdin_generator(true | false, float()) -> fun().
+stdin_generator(Online, BlockScale) ->
     %% TODO: investigate what is  (stdin-generator rs online?) in radamsa code and how force-ll correctly works...
     io:setopts(standard_io, [binary]),
-    Ll = port_stream(standard_io),
+    Ll = port_stream(standard_io, BlockScale),
     io:setopts(standard_io, []),
     LlM = if
               Online =:= true andalso is_function(Ll) -> Ll; %% TODO: ugly, rewrite
@@ -100,8 +98,8 @@ stdin_generator(Online) ->
     fun () -> {LlM, {generator, stdin}} end.
 
 %% file input
--spec file_streamer([string()]) -> fun().
-file_streamer(Paths) ->
+-spec file_streamer([string()], float()) -> fun().
+file_streamer(Paths, BlockScale) ->
     N = length(Paths),
     fun () ->        
         P = random:uniform(N), %% lists indexing from 1 in erlang
@@ -109,7 +107,7 @@ file_streamer(Paths) ->
         {Res, Port} = file:open(Path, [read, raw, binary]), %% TODO: FIXME: could we use raw?
         case Res of
             ok ->
-                Ll = port_stream(Port),
+                Ll = port_stream(Port, BlockScale),
                 {Ll, [{generator, file}, {source, path}]};
             _Else ->
                 Err = lists:flatten(io_lib:format("Error opening file '~s'", [Path])),  %% TODO: add printing filename, handling -r and other things...
@@ -123,9 +121,9 @@ direct_generator(Input) ->
     fun () -> {[Input], {generator, direct}} end.
 
 %% Random input stream
--spec random_stream() -> [binary()].
-random_stream() ->
-    N = erlamsa_rnd:rand_range(32, ?MAX_BLOCK_SIZE),
+-spec random_stream(float()) -> [binary()].
+random_stream(BlockScale) ->
+    N = erlamsa_rnd:rand_range(32, round(?MAX_BLOCK_SIZE * BlockScale)),
     B = erlamsa_rnd:random_block(N),
     Ip = erlamsa_rnd:rand_range(1, 100),
     O = erlamsa_rnd:rand(Ip),
@@ -133,13 +131,13 @@ random_stream() ->
         0 ->
             [B];
         _Else ->
-            [B | random_stream()]
+            [B | random_stream(BlockScale)]
     end.
 
 %% random generator
--spec random_generator() -> {[binary()], [meta()]}.
-random_generator() ->
-    {random_stream(), {generator, random}}.  
+-spec random_generator(float()) -> {[binary()], [meta()]}.
+random_generator(BlockScale) ->
+    fun () -> {random_stream(BlockScale), {generator, random}} end.  
 
 %% [{Pri, Gen}, ...] -> Gen(rs) -> output end
 -spec mux_generators(prioritized_list(), fun()) -> fun() | false.
@@ -153,17 +151,17 @@ mux_generators(Generators, _) ->
     end.
 
 %% create a lambda-generator function based on the array
--spec make_generator_fun(list(), binary() | nil, fun(), non_neg_integer()) -> fun().
-make_generator_fun(Args, Inp, Fail, N) ->
+-spec make_generator_fun(list(), binary() | nil, float(), fun(), non_neg_integer()) -> fun().
+make_generator_fun(Args, Inp, BlockScale, Fail, N) ->
     fun (false) -> Fail("Bad generator priority!");
         ({Name, Pri}) ->
             case Name of
                 stdin when hd(Args) == "-" ->  
-                    {Pri, stdin_generator(N == 1)}; %% TODO: <<-- 1 in Radamsa
+                    {Pri, stdin_generator(N == 1, BlockScale)}; %% TODO: <<-- 1 in Radamsa
                 stdin ->
                     false;
                 file when Args =/= [] andalso Args =/= ["-"] andalso Args =/= [direct] ->
-                    {Pri, file_streamer(Args)};
+                    {Pri, file_streamer(Args, BlockScale)};
                 file ->
                     false;
                 direct when Inp =:= nil ->
@@ -171,7 +169,7 @@ make_generator_fun(Args, Inp, Fail, N) ->
                 direct ->
                     {Pri, direct_generator(Inp)};
                 random ->
-                    {Pri, fun random_generator/0};
+                    {Pri, random_generator(BlockScale)};
                 _Else ->
                     Fail("Unknown generator name."),
                     false
@@ -179,9 +177,9 @@ make_generator_fun(Args, Inp, Fail, N) ->
     end.
 
 %% get a list of {GenAtom, Pri} and output the list of {Pri, Gen}
--spec make_generator(list(), list(), binary() | nil, fun(), non_neg_integer()) -> fun() | false.
-make_generator(Pris, Args, Inp, Fail, N) ->
-    Gs = [ A || A <- [(make_generator_fun(Args, Inp, Fail, N))(V1) || V1 <- Pris], A =/= false],
+-spec make_generator(list(), list(), binary() | nil, float(), fun(), non_neg_integer()) -> fun() | false.
+make_generator(Pris, Args, Inp, BlockScale, Fail, N) ->
+    Gs = [ A || A <- [(make_generator_fun(Args, Inp, BlockScale, Fail, N))(V1) || V1 <- Pris], A =/= false],
     mux_generators(Gs, Fail).
 
 -spec generators() -> list().
