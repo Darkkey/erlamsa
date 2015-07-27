@@ -60,11 +60,12 @@ cmdline_optsspec() ->
 	 {about		, $a, 	"about", 		undefined, 				"what is this thing"},
 	 {version	, $V, 	"version",		undefined, 				"show program version"},
 	 {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or :port, host:port for data input from net"},
+	 {external	, $e,   "external", 	string,					"external fuzzer/mutation module"},	 
 	 {proxyprob	, $P,	"proxyprob",	{string, "0.0,0.0"},	"<arg>, fuzzing probability for proxy mode s->c,c->s"},
 	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or http://example.com [-]"},
 	 {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
 	 {blockscale, $b, 	"blockscale",	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize"},
-	 {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},
+	 {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},	 
 	 {seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int"},
 	 {mutations , $m,   "mutations",	{string,
 	  					 	erlamsa_mutations:tostring(	erlamsa_mutations:mutations())}, 	"<arg>, which mutations to use"},
@@ -75,7 +76,7 @@ cmdline_optsspec() ->
 	 {meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"},
 	 {logger	, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename"},
 	 {workers	, $w, 	"workers",		{integer, 10},			"<arg>, number of workers in server mode"},
-%	 {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},
+%	 {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},	 
 	 {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose"},
 	 {list		, $l,	"list",			undefined,				"list i/o options, mutations, patterns and generators"}].
 
@@ -279,6 +280,8 @@ parse_opts([{sleep, Sleep}|T], Dict) ->
 	parse_opts(T, maps:put(sleep, Sleep, Dict));
 parse_opts([{logger, LogOpts}|T], Dict) ->
 	parse_opts(T, parse_logger_opts(LogOpts, Dict));
+parse_opts([{external, ModuleName}|T], Dict) ->
+	parse_opts(T, maps:put(external, ModuleName, Dict));	
 parse_opts([{proxyprob, ProxyProbOpts}|T], Dict) ->
 	parse_opts(T, parse_proxyprob_opts(ProxyProbOpts, Dict));
 parse_opts([{input, InputOpts}|T], Dict) ->

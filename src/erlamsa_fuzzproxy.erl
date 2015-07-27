@@ -96,7 +96,7 @@ loop_udp(SrvSocket, ClSocket, ClientHost, ClientPort, Opts, Verbose, Log) ->
     receive
         {udp, SrvSocket, Host, Port, Data} = Msg ->
             Verbose(io_lib:format("read udp client->server ~p ~p ~n",[Data, Msg])),
-            Ret = fuzz(udp, ProbToServer, Opts, Data),
+            {_, Ret} = fuzz(udp, ProbToServer, Opts, Data),
             Verbose(io_lib:format("wrote udp client->server ~p ~n",[Ret])),
             gen_udp:send(ClSocket, ServerHost, ServerPort, Ret),
             loop_udp(SrvSocket, ClSocket, Host, Port, Opts, Verbose, Log);
@@ -106,7 +106,7 @@ loop_udp(SrvSocket, ClSocket, ClientHost, ClientPort, Opts, Verbose, Log) ->
                 [] ->
                     loop_udp(SrvSocket, ClSocket, [], 0, Opts, Verbose, Log);
                 _Else ->
-                    Ret = fuzz(udp, ProbToClient, Opts, Data),
+                    {_, Ret} = fuzz(udp, ProbToClient, Opts, Data),
                     gen_udp:send(SrvSocket, ClientHost, ClientPort, Ret),
                     Verbose(io_lib:format("wrote udp server->client ~p ~n",[Ret])),
                     loop_udp(SrvSocket, ClSocket, ClientHost, ClientPort, Opts, Verbose, Log)
@@ -120,20 +120,20 @@ loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose, Log) ->
     inet:setopts(ClientSocket, [{active,once}]),
     receive
         {tcp, ClientSocket, Data} ->
-	    Verbose(io_lib:format("read tcp client->server ~p ~n",[Data])),
+	        Verbose(io_lib:format("read tcp client->server ~p ~n",[Data])),
             Log("from client(c->s): ~p", [Data]),
-            Ret = fuzz(Proto, ProbToServer, Opts, Data),
-            Verbose(io_lib:format("wrote tcp client->server ~p ~n",[Ret])),
+            {Res, Ret} = fuzz(Proto, ProbToServer, Opts, Data),
+            Verbose(io_lib:format("wrote tcp client->server ~p (fuzzing = ~p) ~n",[Ret, Res])),
             gen_tcp:send(ServerSocket, Ret),
-            Log("from fuzzer(c->s): ~p", [Data]),
+            Log("from fuzzer(c->s) [~p]: ~p", [Res, Ret]),
             loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose, Log);
         {tcp, ServerSocket, Data} ->
             Verbose(io_lib:format("read tcp server->client ~p ~n", [Data])),
             Log("from server(s->c): ~p", [Data]),
-            Ret = fuzz(Proto, ProbToClient, Opts, Data),
-            Verbose(io_lib:format("wrote tcp server->client ~p ~n", [Ret])),
+            {Res, Ret} = fuzz(Proto, ProbToClient, Opts, Data),
+            Verbose(io_lib:format("wrote tcp server->client ~p (fuzzing = ~p) ~n", [Ret, Res])),
             gen_tcp:send(ClientSocket, Ret),
-            Log("from server(s->c): ~p", [Data]),
+            Log("from fuzzer(s->c) [~p]: ~p", [Res, Ret]),
             loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose, Log);
         {tcp_closed, ClientSocket} ->
             gen_tcp:close(ServerSocket),
@@ -153,14 +153,21 @@ extract_http(Data) ->
 pack_http(_Query, _Hdr, Data) ->
     Data.
 
-fuzz(http, Prob, Opts, Data) ->
-    {Query, HTTPHeaders, HTTPData} = extract_http(Data),
-    pack_http(Query, HTTPHeaders, call_fuzzer(Prob, erlamsa_rnd:rand_float(), Opts, HTTPData));
-fuzz(_Proto, Prob, Opts, Data) ->
-    call_fuzzer(Prob, erlamsa_rnd:rand_float(), Opts, Data).
+fuzz(Proto, Prob, Opts, Data) ->
+    case maps:get(external, Opts, nil) of
+        nil -> fuzz(Proto, Prob, erlamsa_rnd:rand_float(), Opts, Data);
+        Module -> 
+            erlang:apply(list_to_atom(Module), fuzzer, [Proto, Data, Opts])
+    end.
 
-call_fuzzer(Prob, Rnd, _Opts, Data) when Rnd >= Prob -> io:format("no fuzz~n"), Data;
-call_fuzzer(_Prob, _Rnd, Opts, Data) ->
+fuzz(_, Prob, Rnd, _Opts, Data) when Rnd >= Prob -> {nofuzz, Data};
+fuzz(http, Prob, _Rnd, Opts, Data) ->
+    {Query, HTTPHeaders, HTTPData} = extract_http(Data),
+    {ok, pack_http(Query, HTTPHeaders, call_fuzzer(Prob, Opts, HTTPData))};
+fuzz(_Proto, Prob, _Rnd, Opts, Data) ->
+    {ok, call_fuzzer(Prob, Opts, Data)}.
+
+call_fuzzer(_Prob, Opts, Data) ->
     NewOpts = maps:put(paths, [direct],
                maps:put(output, return,
                 maps:put(input, Data,
