@@ -10,8 +10,8 @@ sleep() ->
 	sleep().
 
 main(Args) ->
-	true = code:add_pathz(filename:dirname(escript:script_name()) 
-                       ++ "/ebin"),
+	true = code:add_pathz(filename:dirname(escript:script_name()) ++ "/ebin"),
+	true = code:add_pathz(filename:dirname(escript:script_name()) ++ "/deps/procket/ebin"),
     Dict = erlamsa_cmdparse:parse(Args),
     case maps:get(mode, Dict, stdio) of
     	proxy ->     	

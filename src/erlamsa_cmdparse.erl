@@ -62,7 +62,7 @@ cmdline_optsspec() ->
 	 {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or :port, host:port for data input from net"},
 	 {external	, $e,   "external", 	string,					"external fuzzer/mutation module"},	 
 	 {proxyprob	, $P,	"proxyprob",	{string, "0.0,0.0"},	"<arg>, fuzzing probability for proxy mode s->c,c->s"},
-	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or http://example.com [-]"},
+	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or ip://172.16.0.1:47 or http://example.com [-]"},
 	 {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
 	 {blockscale, $b, 	"blockscale",	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize"},
 	 {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},	 
@@ -175,6 +175,8 @@ parse_http_addr(URL) ->
 
 parse_url([<<"udp">>|T], _URL) ->
 	parse_sock_addr(udp, binary_to_list(hd(T)));
+parse_url([<<"ip">>|T], _URL) ->
+	parse_sock_addr(ip, binary_to_list(hd(T)));	
 parse_url([<<"tcp">>|T], _URL) ->
 	parse_sock_addr(tcp, binary_to_list(hd(T)));
 parse_url([<<"http">>|_T], URL) ->

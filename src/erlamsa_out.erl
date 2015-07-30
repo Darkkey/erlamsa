@@ -15,16 +15,16 @@
 -endif.
 
 %% API
--export([output/2, string_outputs/1, flush/1]).
+-export([output/3, string_outputs/1, flush/1]).
 
 %% convert list-of-bvecs to one big binary
 -spec flush(list(nil | binary())) -> any(). 
 flush([]) -> <<>>;
 flush([H|T]) when is_binary(H) -> R = flush(T), <<H/binary, R/binary>>.
 
--spec output(lazy_list_of_bins(), output_dest()) -> {fun(), meta(), integer(), binary()}.
-output(Ll, Fd) ->
-    {NLl, NewFd, Data, N} = blocks_port(Ll, Fd),
+-spec output(lazy_list_of_bins(), output_dest(), fun()) -> {fun(), meta(), integer(), binary()}.
+output(Ll, Fd, Post) ->
+    {NLl, NewFd, Data, N} = blocks_port(Ll, Fd, Post),
     %% (ok? (and (pair? ll) (tuple? (car ll)))) ;; all written? <-- do we really need to check this?
     {Muta, Meta} = erlamsa_utils:last(NLl),
     FlushedData = flush(Data),
@@ -54,6 +54,23 @@ file_writer(Str) ->
             ok -> {F, Fd, [{output, file} | Meta]};
             _Else ->
                 Err = lists:flatten(io_lib:format("Error opening file '~s'", [Filename])),  %% TODO: add printing filename, handling -r and other things...
+                erlamsa_utils:error(Err)
+        end
+    end.
+
+-spec rawsock_writer(inet:ip_address(), non_neg_integer()) -> fun().
+rawsock_writer(Addr, Proto) ->
+    fun F(_N, Meta) ->
+        {Res, FD} = procket:open(0, [{protocol, Proto}, {type, raw}, {family, inet}]),
+        case Res of 
+            ok ->  
+                {ok, Sock} = gen_udp:open(0, [binary, {fd, FD}]),        
+                {F, {net, 
+                    fun (Data) -> gen_udp:send(Sock, Addr, 0, Data) end,                
+                    fun () -> gen_udp:close(Sock), procket:close(FD), ok end %% TODO: ugly timeout before closing..., should be in another thread
+                }, [{output, tcpsock} | Meta]};
+            _Else -> 
+                Err = lists:flatten(io_lib:format("Error creating raw socket to ip://~s:~p '~s'", [Addr, Proto, FD])), 
                 erlamsa_utils:error(Err)
         end
     end.
@@ -150,25 +167,26 @@ string_outputs(Str) ->
         return -> fun return_stream/2;
         {tcp, {Addr, Port}} -> tcpsock_writer(Addr, Port);
         {udp, {Addr, Port}} -> udpsock_writer(Addr, Port);
+        {ip, {Addr, Proto}} -> rawsock_writer(Addr, Proto);
         {http, Params} -> http_writer(Params);
         _Else -> file_writer(Str)
     end.
 
 %% write blocks to port
--spec blocks_port(lazy_list_of_bins(), output_dest()) -> {lazy_list_of_bins(), list(), non_neg_integer()}.
-blocks_port(Ll, Fd) -> blocks_port(Ll, Fd, [], 0).
+-spec blocks_port(lazy_list_of_bins(), output_dest(), fun()) -> {lazy_list_of_bins(), list(), non_neg_integer()}.
+blocks_port(Ll, Fd, Post) -> blocks_port(Ll, Fd, [], 0, Post).
 
 %% TODO: UGLY, need rewrite and handle errors
--spec blocks_port(lazy_list_of_bins(), output_dest(), list(), non_neg_integer()) -> {lazy_list_of_bins(), list(), non_neg_integer()}.
-blocks_port([], Fd, Data, N) -> {[], Fd, Data, N};
-blocks_port([Ll], Fd, Data, N) when is_function(Ll) -> blocks_port(Ll(), Fd, Data, N);
-blocks_port(Ll = [H|T], Fd, Data, N) when is_binary(H) ->
-    {Res, NewData} = write_really(H, Fd),
+-spec blocks_port(lazy_list_of_bins(), output_dest(), list(), non_neg_integer(), fun()) -> {lazy_list_of_bins(), list(), non_neg_integer()}.
+blocks_port([], Fd, Data, N, _) -> {[], Fd, Data, N};
+blocks_port([Ll], Fd, Data, N, Post) when is_function(Ll) -> blocks_port(Ll(), Fd, Data, N, Post);
+blocks_port(Ll = [H|T], Fd, Data, N, Post) when is_binary(H) ->
+    {Res, NewData} = write_really(Post(H), Fd),
     case Res of
-        ok when is_binary(H) -> blocks_port(T, Fd, [NewData|Data], N + byte_size(H));
+        ok when is_binary(H) -> blocks_port(T, Fd, [NewData|Data], N + byte_size(H), Post);
         _Else -> {Ll, Fd, Data, N}
     end;
-blocks_port(Ll, Fd, Data, N) -> {Ll, Fd, Data, N}.
+blocks_port(Ll, Fd, Data, N, _) -> {Ll, Fd, Data, N}.
 
 
 %% closes the port (and possibly writes the data in case of HTTP)
