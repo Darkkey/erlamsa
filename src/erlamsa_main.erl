@@ -65,11 +65,6 @@ maybe_meta_logger(Path, _) ->
   end,    
   fun (X) -> Verb(io_lib:format("~p", [X])) end.
 
-make_post(nil) ->
-    fun (Data) -> Data end;
-make_post(ModuleName) ->
-    fun (Data) -> erlang:apply(list_to_atom(ModuleName), post, [Data]) end.
-
 -spec test() -> list().
 test() -> fuzzer(maps:put(paths, ["test.1"], maps:put(verbose, 0,  maps:put(output, return, maps:new())))).
 
@@ -111,7 +106,7 @@ fuzzer(Dict) ->
             Record_Meta({seed, maps:get(seed, Dict)}),            
             Pat = erlamsa_patterns:make_pattern(maps:get(patterns, Dict, erlamsa_patterns:default())),
             Out = erlamsa_out:string_outputs(maps:get(output, Dict, "-")),
-            Post = make_post(maps:get(external, Dict, nil)),
+            Post = erlamsa_utils:make_post(maps:get(external, Dict, nil)),
             Sleep = maps:get(sleep, Dict, 0),
             fuzzer_loop(Muta, Gen, Pat, Out, Record_Meta, 1, N, Sleep, Post, [])
     end.

@@ -1,0 +1,59 @@
+-module(erlamsa_gfcomms).
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-compile([export_all]).
+-endif.
+
+-include("erlamsa.hrl").
+
+-export([start/1]).
+
+start(Opts) when is_list(Opts) ->
+    start(maps:from_list(Opts));
+start(Opts) ->
+    random:seed(now()),
+    Log = erlamsa_logger:build_logger(Opts),
+    %% Workers = maps:get(workers, Opts, 10), %% TODO: workers count
+    Generate = erlamsa_utils:make_fuzzer(maps:get(external, Opts, nil)),
+    {_Proto, Port} = maps:get(input_endpoint, Opts),
+    Verbose = erlamsa_utils:verb(stdout, maps:get(verbose, Opts, 0)),
+    start_server(Port, Opts, Generate, Verbose, Log).
+    
+start_server(Port, Opts, Generate, Verbose, Log) ->
+    Pid = spawn_link(fun() ->
+        {ok, Listen} = gen_tcp:listen(Port, [binary, {active, false}]),
+        spawn(fun() -> server_tcp(Listen, Opts, Generate, Verbose, Log) end),
+        timer:sleep(infinity)
+        end),
+    {ok, Pid}.
+ 
+server_tcp(ListenSocket, Opts, Generate, Verbose, Log) ->
+    {ok, Socket} = gen_tcp:accept(ListenSocket),
+    spawn(fun() -> server_tcp(ListenSocket, Opts, Generate, Verbose, Log) end),
+    Verbose(io_lib:format("Got connect ~n", [])),
+    Log("new connect", []),
+    loop_tcp(Socket, Opts, Generate, Verbose, Log).
+ 
+loop_tcp(Socket, Opts, Generate, Verbose, Log) ->
+    inet:setopts(Socket, [{active, once}]),
+    receive
+        {tcp, Socket, Data} ->
+            Verbose(io_lib:format("Read: ~p ~n",[Data])),
+            Log("Read from target: ~p",[Data]),
+            {ok, ToWrite} = Generate(tcp, Data, 
+                maps:put(write_socket, 
+                    fun(DataToWrite) -> 
+                        Verbose(io_lib:format("Write: ~p ~n", [DataToWrite])),
+                        Log("Written to target: ~p", [DataToWrite]),
+                        gen_tcp:send(Socket, DataToWrite)
+                    end
+                    , Opts)),
+            Verbose(io_lib:format("Write: ~p ~n",[ToWrite])),
+            Log("Written to target: ~p",[Data]),
+            gen_tcp:send(Socket, ToWrite),
+            loop_tcp(Socket, Opts, Generate, Verbose, Log);
+        {tcp_closed, Socket} ->
+            Verbose(io_lib:format("Connection closed.~n",[])),
+            Log("Connection to target closed.",[]),
+            gen_tcp:close(Socket)
+    end.

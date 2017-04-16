@@ -35,7 +35,7 @@
 -export([rand/1, erand/1, rand_float/0, rand_bit/0, rand_occurs/1, rand_occurs_fixed/2,
 		rand_nbit/1, rand_log/1, rand_elem/1, random_block/1, 
 		random_numbers/2, random_permutation/1, rand_range/2,
-		reservoir_sample/2, rand_delta/0, rand_delta_up/0]).
+		reservoir_sample/2, rand_delta/0, rand_delta_up/0, random_bitstring/1]).
 
 %% Constants
 -define(P_WEAKLY_USUALLY_NOM, 11).
@@ -56,7 +56,7 @@ rand(N) -> random:uniform(N) - 1.
 erand(0) -> 0;
 erand(N) -> random:uniform(N).
 
-% generates random in range(L,R)
+% generates random in range [L,R)
 -spec rand_range(non_neg_integer(), non_neg_integer()) -> non_neg_integer().
 rand_range(L, R) when R>L ->
     rand(R-L) + L;
@@ -124,6 +124,11 @@ rand_elem(L) ->
 %% TODO: check byte-stream magic here, Radamsa realization is MUCH differ
 -spec random_block(non_neg_integer()) -> binary().
 random_block(N) -> random_block(N, []).
+
+%% Generate random block of bits
+random_bitstring(Bits) ->             
+    RB = rand_range(0, round(math:pow(2,Bits))),
+    <<RB:Bits>>.
 
 -spec random_block(non_neg_integer(), list(byte())) -> binary().
 random_block(0, Out) -> list_to_binary(Out);

@@ -157,7 +157,7 @@ fuzz(Proto, Prob, Opts, Data) ->
     case maps:get(external, Opts, nil) of
         nil -> fuzz(Proto, Prob, erlamsa_rnd:rand_float(), Opts, Data);
         Module -> 
-            erlang:apply(list_to_atom(Module), fuzzer, [Proto, Data, Opts])
+            erlang:apply(list_to_atom(Module), fuzzer, [Proto, Data, maps:put(fuzzprob, Prob, Opts)])
     end.
 
 fuzz(_, Prob, Rnd, _Opts, Data) when Rnd >= Prob -> {nofuzz, Data};

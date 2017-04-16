@@ -55,13 +55,16 @@ outputs() ->
 	{"[tcp|udp]://ipaddr:port", "send fuzzed data to remote tcp or udp port located at ipaddr"},
 	{"http://addr[:port]/path?params,[GET|POST],header1,...", "send fuzzed date to remote http host located at addr"}].
 
+%% GF-base modes:
+
 cmdline_optsspec() ->
 	[{help		, $h, 	"help", 		undefined, 				"show this thing"},
 	 {about		, $a, 	"about", 		undefined, 				"what is this thing"},
 	 {version	, $V, 	"version",		undefined, 				"show program version"},
 	 {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or :port, host:port for data input from net"},
-	 {external	, $e,   "external", 	string,					"external fuzzer/mutation module"},	 
+	 {external	, $e,   "external", 	string,					"external fuzzer/generation/mutation module"},	 
 	 {proxyprob	, $P,	"proxyprob",	{string, "0.0,0.0"},	"<arg>, fuzzing probability for proxy mode s->c,c->s"},
+	 {genfuzz	, $G,	"genfuzz",		float,					"<arg>, activate generation-based fuzzer, arg is base probablity"},
 	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or ip://172.16.0.1:47 or http://example.com [-]"},
 	 {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
 	 {blockscale, $b, 	"blockscale",	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize"},
@@ -140,6 +143,9 @@ parse_proxyprob_opts(ProxyProbOpts, Dict) ->
 
 parse_input_opts(InputOpts, Dict) ->
 	case string:tokens(InputOpts, ":") of
+		[Proto, ListenPort] ->
+			maps:put(input_endpoint, {Proto,
+				list_to_integer(hd(string:tokens(ListenPort, "/")))}, Dict);
 		[Proto, LPortD, RHost, RPort] ->
 			maps:put(proxy_address, {Proto,
 				list_to_integer(hd(string:tokens(LPortD, "/"))),
@@ -275,7 +281,9 @@ parse_opts([recursive|T], Dict) ->
 parse_opts([{count, N}|T], Dict) ->
 	parse_opts(T, maps:put(n, N, Dict));
 parse_opts([{blockscale, B}|T], Dict) ->
-	parse_opts(T, maps:put(blockscale, B, Dict));	
+	parse_opts(T, maps:put(blockscale, B, Dict));
+parse_opts([{genfuzz, BP}|T], Dict) ->
+	parse_opts(T, maps:put(mode, genfuzz, maps:put(genfuzz, BP, Dict)));		
 parse_opts([{workers, W}|T], Dict) ->
 	parse_opts(T, maps:put(workers, W, Dict));
 parse_opts([{sleep, Sleep}|T], Dict) ->
