@@ -9,8 +9,9 @@ sleep() ->
 	timer:sleep(infinity).
 
 main(Args) ->
-	true = code:add_pathz(filename:dirname(escript:script_name()) ++ "/ebin"),
-	true = code:add_pathz(filename:dirname(escript:script_name()) ++ "/deps/procket/ebin"),
+	RuntimeDir = filename:dirname(escript:script_name()),
+	true = code:add_pathz(RuntimeDir ++ "/ebin"),
+	true = code:add_pathz(RuntimeDir ++ "/deps/procket/ebin"),
     Dict = erlamsa_cmdparse:parse(Args),
     case maps:get(mode, Dict, stdio) of
 		genfuzz ->
