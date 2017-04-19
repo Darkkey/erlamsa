@@ -36,7 +36,7 @@
 -include("erlamsa.hrl").
 
 % API
--export([build_logger/1]).
+-export([get_timestamp/0, build_logger/1]).
 
 get_timestamp() ->
 	{_, _, Ms} = os:timestamp(),
@@ -44,19 +44,37 @@ get_timestamp() ->
     {H, Min, S} = time(),
     io_lib:format('~4..0b-~2..0b-~2..0b ~2..0b:~2..0b:~2..0b.~3..0b ~p', [Y, M, D, H, Min, S, round(Ms/1000), self()]).
 
-build_logger(Opts) -> build_logger(maps:get(logger_type, Opts, none), Opts).
+append_to_logfile(FileName, TimeStamp, LogMsg) -> 
+	file:write_file(FileName, io_lib:format("~s: ~s~n", [TimeStamp, LogMsg]), [append]).
 
-build_logger(none, _) -> 
-	fun (_, _) -> ok end;
-build_logger(file, Opts) ->
-	FileName = maps:get(logger_file, Opts, "./erlamsa.log"),
+build_logger(Opts) -> 
+	StdOutLogger = build_logger_stdout(maps:get(logger_stdout, Opts, none)),
+	StdErrLogger = build_logger_stderr(maps:get(logger_stderr, Opts, none)),
+	FileLogger = build_logger_file(maps:get(logger_file, Opts, none)),
 	fun (Fmt, Lst) ->
 		TimeStamp = get_timestamp(),
 		LogMsg = io_lib:format(Fmt, Lst),
-		file:write_file(FileName, io_lib:format("~s: ~s~n", [TimeStamp, LogMsg]), [append]),
+		StdOutLogger(TimeStamp, LogMsg),
+		StdErrLogger(TimeStamp, LogMsg),
+		FileLogger(TimeStamp, LogMsg),
 		ok
 	end.
 
+build_logger_file(none) -> 
+	fun (_, _) -> ok end;
+build_logger_file([]) -> 
+	fun (TimeStamp, LogMsg) -> append_to_logfile("./erlamsa.log", TimeStamp, LogMsg) end;
+build_logger_file(FileName) -> 
+	fun (TimeStamp, LogMsg) -> append_to_logfile(FileName, TimeStamp, LogMsg) end.
 
+build_logger_stdout(none) -> 
+	fun (_, _) -> ok end;
+build_logger_stdout(stdout) -> 
+	fun (TimeStamp, LogMsg) -> io:format("~s: ~s~n", [TimeStamp, LogMsg]) end.
+
+build_logger_stderr(none) -> 
+	fun (_, _) -> ok end;
+build_logger_stderr(stderr) -> 
+	fun (TimeStamp, LogMsg) -> io:format(standard_error, "~s: ~s~n", [TimeStamp, LogMsg]) end.
 
 

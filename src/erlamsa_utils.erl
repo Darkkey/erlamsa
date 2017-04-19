@@ -37,10 +37,10 @@
 -endif.
 
 %% API
--export([uncons/2, extract_function/1, forcell/1, last/1, get/3,
+-export([uncons/2, extract_function/1, verb/2, forcell/1, last/1, get/3,
         merge/2, hd_bin/1, tl_bin/1, choose_pri/2, is_pair/1,
         flush_bvecs/2, applynth/3, sort_by_priority/1,
-        check_empty/1, stderr_probe/2, halve/1, verb/2, error/1,
+        check_empty/1, stderr_probe/2, halve/1, error/1,
         resolve_addr/1, make_post/1, make_post/2, make_fuzzer/1]).
 
 %% l -> hd l' | error
@@ -50,17 +50,17 @@ uncons([], D) -> {D, []};
 uncons(B, _) when is_binary(B) -> {B, []};
 uncons(L, D) when is_function(L) -> uncons(L(), D).
 
--spec verb(file:io_device() | standard_error | standard_io, non_neg_integer()) -> fun().
-verb(_Fd, V) when V < 1 -> fun(X) -> X end;
-verb(stdout, _I) -> fun(X) -> io:format("~s", [X]) end;
-verb(stderr, _I) -> fun(X) -> io:format(standard_error, "~s", [X]) end;
-verb(Fd, _I) -> fun(X) -> io:format(Fd, "~s", [X]) end.
-
 %% extract function value
 -spec extract_function(any()) -> any().
 extract_function([X]) -> extract_function(X); %% <-- may be ambigious
 extract_function(X) when is_function(X) -> extract_function(X());
 extract_function(X) -> X.
+
+-spec verb(file:io_device() | standard_error | standard_io, non_neg_integer()) -> fun().
+verb(_Fd, V) when V < 1 -> fun(X) -> X end;
+verb(stdout, _I) -> fun(X) -> io:format("~s", [X]) end;
+verb(stderr, _I) -> fun(X) -> io:format(standard_error, "~s", [X]) end;
+verb(Fd, _I) -> fun(X) -> io:format(Fd, "~s", [X]) end.
 
 %% forcing ll def
 -spec forcell(list() | function()) -> any().

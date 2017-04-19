@@ -94,9 +94,11 @@ fuzzer(Dict) ->
         N =:= default ->
             fuzzer(maps:put(n, 1, Dict));
         true ->
-            random:seed(maps:get(seed, Dict)),
-            %io:write(maps:get(seed, Dict)),
-            file:write_file("./last_seed.txt", io_lib:format("~p", [maps:get(seed, Dict)])),
+            Verbose = erlamsa_utils:verb(stderr, maps:get(verbose, Dict, 0)),
+            Seed = maps:get(seed, Dict),
+            random:seed(Seed),
+            file:write_file("./last_seed.txt", io_lib:format("~p", [Seed])),
+            Verbose(io_lib:format("Random seed: ~p~n", [Seed])),
             Fail = fun(Why) -> io:write(Why), throw(Why) end,
             Muta = erlamsa_mutations:make_mutator(Mutas),
             DirectInput = maps:get(input, Dict, nil),
@@ -108,23 +110,24 @@ fuzzer(Dict) ->
             Out = erlamsa_out:string_outputs(maps:get(output, Dict, "-")),
             Post = erlamsa_utils:make_post(maps:get(external, Dict, nil)),
             Sleep = maps:get(sleep, Dict, 0),
-            fuzzer_loop(Muta, Gen, Pat, Out, Record_Meta, 1, N, Sleep, Post, [])
+            fuzzer_loop(Muta, Gen, Pat, Out, Record_Meta, Verbose, 1, N, Sleep, Post, [])
     end.
 
 -spec record_result(binary(), list()) -> list().
 record_result(<<>>, Acc) -> Acc;
 record_result(X, Acc) -> [X | Acc].
 
--spec fuzzer_loop(fun(), fun(), fun(), fun(), fun(), non_neg_integer(), non_neg_integer(), non_neg_integer() | inf, fun(), list()) -> [binary()].
-fuzzer_loop(_, _, _, _, RecordMetaFun, I, N, _, _, Acc) when is_integer(N) andalso N < I -> RecordMetaFun({close, ok}), lists:reverse(Acc); 
-fuzzer_loop(Muta, Gen, Pat, Out, RecordMetaFun, I, N, Sleep, Post, Acc) ->
+-spec fuzzer_loop(fun(), fun(), fun(), fun(), fun(), fun(), non_neg_integer(), non_neg_integer(), non_neg_integer() | inf, fun(), list()) -> [binary()].
+fuzzer_loop(_, _, _, _, RecordMetaFun, _Verbose, I, N, _, _, Acc) when is_integer(N) andalso N < I -> RecordMetaFun({close, ok}), lists:reverse(Acc); 
+fuzzer_loop(Muta, Gen, Pat, Out, RecordMetaFun, Verbose, I, N, Sleep, Post, Acc) ->
     {Ll, GenMeta} = Gen(), 
     {NewOut, Fd, OutMeta} = Out(I, [{nth, I}, GenMeta]),    
     Tmp = Pat(Ll, Muta, OutMeta),
     {NewMuta, Meta, Written, Data} = erlamsa_out:output(Tmp, Fd, Post),
-    RecordMetaFun([{written, Written}| Meta]),    
+    RecordMetaFun([{written, Written}| Meta]),  
+    Verbose(io_lib:format("output: ~p~n", [Written])),      
     timer:sleep(Sleep),
-    fuzzer_loop(NewMuta, Gen, Pat, NewOut, RecordMetaFun, I + 1, N, Sleep, Post, record_result(Data, Acc)).
+    fuzzer_loop(NewMuta, Gen, Pat, NewOut, RecordMetaFun, Verbose, I + 1, N, Sleep, Post, record_result(Data, Acc)).
 
 
 

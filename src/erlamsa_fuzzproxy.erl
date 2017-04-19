@@ -52,7 +52,7 @@ transport(Tr) -> Tr.
 start_servers(tcp, Workers, ListenSock, Opts, Verbose, Log) ->
     start_tcp_servers(Workers, ListenSock, Opts, Verbose, Log);
 start_servers(udp, _Workers, ListenSock, Opts, Verbose, Log) ->
-    Verbose(io_lib:format("Proxy worker process started, socket id ~p ~n", [ListenSock])),
+    Log("udp proxy worker process started, socket id ~p", ListenSock),
     Pid = spawn(?MODULE, loop_udp, [ListenSock, init_clientsocket, [], 0, Opts, Verbose, Log]),
     gen_udp:controlling_process(ListenSock, Pid).
 
@@ -63,11 +63,10 @@ start_tcp_servers(Workers, ListenSock, Opts, Verbose, Log) ->
 
 server_tcp(ListenSock, Opts, Verbose, Log) ->
     {Proto, _, _, DHost, DPort} = maps:get(proxy_address, Opts),
-    Verbose(io_lib:format("Proxy worker process started ~n", [])),
+    Log("tcp proxy worker process started", []),
     random:seed(now()),
     case gen_tcp:accept(ListenSock) of
         {ok, ClientSocket} ->
-            Verbose(io_lib:format("Got connect ~n", [])),
             Log("new connect(c->s)", []),
             case gen_tcp:connect(DHost, DPort,
 				 [binary, {packet,0}, {active, true}]) of
@@ -76,11 +75,13 @@ server_tcp(ListenSock, Opts, Verbose, Log) ->
                       server_tcp(ListenSock, Opts, Verbose, Log);
 		          E ->
 		              io:format("Error: connect to server failed!~n"),
+                      Log("error: worker connect to server failed!", []),
 		          E
 		      end,
 		  ok;
         Other ->
             io:format("Error: accept returned ~w~n",[Other]),
+            Log("error: accept returned ~p", [Other]),
             ok
     end.
 
@@ -95,20 +96,20 @@ loop_udp(SrvSocket, ClSocket, ClientHost, ClientPort, Opts, Verbose, Log) ->
     {ProbToClient, ProbToServer} = maps:get(proxy_probs, Opts, {0.0, 0.0}),
     receive
         {udp, SrvSocket, Host, Port, Data} = Msg ->
-            Verbose(io_lib:format("read udp client->server ~p ~p ~n",[Data, Msg])),
+            Log("read udp client->server ~p ~p ~n",[Data, Msg]),
             {_, Ret} = fuzz(udp, ProbToServer, Opts, Data),
-            Verbose(io_lib:format("wrote udp client->server ~p ~n",[Ret])),
+            Log("wrote udp client->server ~p ~n",[Ret]),
             gen_udp:send(ClSocket, ServerHost, ServerPort, Ret),
             loop_udp(SrvSocket, ClSocket, Host, Port, Opts, Verbose, Log);
         {udp, ClSocket, ServerHost, ServerPort, Data} = Msg ->
-            Verbose(io_lib:format("read udp server:->client ~p ~p ~n",[Data, Msg])),
+            Log("read udp server:->client ~p ~p ~n",[Data, Msg]),
             case ClientHost of
                 [] ->
                     loop_udp(SrvSocket, ClSocket, [], 0, Opts, Verbose, Log);
                 _Else ->
                     {_, Ret} = fuzz(udp, ProbToClient, Opts, Data),
                     gen_udp:send(SrvSocket, ClientHost, ClientPort, Ret),
-                    Verbose(io_lib:format("wrote udp server->client ~p ~n",[Ret])),
+                    Log("wrote udp server->client ~p ~n",[Ret]),
                     loop_udp(SrvSocket, ClSocket, ClientHost, ClientPort, Opts, Verbose, Log)
             end
     end.
@@ -120,29 +121,23 @@ loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose, Log) ->
     inet:setopts(ClientSocket, [{active,once}]),
     receive
         {tcp, ClientSocket, Data} ->
-	        Verbose(io_lib:format("read tcp client->server ~p ~n",[Data])),
-            Log("from client(c->s): ~p", [Data]),
+	        Log("from client(c->s): ~p", [Data]),
             {Res, Ret} = fuzz(Proto, ProbToServer, Opts, Data),
-            Verbose(io_lib:format("wrote tcp client->server ~p (fuzzing = ~p) ~n",[Ret, Res])),
             gen_tcp:send(ServerSocket, Ret),
-            Log("from fuzzer(c->s) [~p]: ~p", [Res, Ret]),
+            Log("from fuzzer(c->s) [fuzzing = ~p]: ~p", [Res, Ret]),
             loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose, Log);
         {tcp, ServerSocket, Data} ->
-            Verbose(io_lib:format("read tcp server->client ~p ~n", [Data])),
             Log("from server(s->c): ~p", [Data]),
             {Res, Ret} = fuzz(Proto, ProbToClient, Opts, Data),
-            Verbose(io_lib:format("wrote tcp server->client ~p (fuzzing = ~p) ~n", [Ret, Res])),
             gen_tcp:send(ClientSocket, Ret),
-            Log("from fuzzer(s->c) [~p]: ~p", [Res, Ret]),
+            Log("from fuzzer(s->c) [fuzzing = ~p]: ~p", [Res, Ret]),
             loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose, Log);
         {tcp_closed, ClientSocket} ->
             gen_tcp:close(ServerSocket),
-            Verbose(io_lib:format("client socket ~w closed [~w]~n", [ClientSocket, self()])),
             Log("client close (c->s)", []),
             ok;
         {tcp_closed, ServerSocket}->
             gen_tcp:close(ClientSocket),
-            Verbose(io_lib:format("server socket ~w closed [~w]~n",[ServerSocket,self()])),
             Log("server close (s->c)", []),
             ok
     end.

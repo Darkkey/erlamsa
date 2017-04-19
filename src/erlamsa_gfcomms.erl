@@ -30,7 +30,6 @@ start_server(Port, Opts, Generate, Verbose, Log) ->
 server_tcp(ListenSocket, Opts, Generate, Verbose, Log) ->
     {ok, Socket} = gen_tcp:accept(ListenSocket),
     spawn(fun() -> server_tcp(ListenSocket, Opts, Generate, Verbose, Log) end),
-    Verbose(io_lib:format("Got connect ~n", [])),
     Log("new connect", []),
     loop_tcp(Socket, Opts, Generate, Verbose, Log).
  
@@ -38,22 +37,18 @@ loop_tcp(Socket, Opts, Generate, Verbose, Log) ->
     inet:setopts(Socket, [{active, once}]),
     receive
         {tcp, Socket, Data} ->
-            Verbose(io_lib:format("Read: ~p ~n",[Data])),
             Log("Read from target: ~p",[Data]),
             {ok, ToWrite} = Generate(tcp, Data, 
                 maps:put(write_socket, 
                     fun(DataToWrite) -> 
-                        Verbose(io_lib:format("Write: ~p ~n", [DataToWrite])),
                         Log("Written to target: ~p", [DataToWrite]),
                         gen_tcp:send(Socket, DataToWrite)
                     end
                     , Opts)),
-            Verbose(io_lib:format("Write: ~p ~n",[ToWrite])),
-            Log("Written to target: ~p",[Data]),
+            Log("Written to target: ~p",[ToWrite]),
             gen_tcp:send(Socket, ToWrite),
             loop_tcp(Socket, Opts, Generate, Verbose, Log);
         {tcp_closed, Socket} ->
-            Verbose(io_lib:format("Connection closed.~n",[])),
             Log("Connection to target closed.",[]),
             gen_tcp:close(Socket)
     end.

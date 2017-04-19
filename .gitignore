@@ -10,3 +10,4 @@ rel/example_project
 .rebar
 .DS_Store
 last_seed.txt
+TODO.txt

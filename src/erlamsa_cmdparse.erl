@@ -77,10 +77,10 @@ cmdline_optsspec() ->
 	 {generators, $g,	"generators",	{string,
 	 						erlamsa_gen:tostring(		erlamsa_gen:generators())},		"<arg>, which data generators to use"},
 	 {meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"},
-	 {logger	, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename"},
+	 {logger	, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename or stdout (-) or stderr (-err)"},
 	 {workers	, $w, 	"workers",		{integer, 10},			"<arg>, number of workers in server mode"},
 %	 {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},	 
-	 {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose"},
+	 {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose, show some progress during generation"},
 	 {list		, $l,	"list",			undefined,				"list i/o options, mutations, patterns and generators"}].
 
 usage() ->
@@ -126,12 +126,25 @@ process_action(Name, [_, Pri], _DefaultPri) ->
 process_action(Name, _, DefaultPri) ->
 	{Name, DefaultPri}.
 
-parse_logger_opts(LogOpts, Dict) ->
-	case string:tokens(LogOpts, "=") of
+
+parse_logger_opts(LogOpts, Dict) -> 
+	parse_logger_opt(string:tokens(LogOpts, ","), Dict).
+
+parse_logger_opt(["-"|T], Dict) ->
+	parse_logger_opt(T, maps:put(logger_stdout, stdout, Dict));
+parse_logger_opt(["stdout"|T], Dict) ->
+	parse_logger_opt(T, maps:put(logger_stdout, stdout, Dict));
+parse_logger_opt(["stderr"|T], Dict) ->
+	parse_logger_opt(T, maps:put(logger_stderr, stderr, Dict));
+parse_logger_opt(["-err"|T], Dict) ->
+	parse_logger_opt(T, maps:put(logger_stderr, stderr, Dict));
+parse_logger_opt([], Dict) ->
+	Dict;
+parse_logger_opt([LogOpt|T], Dict) ->
+	case string:tokens(LogOpt, "=") of
 		["file", FName] ->
-			maps:put(logger_file, FName,
-				maps:put(logger_type, file, Dict));
-		_Else -> fail(io_lib:format("invalid logger specification: '~s'", [LogOpts]))
+			parse_logger_opt(T, maps:put(logger_file, FName, Dict));
+		_Else -> fail(io_lib:format("invalid logger specification: '~s'", [LogOpt]))
 	end.
 
 parse_proxyprob_opts(ProxyProbOpts, Dict) ->
