@@ -61,9 +61,9 @@ cmdline_optsspec() ->
 	[{help		, $h, 	"help", 		undefined, 				"show this thing"},
 	 {about		, $a, 	"about", 		undefined, 				"what is this thing"},
 	 {version	, $V, 	"version",		undefined, 				"show program version"},
-	 {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or :port, host:port for data input from net"},
-	 {external	, $e,   "external", 	string,					"external fuzzer/generation/mutation module"},	 
-	 {proxyprob	, $P,	"proxyprob",	{string, "0.0,0.0"},	"<arg>, fuzzing probability for proxy mode s->c,c->s"},
+	 {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or proto://:port, proto://host:port for data endpoint (generation mode/FAAS)"},
+	 {external	, $e,   "external", 	string,					"external pre/post/generation/mutation module"},	 
+	 {proxyprob	, $P,	"proxy",		{string, "0.0,0.0"},	"<arg>, activate proxy mode, param is fuzzing probability in form of s->c,c->s e.g.: 0.5,0.5"},
 	 {genfuzz	, $G,	"genfuzz",		float,					"<arg>, activate generation-based fuzzer, arg is base probablity"},
 	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or ip://172.16.0.1:47 or http://example.com [-]"},
 	 {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
@@ -78,7 +78,7 @@ cmdline_optsspec() ->
 	 						erlamsa_gen:tostring(		erlamsa_gen:generators())},		"<arg>, which data generators to use"},
 	 {meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"},
 	 {logger	, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename or stdout (-) or stderr (-err)"},
-	 {workers	, $w, 	"workers",		{integer, 10},			"<arg>, number of workers in server mode"},
+	 {workers	, $w, 	"workers",		integer, 				"<arg>, number of working threads"},
 %	 {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},	 
 	 {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose, show some progress during generation"},
 	 {list		, $l,	"list",			undefined,				"list i/o options, mutations, patterns and generators"}].
@@ -98,6 +98,17 @@ parse_actions(List, OptionName, Default, Dict) ->
 		{fail, Reason} ->
 			fail(Reason)
 	end.
+
+set_defaults(Dict) ->
+	Workers = 
+		case maps:get(mode, Dict, stdio) of
+			genfuzz ->   3;
+			proxy   -> 	10;    	
+			stdio   ->   1;
+			faas 	->	10;	
+			_Else   ->	 1
+		end,
+	maps:put(workers, maps:get(workers, Dict, Workers), Dict).
 
 -spec string_to_actions(string(), string(), [tuple()]) -> {ok, [tuple()]} | {fail, string()}.
 string_to_actions(Lst, What, DefaultLst) ->
@@ -322,4 +333,4 @@ parse_opts([{seed, SeedOpts}|T], Dict) ->
 parse_opts([_|T], Dict) ->
 	parse_opts(T, Dict);
 parse_opts([], Dict) ->
-	Dict.
+	set_defaults(Dict).

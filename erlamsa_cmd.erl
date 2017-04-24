@@ -22,6 +22,8 @@ main(Args) ->
     		sleep();
     	stdio ->    		
     		erlamsa_main:fuzzer(Dict), timer:sleep(1);
+		faas ->
+			io:format("Mode not supported yet!");
     	_Else -> 
-    		io:format("Mode not supported yet!")
+    		io:format("Invalid mode.")
     end.

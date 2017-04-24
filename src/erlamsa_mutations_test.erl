@@ -110,7 +110,7 @@ ascii_delimeter_test() ->
 sed_fuse_this_test() ->	
 	?assert(recursive_regex_tester(
 		"kittenslartibartfasterthaneelslartibartfastenyourseatbelts",
-		"kittenslartibartfastenyourseatbelts", fun erlamsa_mutations:sed_fuse_this/2, 60
+		"kittenslartibartfastenyourseatbelts", fun erlamsa_mutations:sed_fuse_this/2, 120
 		) =:= true). 
 
 %%

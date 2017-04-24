@@ -39,7 +39,19 @@
 -export([test/0, test/1, test_input/1, fuzzer/1]).
 
 -spec urandom_seed() -> {non_neg_integer(), non_neg_integer(), non_neg_integer()}.
-urandom_seed() -> list_to_tuple(lists:map(fun(_) -> lists:foldl(fun(X, A) -> X + (A bsl 8) end, 0, binary_to_list(crypto:rand_bytes(2))) end, lists:seq(1,3))).
+urandom_seed() -> 
+    list_to_tuple(
+        lists:map(
+            fun(_) -> 
+                lists:foldl(
+                    fun(X, A) -> X + (A bsl 8) end, 
+                    0, 
+                    binary_to_list(crypto:strong_rand_bytes(2))
+                ) 
+            end, 
+            lists:seq(1,3)
+        )
+    ).
 
 -spec maybe_meta_logger(string() | atom(), fun()) -> fun().
 maybe_meta_logger(Path, _) ->  

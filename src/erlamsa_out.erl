@@ -67,7 +67,7 @@ rawsock_writer(Addr, Proto) ->
                 {ok, Sock} = gen_udp:open(0, [binary, {fd, FD}]),        
                 {F, {net, 
                     fun (Data) -> gen_udp:send(Sock, Addr, 0, Data) end,                
-                    fun () -> gen_udp:close(Sock), procket:close(FD), ok end %% TODO: ugly timeout before closing..., should be in another thread
+                    fun () -> gen_udp:close(Sock), procket:close(FD), ok end 
                 }, [{output, tcpsock} | Meta]};
             _Else -> 
                 Err = lists:flatten(io_lib:format("Error creating raw socket to ip://~s:~p '~s'", [Addr, Proto, FD])), 
@@ -113,11 +113,11 @@ http_writer({Host, Port, Path, Query, ["GET",Param|T]}) ->
 http_writer({Host, Port, Path, Query, [Type | T]}) -> 
     make_http_writer(Host, Port, Path, Query, Type, "", T).
 
-%% TODO: add spec
+-spec make_host_header(string()) -> binary(). 
 make_host_header(Host) ->
     list_to_binary("Host: " ++ Host ++ [13,10]).
 
-%% TODO: add spec
+-spec create_http_header_maker(string(), string(), string(), string(), string(), string()) -> binary(). 
 create_http_header_maker(Host, "GET", "", Path, Query, Headers) ->
     First = "GET " ++ Path ++ Query,  
     HostHeader = make_host_header(Host),
@@ -143,7 +143,7 @@ http_headers([H|T], Acc) ->
 http_headers([], Acc) ->
     flush(Acc).
     
-%% TODO: FIXME: check correct format of data
+%% TODO: FIXME: check correct format of data (http domain name?)
 -spec make_http_writer(inet:ip_address(), inet:port_number(), string(), string(), string(), string(), list(string())) -> fun().
 make_http_writer(Host, Port, Path, Query, Type, Param, Options) ->
     Maker = create_http_header_maker(Host, Type, Param, Path, Query, http_headers(Options, [])), %% TODO:fixme with re
@@ -159,7 +159,6 @@ make_http_writer(Host, Port, Path, Query, Type, Param, Options) ->
         [{output, http} | Meta]}
     end.
 
-%% TODO: possibly add tcp, udp, files, multiple files output.
 -spec string_outputs(string()) -> fun().
 string_outputs(Str) ->
     case Str of
