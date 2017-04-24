@@ -1,0 +1,2 @@
+#!/bin/sh 
+escript erlamsa_cmd.erl "$@"

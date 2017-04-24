@@ -1,0 +1,1 @@
+escript erlamsa_cmd.erl %*
