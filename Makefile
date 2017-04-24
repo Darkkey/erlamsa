@@ -1,3 +1,6 @@
+test:
+	./rebar eu
+
 compile:
 	./rebar compile
 
