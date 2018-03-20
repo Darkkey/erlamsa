@@ -1,3 +1,5 @@
+default: compile test
+
 test:
 	./rebar eu
 

@@ -52,7 +52,7 @@ transport(Tr) -> Tr.
 start_servers(tcp, Workers, ListenSock, Opts, Verbose, Log) ->
     start_tcp_servers(Workers, ListenSock, Opts, Verbose, Log);
 start_servers(udp, _Workers, ListenSock, Opts, Verbose, Log) ->
-    Log("udp proxy worker process started, socket id ~p", ListenSock),
+    Log("udp proxy worker process started, socket id ~p", [ListenSock]),
     Pid = spawn(?MODULE, loop_udp, [ListenSock, init_clientsocket, [], 0, Opts, Verbose, Log]),
     gen_udp:controlling_process(ListenSock, Pid).
 
@@ -71,7 +71,7 @@ server_tcp(ListenSock, Opts, Verbose, Log) ->
             case gen_tcp:connect(DHost, DPort,
 				 [binary, {packet,0}, {active, true}]) of
 		          {ok, ServerSocket} ->
-		              loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose, Log),
+		              loop_tcp(list_to_atom(Proto), ClientSocket, ServerSocket, Opts, Verbose, Log),
                       server_tcp(ListenSock, Opts, Verbose, Log);
 		          E ->
 		              io:format("Error: connect to server failed!~n"),
@@ -117,7 +117,6 @@ loop_udp(SrvSocket, ClSocket, ClientHost, ClientPort, Opts, Verbose, Log) ->
 
 loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose, Log) ->
     {ProbToClient, ProbToServer} = maps:get(proxy_probs, Opts, {0.0, 0.0}),
-    _Log = maps:get(logger, Opts, fun (X) -> X end), %% ????
     inet:setopts(ClientSocket, [{active,once}]),
     receive
         {tcp, ClientSocket, Data} ->
@@ -142,11 +141,46 @@ loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose, Log) ->
             ok
     end.
 
-%% TODO: Stubs
-extract_http(Data) ->
-    {"POST", [], Data}.
-pack_http(_Query, _Hdr, Data) ->
-    Data.
+
+extract_http(Data, Log) ->
+    case erlang:decode_packet(http, Data, []) of 
+        {ok, Query, Rest} ->
+            extract_http_headers(Rest, Log, [Query]);
+        Err ->
+            Log("Invalid HTTP packet?: ~p~n", [Err]),
+            {ok, [], Data}
+    end.
+extract_http_headers(Data, Log, Acc) ->
+    io:format("Incoming:~p~n", [Data]),
+    case erlang:decode_packet(httph, Data, []) of
+        {ok, http_eoh, Rest} ->
+            {ok, Acc, Rest};
+        {ok, Hdr, Rest} ->
+            extract_http_headers(Rest, Log, [Hdr | Acc]);
+        {more, undefined} ->
+            {more, Acc, Data};
+        Err ->
+            Log("Error parsing HTTP header: ~p~n", [Err]),
+            {ok, Acc, Data}
+    end.
+
+pack_http(more, Headers, Data, Log) ->
+    pack_http_packet(Headers, Data, Log, []);
+pack_http(ok, Headers, Data, Log) ->
+    pack_http_packet(Headers, Data, Log, [[10, 13]]).
+
+pack_http_packet([{http_header, _, 'Content-Length', _, _}|T], Data, Log, Acc) ->
+    Len = size(Data),
+    pack_http_packet(T, Data, Log, [list_to_binary(io_lib:format("Content-Length: ~p~c~n", [Len, 13])) | Acc]);
+pack_http_packet([{http_header, _, HdrName, _, HdrValue}|T], Data, Log, Acc) ->
+    pack_http_packet(T, Data, Log, [list_to_binary(io_lib:format("~s: ~s~c~n", [atom_to_list(HdrName), HdrValue, 13])) | Acc]);
+pack_http_packet([{http_response, {VerMajor, VerMinor}, Code, Status}|T], Data, Log, Acc) ->
+    pack_http_packet(T, Data, Log, [list_to_binary(io_lib:format("HTTP ~p.~p ~p ~s~c~n", [VerMajor, VerMinor, Code, Status, 13])) | Acc]);
+pack_http_packet([{http_error, ErrHdr}|T], Data, Log, Acc) ->
+    pack_http_packet(T, Data, Log, [ErrHdr | Acc]);   
+pack_http_packet([], Data, Log, Acc) ->
+    Hdr = list_to_binary(Acc),
+    <<Hdr/binary, Data/binary>>.
 
 fuzz(Proto, Prob, Opts, Data) ->
     case maps:get(external, Opts, nil) of
@@ -156,9 +190,10 @@ fuzz(Proto, Prob, Opts, Data) ->
     end.
 
 fuzz(_, Prob, Rnd, _Opts, Data) when Rnd >= Prob -> {nofuzz, Data};
-fuzz(http, Prob, _Rnd, Opts, Data) ->
-    {Query, HTTPHeaders, HTTPData} = extract_http(Data),
-    {ok, pack_http(Query, HTTPHeaders, call_fuzzer(Prob, Opts, HTTPData))};
+fuzz(http, Prob, _Rnd, Opts, Data) -> 
+    Log = erlamsa_logger:build_logger(Opts),
+    {Status, HTTPHeaders, HTTPData} = extract_http(Data, Log),
+    {ok, pack_http(Status, HTTPHeaders, call_fuzzer(Prob, Opts, HTTPData), Log)};
 fuzz(_Proto, Prob, _Rnd, Opts, Data) ->
     {ok, call_fuzzer(Prob, Opts, Data)}.
 
