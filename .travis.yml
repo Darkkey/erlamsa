@@ -1,9 +1,7 @@
 language: erlang 
 os:
   - linux
-  - osx
 otp_release:
   - 19.3
   - 18.1
   - 18.0
-  - 17.5
