@@ -13,7 +13,7 @@ main(Args) ->
 	true = code:add_pathz(RuntimeDir ++ "/ebin"),
 	true = code:add_pathz(RuntimeDir ++ "/deps/procket/ebin"),
     Dict = erlamsa_cmdparse:parse(Args),
-	Pid = spawn(erlamsa_fsupervisor, start, [maps:get(maxrunningtime, Dict, 10)]),
+	Pid = spawn(erlamsa_fsupervisor, start, [maps:get(maxrunningtime, Dict, 30)]),
     global:register_name(fuzzing_supervisor, Pid),
     case maps:get(mode, Dict, stdio) of
 		genfuzz ->

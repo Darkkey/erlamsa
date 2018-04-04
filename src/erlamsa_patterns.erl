@@ -38,9 +38,26 @@
 %% API
 -export([make_pattern/1, default/0, patterns/0, tostring/1]).
 
--define(MAX_BURST_MUTATIONS, 16).
-
 -type mutator_cont_fun() :: fun((any(), mutator(), meta_list()) -> list()).
+
+%% during mutation a very large block could appear, here we splitting it into
+%% blocks that could be processed by erlang bitstring engine
+split_into_maxblocks(This, Acc) when byte_size(This) > ?ABSMAX_BINARY_BLOCK -> 
+    S = ?ABSMAXHALF_BINARY_BLOCK,
+    AS = (S + erlamsa_rnd:rand(S) - 1)*8, 
+    <<A:AS, B/binary>> = This,
+    split_into_maxblocks(B, [<<A:AS>> | Acc]);
+split_into_maxblocks(This, Acc) ->
+    [This | Acc].
+
+split(U = {false, _LlN}) ->
+    U;
+split({This, LlN}) when is_binary(This), byte_size(This) > ?ABSMAX_BINARY_BLOCK ->
+    Lst = split_into_maxblocks(This, []),
+    [H |T] = erlamsa_utils:cons_revlst(Lst, LlN),
+    {H, T};
+split(U) ->
+    U.
 
 %% Ll -- list of smth
 %% TODO: WARNING: Ll could be a function in Radamsa terms
@@ -49,7 +66,7 @@
 -spec mutate_once(any(), mutator(), meta_list(), mutator_cont_fun()) -> list().
 mutate_once(Ll, Mutator, Meta, Cont) ->
     Ip = erlamsa_rnd:rand(?INITIAL_IP),
-    {This, LlN} = erlamsa_utils:uncons(Ll, false),
+    {This, LlN} = split(erlamsa_utils:uncons(Ll, false)),
     if
         This /= false ->
             mutate_once_loop(Mutator, Meta, Cont, Ip, This, LlN);

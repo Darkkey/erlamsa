@@ -228,7 +228,7 @@ construct_sed_byte_random() ->  %% swap a byte with a random one
 construct_sed_bytes_muta(F, Name) ->
     fun 
     Self([<<>>|BTail], Meta) -> 
-        {Self, BTail, [{Name, -1}|Meta], -1};
+        {Self, [<<>>|BTail], [{Name, -1}|Meta], -1};
     Self([BVec|BTail], Meta) ->        
         BSize = byte_size(BVec),        
         S = erlamsa_rnd:rand(BSize), 
@@ -310,7 +310,7 @@ construct_sed_bytes_randmask(MaskFun) -> %% permute a few bytes
             C = list_to_binary(
                       randmask(MaskFun, binary_to_list(Bs))),
             [<<H/binary, C/binary, T/binary>> | BTail]
-        end, seq_perm).
+        end, seq_randmask).
 
 %%
 %% Lines
@@ -888,7 +888,7 @@ funny_unicode() ->
     Manual ++ lists:map(fun (X) -> encode_point(X) end, Numbers).
 
 -spec sed_utf8_widen(list_of_bins(), meta_list()) -> mutation_res().
-sed_utf8_widen([H|T], Meta) ->    
+sed_utf8_widen([H|T], Meta) -> 
     P = erlamsa_rnd:rand(size(H)),
     D = erlamsa_rnd:rand_delta(),
     {fun sed_utf8_widen/2, 
@@ -899,7 +899,7 @@ sed_utf8_widen([H|T], Meta) ->
       | T], [{sed_utf8_widen, D}|Meta], D}.
 
 -spec sed_utf8_insert(list_of_bins(), meta_list()) -> mutation_res().
-sed_utf8_insert([H|T], Meta) ->    
+sed_utf8_insert([H|T], Meta) ->  
     P = erlamsa_rnd:rand(size(H)),
     D = erlamsa_rnd:rand_delta(),
     Bin = list_to_binary(erlamsa_rnd:rand_elem(funny_unicode())),
@@ -940,14 +940,18 @@ weighted_permutations(Pris) ->
 -spec mux_fuzzers([mutation()]) -> fun().
 %% (#(score priority mutafn name) ...) -> merged-mutafn :: rs ll meta -> merged-mutafn' rs' ll' meta'
 mux_fuzzers(Fs) ->
-    fun L([], Meta) -> {mux_fuzzers(Fs), <<>>, Meta};
-        L(Ll, Meta) when is_list(Ll) ->
-            mux_fuzzers_loop(Ll, weighted_permutations(Fs), [], Meta) ;
-        L(Ll, Meta) when is_function(Ll) -> L(Ll(), Meta) %% TODO: strange behaviour
+    fun 
+        L([<<>>],   Meta) -> {mux_fuzzers(Fs), [<<>>], Meta}; %% TODO: if some mutation goes wrong, these could be infinite loop; redesign in future
+        L([],   Meta) -> {mux_fuzzers(Fs), <<>>, Meta};
+        L(Ll,   Meta) when is_list(Ll) ->
+            mux_fuzzers_loop(Ll, weighted_permutations(Fs), [], Meta);
+        L(Ll,   Meta) when is_function(Ll) -> L(Ll(), Meta) %% TODO: strange behaviour
     end.
 
 -spec mux_fuzzers_loop(lazy_list_of_bins(), [mutation()], [mutation()], meta_list()) -> {fun(), lazy_list_of_bins(), meta_list()}.
 mux_fuzzers_loop(Ll, [], Out, Meta) -> {mux_fuzzers(Out), Ll, Meta};
+mux_fuzzers_loop(Ll = [H|_T], [_Node|Tail], Out, Meta) when is_binary(H), byte_size(H) > 1000000 ->
+    {mux_fuzzers(Out ++ Tail), Ll, [{skipped_big, byte_size(H)} | Meta]};
 mux_fuzzers_loop(Ll, [Node|Tail], Out, Meta) ->
     {Mscore, MPri, Fn, Mname} = Node,
     Res = Fn(Ll, Meta),

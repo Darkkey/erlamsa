@@ -38,7 +38,7 @@ handle_command(List) ->
         {add, NewFuzzerProcessPid} -> 
             List ++ [{erlang:system_time(second), NewFuzzerProcessPid}]            
     after 
-        950 ->
+        100 ->
             List
     end.
 

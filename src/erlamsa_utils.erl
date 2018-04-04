@@ -37,11 +37,16 @@
 -endif.
 
 %% API
--export([uncons/2, extract_function/1, verb/2, forcell/1, last/1, get/3,
+-export([cons_revlst/2, uncons/2, extract_function/1, verb/2, forcell/1, last/1, get/3,
         merge/2, hd_bin/1, tl_bin/1, choose_pri/2, is_pair/1,
         flush_bvecs/2, applynth/3, sort_by_priority/1,
         check_empty/1, stderr_probe/2, halve/1, error/1,
         resolve_addr/1, make_post/1, make_post/2, make_fuzzer/1]).
+
+cons_revlst([H|T], L) ->
+    cons_revlst(T, [H|L]);
+cons_revlst([], L) ->
+    L.
 
 %% l -> hd l' | error
 -spec uncons(list() | binary() | fun(), any()) -> any().
