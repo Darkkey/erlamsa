@@ -109,7 +109,6 @@ fuzzer(Dict) ->
             Verbose = erlamsa_utils:verb(stderr, maps:get(verbose, Dict, 0)),
             Seed = maps:get(seed, Dict),
             random:seed(Seed),
-            io:format("Seed for ~p is ~p~n", [self(), Seed]),
             file:write_file("./last_seed.txt", io_lib:format("~p", [Seed])),
             Verbose(io_lib:format("Random seed: ~p~n", [Seed])),
             Fail = fun(Why) -> io:write(Why), throw(Why) end,
