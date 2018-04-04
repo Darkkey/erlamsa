@@ -950,7 +950,7 @@ mux_fuzzers(Fs) ->
 
 -spec mux_fuzzers_loop(lazy_list_of_bins(), [mutation()], [mutation()], meta_list()) -> {fun(), lazy_list_of_bins(), meta_list()}.
 mux_fuzzers_loop(Ll, [], Out, Meta) -> {mux_fuzzers(Out), Ll, Meta};
-mux_fuzzers_loop(Ll = [H|_T], [_Node|Tail], Out, Meta) when is_binary(H), byte_size(H) > 1000000 ->
+mux_fuzzers_loop(Ll = [H|_T], [_Node|Tail], Out, Meta) when is_binary(H), byte_size(H) > ?ABSMAX_BINARY_BLOCK ->
     {mux_fuzzers(Out ++ Tail), Ll, [{skipped_big, byte_size(H)} | Meta]};
 mux_fuzzers_loop(Ll, [Node|Tail], Out, Meta) ->
     {Mscore, MPri, Fn, Mname} = Node,
