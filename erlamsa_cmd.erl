@@ -13,6 +13,8 @@ main(Args) ->
 	true = code:add_pathz(RuntimeDir ++ "/ebin"),
 	true = code:add_pathz(RuntimeDir ++ "/deps/procket/ebin"),
     Dict = erlamsa_cmdparse:parse(Args),
+	Pid = spawn(erlamsa_fsupervisor, start, [maps:get(maxrunningtime, Dict, 10)]),
+    global:register_name(fuzzing_supervisor, Pid),
     case maps:get(mode, Dict, stdio) of
 		genfuzz ->
 			erlamsa_gfcomms:start(Dict),
@@ -23,7 +25,9 @@ main(Args) ->
     	stdio ->    		
     		erlamsa_main:fuzzer(Dict), timer:sleep(1);
 		httpsvc ->
-			erlamsa_httpsvc:start(maps:get(svchost, Dict, "localhost"), maps:get(svcport, Dict, 17771)),
+			erlamsa_httpsvc:start(maps:get(svchost, Dict, "localhost"), 
+								  maps:get(svcport, Dict, 17771)								  
+								),
 			sleep();
 		faas ->
 			io:format("Mode not supported yet!");
