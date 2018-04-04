@@ -39,9 +39,12 @@
 -export([parse/1, usage/0]).
 
 about() ->
-	"Erlamsa is an erlang port of famous Radams fuzzer. Radamsa is
+	"Erlamsa is an erlang port of famous Radamsa fuzzer. Radamsa is
 a general purpose fuzzer. It modifies given sample data in ways,
 which might expose errors in programs intended to process the data.
+Erlamsa use same fuzzing engine as Radamsa, however extends functionality
+with additional features like proxy, JSON fuzzing service, generational
+fuzzing, SGML fuzzer and more.
 
 Radamsa was written by Aki Helin at OUSPG.
 Erlamsa is written by Alexander Bolshev (@dark_k3y).~n".
@@ -59,11 +62,12 @@ outputs() ->
 
 cmdline_optsspec() ->
 	[{help		, $h, 	"help", 		undefined, 				"show this thing"},
+	 {httpsvc   , $H,   "httpservice",  string,				    "<arg>, run as HTTP service on <host:port>, e.g.: 127.0.0.1:17771"},
 	 {about		, $a, 	"about", 		undefined, 				"what is this thing"},
 	 {version	, $V, 	"version",		undefined, 				"show program version"},
 	 {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or proto://:port, proto://host:port for data endpoint (generation mode/FAAS)"},
 	 {external	, $e,   "external", 	string,					"external pre/post/generation/mutation module"},	 
-	 {proxyprob	, $P,	"proxy",		{string, "0.0,0.0"},	"<arg>, activate proxy mode, param is fuzzing probability in form of s->c,c->s e.g.: 0.5,0.5"},
+	 {proxyprob	, $P,	"proxy",		string,					"<arg>, activate proxy mode, param is fuzzing probability in form of s->c,c->s e.g.: 0.5,0.5"},
 	 {genfuzz	, $G,	"genfuzz",		float,					"<arg>, activate generation-based fuzzer, arg is base probablity"},
 	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or ip://172.16.0.1:47 or http://example.com [-]"},
 	 {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
@@ -80,7 +84,7 @@ cmdline_optsspec() ->
 	 {logger	, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename or stdout (-) or stderr (-err)"},
 	 {workers	, $w, 	"workers",		integer, 				"<arg>, number of working threads"},
 %	 {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},	 
-	 {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose, show some progress during generation"},
+	 {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose, show some progress during generation"},	 
 	 {list		, $l,	"list",			undefined,				"list i/o options, mutations, patterns and generators"}].
 
 usage() ->
@@ -245,7 +249,7 @@ parse_seed_opt(Seed, Dict) ->
 parse(Args) ->
 	case getopt:parse(cmdline_optsspec(), Args) of
 		{ok, {Opts, Files}} -> parse_tokens(Opts, Files);
-		_Else -> usage(), halt(-1)
+		_Else -> usage(), halt(1)
 	end.
 
 parse_tokens(Opts, []) ->
@@ -256,6 +260,14 @@ parse_tokens(Opts, Paths) ->
 parse_opts([help|_T], _Dict) ->
 	usage(),
 	halt(0);
+parse_opts([{httpsvc, HostPort}|T], Dict) ->	
+	case string:tokens(HostPort, ":") of
+		[Host, Port] -> 
+			parse_opts(T, maps:put(svchost, Host,
+					maps:put(svcport, list_to_integer(Port),
+						maps:put(mode, httpsvc, Dict))));
+		_ -> fail("Invalid listen endpoint format, usage host:port")
+	end;
 parse_opts([version|_T], _Dict) ->
 	io:format("Erlamsa ~s~n", [?VERSION]),
 	halt(0);

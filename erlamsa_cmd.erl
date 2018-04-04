@@ -22,6 +22,9 @@ main(Args) ->
     		sleep();
     	stdio ->    		
     		erlamsa_main:fuzzer(Dict), timer:sleep(1);
+		httpsvc ->
+			erlamsa_httpsvc:start(maps:get(svchost, Dict, "localhost"), maps:get(svcport, Dict, 17771)),
+			sleep();
 		faas ->
 			io:format("Mode not supported yet!");
     	_Else -> 
