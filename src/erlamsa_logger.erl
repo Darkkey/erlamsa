@@ -36,13 +36,17 @@
 -include("erlamsa.hrl").
 
 % API
--export([get_timestamp/0, build_logger/1]).
+-export([get_timestamp/0, build_logger/1, start/1, logger/1, log/2]).
+
+log(Fmt, Lst) ->
+	global:send(logger, {log, self(), Fmt, Lst}).
 
 get_timestamp() ->
+	Pid = self(),
 	{_, _, Ms} = os:timestamp(),
 	{Y, M, D} = date(),
     {H, Min, S} = time(),
-    io_lib:format('~4..0b-~2..0b-~2..0b ~2..0b:~2..0b:~2..0b.~3..0b ~p', [Y, M, D, H, Min, S, round(Ms/1000), self()]).
+    io_lib:format('~4..0b-~2..0b-~2..0b ~2..0b:~2..0b:~2..0b.~3..0b ~p', [Y, M, D, H, Min, S, round(Ms/1000), Pid]).
 
 append_to_logfile(FileName, TimeStamp, LogMsg) -> 
 	file:write_file(FileName, io_lib:format("~s: ~s~n", [TimeStamp, LogMsg]), [append]).
@@ -78,3 +82,13 @@ build_logger_stderr(stderr) ->
 	fun (TimeStamp, LogMsg) -> io:format(standard_error, "~s: ~s~n", [TimeStamp, LogMsg]) end.
 
 
+start(Log) ->
+    Pid = spawn(erlamsa_logger, logger, [Log]),
+    global:register_name(logger, Pid).
+
+logger(Log) ->    
+    receive
+        {log, Pid, Fmt, Lst} -> 
+            Log(Fmt, Lst)           
+    end,
+	logger(Log).
