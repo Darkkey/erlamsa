@@ -41,7 +41,11 @@
         merge/2, hd_bin/1, tl_bin/1, choose_pri/2, is_pair/1,
         flush_bvecs/2, applynth/3, sort_by_priority/1,
         check_empty/1, stderr_probe/2, halve/1, error/1,
-        resolve_addr/1, make_post/1, make_post/2, make_fuzzer/1]).
+        resolve_addr/1, make_post/1, make_post/1, make_fuzzer/1, make_mutas/1,
+        load_deps/1]).
+
+load_deps(RuntimeDir) ->
+	true and ?LOAD_PROCKET(RuntimeDir).         
 
 cons_revlst([H|T], L) ->
     cons_revlst(T, [H|L]);
@@ -182,16 +186,18 @@ resolve_addr(Host) ->
     {ok, Address} = inet:getaddr(Host, inet),
     Address.
 
-%% TODO: beautify the code below.
-make_post(nil, _FuncName) ->
+make_post(nil) ->
     fun (Data) -> Data end;
-make_post(ModuleName, FuncName) ->
-    fun (Data) -> erlang:apply(list_to_atom(ModuleName), FuncName, [Data]) end.
+make_post(ModuleName) ->
+    fun (Data) -> erlang:apply(list_to_atom(ModuleName), post, [Data]) end.
 
 make_fuzzer(nil) ->
     fun (_Proto, Data, _Opts) -> Data end;
 make_fuzzer(ModuleName) ->
     fun (Proto, Data, Opts) -> erlang:apply(list_to_atom(ModuleName), fuzzer, [Proto, Data, Opts]) end.
 
-make_post(ModuleName) ->
-    make_post(ModuleName, post).
+make_mutas(nil) ->
+    [];
+make_mutas(ModuleName) ->
+    erlang:apply(list_to_atom(ModuleName), mutations, []).
+

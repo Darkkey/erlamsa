@@ -94,6 +94,28 @@ $ python clients/erlamsa_python_client.py
 Hello erlamsa! erlamsed to rlamsa!rlallo eHello e
 ```
 
+## External (extension) scripts
+
+Erlamsa could use external scripts for generation-based fuzzing, custom fuzzing, custom post-fuzzing procedures or custom mutation types. Module should be compiled with `erlc` before using and passed using `-e` option to erlamsa. Due to internal mechanism of external modules inclusion, you should pass external module ALWAYS as a FIRST argument to erlamsa.
+
+In the following example, erlamsa is run with custom mutation module (see `external_muta.erl` for details):
+```
+$ echo -n 123 | ./erlamsa -e external_muta -m pan=1 -p od
+<pancaked>123</pancaked>
+```
+
+### Custom fuzzing extension
+
+Could be using in fuzzing proxy mode, to replace standard fuzzing procedure with a custom one. See `external_test.erl` for example template.
+
+### Custom mutation extension
+
+Adds custom mutation to the list of erlamsa mutators. See `external_muta.erl` for example. 
+
+### Custom post-processing extension
+
+Adds post-processing procedure that will be applied to fuzzing result just before output. Useful for fixing checksum or form of data to avoid unnessesary noise. See `external_nhrp.erl` for example.
+
 ## Code Status
 
 [![Build Status](https://travis-ci.org/Darkkey/erlamsa.svg?branch=master)](https://travis-ci.org/Darkkey/erlamsa)

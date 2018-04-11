@@ -36,7 +36,7 @@
 -include("erlamsa.hrl").
 
 %% API
--export([make_mutator/1, mutations/0, default/0, tostring/1]).
+-export([make_mutator/2, mutations/0, mutations/1, default/1, tostring/1, get_max_score/0]).
  
 
 -define(MIN_SCORE, 2.0).
@@ -45,6 +45,11 @@
 
 -type byte_edit_fun() :: fun((byte()) -> binary()).
 -type text_mutators() :: insert_badness | replace_badness | insert_aaas | insert_null | insert_delimeter.
+
+%% return maximum possible score value
+-spec get_max_score() -> float().
+get_max_score() ->
+    ?MAX_SCORE.
 
 %% quick peek if the data looks possibly binary
 %% quick stupid version: ignore UTF-8, look for high bits
@@ -963,9 +968,16 @@ mux_fuzzers_loop(Ll, [Node|Tail], Out, Meta) ->
         true -> {mux_fuzzers(NOut ++ Tail), Mll, [{used, Mname} | MMeta]}
     end.
 
+
 -spec mutations() -> [mutation()].
-%% default mutations list
-mutations() ->         [{?MAX_SCORE, 10, fun erlamsa_sgml:sgml_mutate/2, sgml, "SGML tree mutations"},
+%% default mutations list 
+mutations() ->         
+    mutations([]).
+
+-spec mutations([mutation()]) -> [mutation()].
+%% default mutations list + external mutas
+mutations(CustomMutas) ->         
+                       [{?MAX_SCORE, 10, fun erlamsa_sgml:sgml_mutate/2, sgml, "SGML tree mutations"},
                         {?MAX_SCORE, 1, fun sed_utf8_widen/2, uw, "try to make a code point too wide"},
                         {?MAX_SCORE, 2, fun sed_utf8_insert/2, ui, "insert funny unicode"},
                         {?MAX_SCORE, 1, construct_ascii_bad_mutator(), ab, "enhance silly issues in ASCII string data handling"},
@@ -1002,10 +1014,11 @@ mutations() ->         [{?MAX_SCORE, 10, fun erlamsa_sgml:sgml_mutate/2, sgml, "
                         {?MAX_SCORE, 2, fun sed_fuse_this/2, ft, "jump to a similar position in block"},
                         {?MAX_SCORE, 1, fun sed_fuse_next/2, fn, "likely clone data between similar positions"},
                         {?MAX_SCORE, 2, fun sed_fuse_old/2, fo, "fuse previously seen data elsewhere"},
-                        {?MAX_SCORE, 0, fun nomutation/2, nil, "no mutation will occur (debugging purposes)"}].
+                        {?MAX_SCORE, 0, fun nomutation/2, nil, "no mutation will occur (debugging purposes)"}
+                        |CustomMutas].
 
--spec default() -> [{atom(), non_neg_integer()}].
-default() -> lists:map(fun ({_, Pri, _, Name, _Desc}) -> {Name, Pri} end, mutations()).
+-spec default(list()) -> [{atom(), non_neg_integer()}].
+default(CustomMutas) -> lists:map(fun ({_, Pri, _, Name, _Desc}) -> {Name, Pri} end, mutations(CustomMutas)).
 
 -spec tostring(list()) -> string().
 tostring(Lst) -> 
@@ -1016,8 +1029,8 @@ tostring(Lst) ->
         end
     end, [], Lst).
 
--spec make_mutator([{atom(), non_neg_integer()}]) -> fun().
-make_mutator(Lst) ->
+-spec make_mutator([{atom(), non_neg_integer()}], list()) -> fun().
+make_mutator(Lst, CustomMutas) ->
     SelectedMutas = maps:from_list(Lst),
     Mutas = lists:foldl(
         fun ({Score, _Pri, F, Name, _Desc}, Acc) ->
@@ -1028,7 +1041,7 @@ make_mutator(Lst) ->
             end
         end,
         [],
-        mutations()),  
+        mutations(CustomMutas)),  
     mutators_mutator(Mutas).
 
 -spec mutators_mutator([mutation()]) -> fun().

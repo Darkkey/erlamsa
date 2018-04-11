@@ -36,11 +36,7 @@
 -include("erlamsa.hrl").
 
 % API
--export([parse/1, load_deps/1, usage/0]).
-
-%% temporary location, TODO: move to appropriate module
-load_deps(RuntimeDir) ->
-	true and ?LOAD_PROCKET(RuntimeDir). 
+-export([parse/1, usage/0]).
 
 about() ->
 	"Erlamsa is an erlang port of famous Radamsa fuzzer. Radamsa is
@@ -341,8 +337,10 @@ parse_opts([{proxyprob, ProxyProbOpts}|T], Dict) ->
 	parse_opts(T, parse_proxyprob_opts(ProxyProbOpts, Dict));
 parse_opts([{input, InputOpts}|T], Dict) ->
 	parse_opts(T, parse_input_opts(InputOpts, Dict));
+%% TODO: ugly solution, forces user to pass external module BEFORE list of priorities, fix in future when cmd interface will be rewritten
 parse_opts([{mutations, Mutators}|T], Dict) ->
-	parse_opts(T, parse_actions(Mutators, mutations, erlamsa_mutations:default(), Dict));
+	CustomMutas = erlamsa_utils:make_mutas(maps:get(external, Dict, nil)),
+	parse_opts(T, parse_actions(Mutators, mutations, erlamsa_mutations:default(CustomMutas), Dict));
 parse_opts([{patterns, Patterns}|T], Dict) ->
 	parse_opts(T, parse_actions(Patterns, patterns, erlamsa_patterns:default(), Dict));
 parse_opts([{generators, Generators}|T], Dict) ->

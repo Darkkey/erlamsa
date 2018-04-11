@@ -95,6 +95,7 @@ test(Seed) -> fuzzer(
 -spec fuzzer(#{}) -> [binary()].
 fuzzer(Dict) ->    
     Seed = maps:get(seed, Dict, default),
+    CustomMutas = erlamsa_utils:make_mutas(maps:get(external, Dict, nil)),
     Mutas = maps:get(mutations, Dict, default),
     N = maps:get(n, Dict, default),
     Paths = maps:get(paths, Dict, ["-"]),
@@ -102,7 +103,7 @@ fuzzer(Dict) ->
         Seed =:= default ->
             fuzzer(maps:put(seed, urandom_seed(), Dict));
         Mutas =:= default ->
-            fuzzer(maps:put(mutations, erlamsa_mutations:default(), Dict));
+            fuzzer(maps:put(mutations, erlamsa_mutations:default(CustomMutas), Dict));
         N =:= default ->
             fuzzer(maps:put(n, 1, Dict));
         true ->
@@ -112,7 +113,7 @@ fuzzer(Dict) ->
             file:write_file("./last_seed.txt", io_lib:format("~p", [Seed])),
             Verbose(io_lib:format("Random seed: ~p~n", [Seed])),
             Fail = fun(Why) -> io:write(Why), throw(Why) end,
-            Muta = erlamsa_mutations:make_mutator(Mutas),
+            Muta = erlamsa_mutations:make_mutator(Mutas, CustomMutas),
             DirectInput = maps:get(input, Dict, nil),
             BlockScale = maps:get(blockscale, Dict, 1.0),
             Gen = erlamsa_gen:make_generator(maps:get(generators, Dict, erlamsa_gen:default()), Paths, DirectInput, BlockScale, Fail, N),

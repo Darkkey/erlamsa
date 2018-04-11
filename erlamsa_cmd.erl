@@ -11,7 +11,7 @@ sleep() ->
 main(Args) ->
 	RuntimeDir = filename:dirname(escript:script_name()),
 	true = code:add_pathz(RuntimeDir ++ "/ebin"),
-	true = erlamsa_cmdparse:load_deps(RuntimeDir),
+	true = erlamsa_utils:load_deps(RuntimeDir),
     Dict = erlamsa_cmdparse:parse(Args),
 	erlamsa_logger:start(Dict),
 	erlamsa_fsupervisor:start(Dict),

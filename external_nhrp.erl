@@ -1,8 +1,10 @@
 -module(external_nhrp).
 
+%% Example custom post-processing module that fixes checksum in NHRP protocol packets
+
 -export([capabilities/0, mutations/0, post/1, fuzzer/3]).
 
-capabilities() -> {nomutations, fuzzer}.
+capabilities() -> {nomutations, post}.
 
 mutations() -> [].
 
