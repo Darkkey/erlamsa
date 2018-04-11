@@ -36,7 +36,11 @@
 -include("erlamsa.hrl").
 
 % API
--export([parse/1, usage/0]).
+-export([parse/1, load_deps/1, usage/0]).
+
+%% temporary location, TODO: move to appropriate module
+load_deps(RuntimeDir) ->
+	true and ?LOAD_PROCKET(RuntimeDir). 
 
 about() ->
 	"Erlamsa is an erlang port of famous Radamsa fuzzer. Radamsa is
@@ -74,6 +78,9 @@ cmdline_optsspec() ->
 	 {blockscale, $b, 	"blockscale",	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize"},
 	 {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},	 
 	 {seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int"},
+	 {maxrunningtime
+	 			, $t, 	"maxrunningtime",
+				 						{integer, 30}, 			"<arg>, maximum running time for fuzzing instance (service/proxy modes only)"},
 	 {mutations , $m,   "mutations",	{string,
 	  					 	erlamsa_mutations:tostring(	erlamsa_mutations:mutations())}, 	"<arg>, which mutations to use"},
 	 {patterns	, $p,	"patterns",		{string,
@@ -316,6 +323,8 @@ parse_opts([recursive|T], Dict) ->
 	parse_opts(T, maps:put(recursive, 1, Dict));
 parse_opts([{count, N}|T], Dict) ->
 	parse_opts(T, maps:put(n, N, Dict));
+parse_opts([{maxrunningtime, MT}|T], Dict) ->
+	parse_opts(T, maps:put(maxrunningtime, MT, Dict));	
 parse_opts([{blockscale, B}|T], Dict) ->
 	parse_opts(T, maps:put(blockscale, B, Dict));
 parse_opts([{genfuzz, BP}|T], Dict) ->

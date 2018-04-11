@@ -24,9 +24,9 @@
 -define(DEFAULT_UDPPROXY_CLIENTPORT, 44443).
 
 -ifdef(USE_PROCKET).
--define(LOAD_PROCKET(), code:add_pathz(RuntimeDir ++ "/deps/procket/ebin")).
+-define(LOAD_PROCKET(R), code:add_pathz(R ++ "/deps/procket/ebin")).
 -else.
--define(LOAD_PROCKET(), true).
+-define(LOAD_PROCKET(R), true).
 -endif.
 
 %% Common inter-module types.
