@@ -7,7 +7,7 @@ Erlang port of famous radamsa fuzzzer.
 
 Erlamsa requires erlang/OTP 17.5+ to run.
 
-Download erlang from official website http://www.erlang.org, install and put in path to erlc, erl and escript binarues into PATH variable. Or use you system's packet manager to install it.
+Download erlang from official website http://www.erlang.org, install and put in path to `erlc`, `erl` and `escript` binaries into `PATH` variable. Or use you system's packet manager to install it.
 
 On OS X (using homebrew):
 ```
