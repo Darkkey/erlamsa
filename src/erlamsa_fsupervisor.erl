@@ -1,5 +1,5 @@
 -module(erlamsa_fsupervisor).
--export([start/1, get_fuzzing_output/1, launch_fuzzing_process/2]).
+-export([start/1, fsupervisor/2, get_fuzzing_output/1, launch_fuzzing_process/2]).
 
 launch_fuzzing_process(Dict, ParentPid) ->
     Output = erlamsa_utils:extract_function(erlamsa_main:fuzzer(Dict)),
@@ -42,8 +42,10 @@ handle_command(List) ->
             List
     end.
 
-start(Delta) ->
-    fsupervisor(Delta, []).
+start(Dict) ->
+    Pid = spawn(erlamsa_fsupervisor, fsupervisor, 
+                    [maps:get(maxrunningtime, Dict, 30), []]),
+    global:register_name(fuzzing_supervisor, Pid).
 
 fsupervisor(Delta, []) ->
     NewList = handle_command([]),
