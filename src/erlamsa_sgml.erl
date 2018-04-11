@@ -113,6 +113,9 @@ tz({tag,_}, <<>>)                     	  -> throw(incorrect_sgml);
 tz({'!',DT},?m(">",Str))                  -> {text,Str,{'!',DT}};
 tz({'!',DT},?d(X,Str))                    -> {{'!',DT++[X]},Str};
 
+tz({que,DT},?m("?>",Str))                  -> {text,Str,{que,DT}};
+tz({que,DT},?d(X,Str))                    -> {{que,DT++[X]},Str};
+
 tz({etag,Tag,Attrs},?m("/>",Str))         -> {text,Str,{sc,Tag,Attrs}};
 tz({etag,Tag,Attrs},?m(">",Str))          -> {text,Str,{open,Tag,Attrs}};
 tz({etag,_Tag,_Attrs}, _)          		  -> throw(incorrect_sgml);
@@ -234,6 +237,9 @@ build_ast2([{text, Text}|T], Ast, Tags, {N, NT}) ->
 build_ast2([{'!', Params}|T], Ast, Tags, {N, NT}) ->
 	%io:format("! ~w, ~w, ~w, +1~n", [Params, Ast, Tags]),
 	build_ast2(T, [{'!', Params}|Ast], Tags, {N + 1, NT});	
+build_ast2([{que, Params}|T], Ast, Tags, {N, NT}) ->
+	%io:format("! ~w, ~w, ~w, +1~n", [Params, Ast, Tags]),
+	build_ast2(T, [{que, Params}|Ast], Tags, {N + 1, NT});		
 build_ast2([{sc, Text, Params}|T], Ast, Tags, {N, NT}) ->
 	%io:format("SingleTag ~w, ~w, ~w, +1~n", [Text, Ast, Tags]),
 	build_ast2(T, [{sc, Text, Params}|Ast], Tags, {N + 1, NT});		
@@ -276,6 +282,9 @@ fold_ast([{text, Text}| T], Acc) ->
 	fold_ast(T, [Text | Acc]);
 fold_ast([{sc, Name, Params}| T], Acc) -> 
 	fold_ast(T, [list_to_binary([<<"<">>, Name, fold_params(Params, []), <<" />">>]) | Acc]);
+fold_ast([{que, Params}| T], Acc) -> 
+	fold_ast(T, [list_to_binary([<<"<">>, <<"?">>, Params, <<"?>">>])
+	 | Acc]);	
 fold_ast([{'!', Params}| T], Acc) -> 
 	fold_ast(T, [list_to_binary([<<"<">>, <<"!">>, Params, <<">">>])
 	 | Acc]);	
