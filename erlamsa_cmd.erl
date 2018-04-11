@@ -11,10 +11,11 @@ sleep() ->
 main(Args) ->
 	RuntimeDir = filename:dirname(escript:script_name()),
 	true = code:add_pathz(RuntimeDir ++ "/ebin"),
-	true = code:add_pathz(RuntimeDir ++ "/deps/procket/ebin"),
+	true = LOAD_PROCKET(),
+	io:format("~p", [LOAD_PROCKET()]),
     Dict = erlamsa_cmdparse:parse(Args),
-	Pid = spawn(erlamsa_fsupervisor, start, [maps:get(maxrunningtime, Dict, 30)]),
-    global:register_name(fuzzing_supervisor, Pid),
+	erlamsa_logger:start(Dict),
+	erlamsa_fsupervisor:start(Dict),
     case maps:get(mode, Dict, stdio) of
 		genfuzz ->
 			erlamsa_gfcomms:start(Dict),

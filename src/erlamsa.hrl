@@ -7,6 +7,8 @@
 %%%-------------------------------------------------------------------
 -author("dark_k3y").
 
+-include("dependencies.hrl").
+
 -define(VERSION, "0.1").
 
 -define(INITIAL_IP,24).              %% initial max 1/n for basic patterns)
@@ -20,6 +22,12 @@
 -define(ABSMAX_BINARY_BLOCK, 2*?ABSMAXHALF_BINARY_BLOCK).
 -define(TCP_TIMEOUT, 5000).
 -define(DEFAULT_UDPPROXY_CLIENTPORT, 44443).
+
+-ifdef(USE_PROCKET).
+-define(LOAD_PROCKET(), code:add_pathz(RuntimeDir ++ "/deps/procket/ebin")).
+-else.
+-define(LOAD_PROCKET(), true).
+-endif.
 
 %% Common inter-module types.
 

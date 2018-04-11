@@ -1,8 +1,30 @@
 # erlamsa
 Erlang port of famous radamsa fuzzzer.
 
-## Build: 
-Requires erlang OTP 17.5+. 
+## Installation:
+
+### Installing erlang
+
+Erlamsa requires erlang/OTP 17.5+ to run.
+
+Download erlang from official website http://www.erlang.org, install and put in path to erlc, erl and escript binarues into PATH variable. Or use you system's packet manager to install it.
+
+On OS X (using homebrew):
+```
+brew install erlang
+```
+
+On CentOS/RHEL:
+```
+yum install erlang
+```
+
+On Debian/Ubuntu/Kali:
+```
+apt-get install erlang erlang-dev erlang-tools erlang-ssl erlang-eunit erlang-mnesia erlang-inets
+```
+
+### Building
 
 On Linux/OS X:
 ```
@@ -13,7 +35,7 @@ or
 escript rebar co
 ```
 
-On Windows (`escript.exe` should in `%PATH%`):
+On Windows (`escript.exe` and `erlc.exe` should be in `%PATH%`):
 ```
 make_windows.bat
 ```
@@ -47,7 +69,7 @@ Launch as service:
 erlamsa -H 127.0.0.1:17771
 ```
 
-HTTP POST your data to `http://<Host:Port>/erlamsa/erlamsa_esi:fuzz` as `application/octet-stream`. See examples in clients/ folder (provided for C#, node.js and python). 
+HTTP POST your data to `http://<Host:Port>/erlamsa/erlamsa_esi:fuzz` as `application/octet-stream`. See examples in `clients/` folder (provided for C#, node.js and python). 
 E.g. for Python 2.7:
 ```
 import httplib
