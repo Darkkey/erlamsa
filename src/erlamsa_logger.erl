@@ -58,17 +58,17 @@ append_to_io(FileName, TimeStamp, Pid, LogMsg, Data) when is_list(FileName) ->
 %% by default, data logging is now enabled --> none is default value
 build_logger_io(IO, none) -> 
 	fun 
-		(TimeStamp, Pid, LogMsg, Data) when byte_size(Data) =:= 0 -> 
-			append_to_io(IO, TimeStamp, Pid, LogMsg, []);
-		(TimeStamp, Pid, LogMsg, Data) -> 
-			append_to_io(IO, TimeStamp, Pid, LogMsg, io_lib:format(" [data(len = ~p) = ~p]", [byte_size(Data), Data])) 
+		(TimeStamp, Pid, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 -> 
+			append_to_io(IO, TimeStamp, Pid, LogMsg, io_lib:format(" [data(len = ~p) = ~p]", [byte_size(Data), Data])); 
+		(TimeStamp, Pid, LogMsg, _Data) -> 
+			append_to_io(IO, TimeStamp, Pid, LogMsg, [])
 	end;
 build_logger_io(IO, _DoData) -> 
 	fun 
-		(TimeStamp, Pid, LogMsg, Data) when byte_size(Data) =:= 0 -> 
-			append_to_io(IO, TimeStamp, Pid, LogMsg, []);
-		(TimeStamp, Pid, LogMsg, Data) -> 
-			append_to_io(IO, TimeStamp, Pid, LogMsg, io_lib:format(" [data_len = ~p]", [byte_size(Data)]))
+		(TimeStamp, Pid, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 -> 
+			append_to_io(IO, TimeStamp, Pid, LogMsg, io_lib:format(" [data_len = ~p]", [byte_size(Data)]));
+		(TimeStamp, Pid, LogMsg, _Data) -> 
+			append_to_io(IO, TimeStamp, Pid, LogMsg, [])
 	end.
 
 build_logger(Opts) -> 

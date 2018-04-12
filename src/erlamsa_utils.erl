@@ -41,7 +41,7 @@
         merge/2, hd_bin/1, tl_bin/1, choose_pri/2, is_pair/1,
         flush_bvecs/2, applynth/3, sort_by_priority/1,
         check_empty/1, stderr_probe/2, halve/1, error/1,
-        resolve_addr/1, make_post/1, make_post/1, make_fuzzer/1, make_mutas/1,
+        resolve_addr/1, make_post/1, make_fuzzer/1, make_mutas/1,
         load_deps/1]).
 
 load_deps(RuntimeDir) ->

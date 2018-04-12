@@ -36,7 +36,7 @@
 -include("erlamsa.hrl").
 
 % API
--export([parse/1, usage/0]).
+-export([parse/1, usage/0, parse_seed/1, string_to_actions/3]).
 
 about() ->
 	"Erlamsa is an erlang port of famous Radamsa fuzzer. Radamsa is
@@ -50,13 +50,18 @@ Radamsa was written by Aki Helin at OUSPG.
 Erlamsa is written by Alexander Bolshev (@dark_k3y).~n".
 
 inputs() ->
-	[{"filename1.txt filename2.txt ...", "data will be read from file(s) with specified name(s)"},
-	{"lport:rhost:rport", "erlamsa will work in fuzzing proxy mode (currently tcp only), listenting on lport and sending fuzzed data to rhost:port"}].
+	[
+		{"filename1.txt filename2.txt ...", "data will be read from file(s) with specified name(s)"},
+		{"-i lport:rhost:rport", "erlamsa will work in fuzzing proxy mode (currently tcp only), listenting on lport and sending fuzzed data to rhost:port"},
+		{"-H host:port", "erlamsa will listen on <host:port> for HTTP POST queries with data, sending fuzzing result in reply, fuzzing options are passed via HTTP headers"}
+	].
 
 outputs() ->
-	[{"filename_iter%n.txt", "data will be written to files with template filename_iter%n.txt, where %n will be replaced by current interation number"},
-	{"[tcp|udp]://ipaddr:port", "send fuzzed data to remote tcp or udp port located at ipaddr"},
-	{"http://addr[:port]/path?params,[GET|POST],header1,...", "send fuzzed date to remote http host located at addr"}].
+	[
+		{"filename_iter%n.txt", "data will be written to files with template filename_iter%n.txt, where %n will be replaced by current interation number"},
+		{"[tcp|udp]://ipaddr:port", "send fuzzed data to remote tcp or udp port located at ipaddr"},
+		{"http://addr[:port]/path?params,[GET|POST],header1,...", "send fuzzed date to remote http host located at addr"}
+		].
 
 %% GF-base modes:
 
@@ -71,7 +76,7 @@ cmdline_optsspec() ->
 	 {genfuzz	, $G,	"genfuzz",		float,					"<arg>, activate generation-based fuzzer, arg is base probablity"},
 	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or ip://172.16.0.1:47 or http://example.com [-]"},
 	 {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
-	 {blockscale, $b, 	"blockscale",	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize"},
+	 {blockscale, $b, 	"blockscale",	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize multiplier"},
 	 {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},	 
 	 {seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int"},
 	 {maxrunningtime
@@ -241,10 +246,11 @@ convert_metapath("stderr") -> stderr;
 convert_metapath("-err") -> stderr;
 convert_metapath(Path) -> Path.
 
-%% TODO: seed
+parse_seed(Seed) ->
+    list_to_tuple(lists:map(fun (X) -> list_to_integer(X) end, string:tokens(Seed, ","))).
 parse_seed_opt(Seed, Dict) ->
 	try
-		maps:put(seed, list_to_tuple(lists:map(fun (X) -> list_to_integer(X) end, string:tokens(Seed, ","))), Dict)
+		maps:put(seed, parse_seed(Seed), Dict)
 	catch
         error:badarg ->
         	fail("Invalid seed format! Usage: int,int,int")
@@ -309,7 +315,7 @@ parse_opts([list|_T], _Dict) ->
 			end
 		,[],
 		erlamsa_patterns:patterns()),
-	io:format("Inputs (-i)~n~s~nOutputs (-o)~n~s~nGenerators (-g)~n~s~nMutations (-m)~n~s~nPatterns (-p)~n~s",
+	io:format("Inputs ~n~s~nOutputs (-o)~n~s~nGenerators (-g)~n~s~nMutations (-m)~n~s~nPatterns (-p)~n~s",
 		[Is, Os, Gs, Ms, Ps]),
 	halt(0);
 parse_opts([{verbose, Lvl}|T], Dict) ->
@@ -332,7 +338,7 @@ parse_opts([{sleep, Sleep}|T], Dict) ->
 	parse_opts(T, maps:put(sleep, Sleep, Dict));
 parse_opts([{logger, LogOpts}|T], Dict) ->
 	parse_opts(T, parse_logger_opts(LogOpts, Dict));
-parse_opts([{noiolog, LogOpts}|T], Dict) ->
+parse_opts([noiolog|T], Dict) ->
 	parse_opts(T, maps:put(noiolog, true, Dict));
 parse_opts([{external, ModuleName}|T], Dict) ->
 	parse_opts(T, maps:put(external, ModuleName, Dict));	
