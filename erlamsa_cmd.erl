@@ -13,7 +13,7 @@ main(Args) ->
 	true = code:add_pathz(RuntimeDir ++ "/ebin"),
 	true = erlamsa_utils:load_deps(RuntimeDir),
     Dict = erlamsa_cmdparse:parse(Args),
-	erlamsa_logger:start(Dict),
+	erlamsa_logger:start(erlamsa_logger:build_logger(Dict)),
 	erlamsa_fsupervisor:start(Dict),
     case maps:get(mode, Dict, stdio) of
 		genfuzz ->

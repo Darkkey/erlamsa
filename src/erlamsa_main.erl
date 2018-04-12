@@ -112,6 +112,7 @@ fuzzer(Dict) ->
             random:seed(Seed),
             file:write_file("./last_seed.txt", io_lib:format("~p", [Seed])),
             Verbose(io_lib:format("Random seed: ~p~n", [Seed])),
+            erlamsa_logger:log(info, "Random seed: ~p", [Seed]),
             Fail = fun(Why) -> io:write(Why), throw(Why) end,
             Muta = erlamsa_mutations:make_mutator(Mutas, CustomMutas),
             DirectInput = maps:get(input, Dict, nil),

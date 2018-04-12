@@ -36,51 +36,67 @@
 -include("erlamsa.hrl").
 
 % API
--export([get_timestamp/0, build_logger/1, start/1, logger/1, log/2]).
+-export([get_timestamp/0, build_logger/1, start/1, logger/1, log/3, log_data/4]).
 
-log(Fmt, Lst) ->
-	global:send(logger, {log, self(), Fmt, Lst}).
+log(Type, Fmt, Lst) ->
+	global:send(logger, {log, self(), Type, Fmt, Lst, <<>>}).
+
+log_data(Type, Fmt, Lst, Data) ->
+	global:send(logger, {log, self(), Type, Fmt, Lst, Data}).	
 
 get_timestamp() ->
-	Pid = self(),
 	{_, _, Ms} = os:timestamp(),
 	{Y, M, D} = date(),
     {H, Min, S} = time(),
-    io_lib:format('~4..0b-~2..0b-~2..0b ~2..0b:~2..0b:~2..0b.~3..0b ~p', [Y, M, D, H, Min, S, round(Ms/1000), Pid]).
+    io_lib:format('~4..0b-~2..0b-~2..0b ~2..0b:~2..0b:~2..0b.~3..0b', [Y, M, D, H, Min, S, round(Ms/1000)]).
 
-append_to_logfile(FileName, TimeStamp, LogMsg) -> 
-	file:write_file(FileName, io_lib:format("~s: ~s~n", [TimeStamp, LogMsg]), [append]).
+append_to_io(IO, TimeStamp, Pid, LogMsg, Data) when is_atom(IO) ->
+	io:format(IO, "~s <~p>: ~s~s~n", [TimeStamp, Pid, LogMsg, Data]); 
+append_to_io(FileName, TimeStamp, Pid, LogMsg, Data) when is_list(FileName) -> 
+	file:write_file(FileName, io_lib:format("~s <~p>: ~s~s~n", [TimeStamp, Pid, LogMsg, Data]), [append]).
+
+%% by default, data logging is now enabled --> none is default value
+build_logger_io(IO, none) -> 
+	fun 
+		(TimeStamp, Pid, LogMsg, Data) when byte_size(Data) =:= 0 -> 
+			append_to_io(IO, TimeStamp, Pid, LogMsg, []);
+		(TimeStamp, Pid, LogMsg, Data) -> 
+			append_to_io(IO, TimeStamp, Pid, LogMsg, io_lib:format(" [data(len = ~p) = ~p]", [byte_size(Data), Data])) 
+	end;
+build_logger_io(IO, _DoData) -> 
+	fun 
+		(TimeStamp, Pid, LogMsg, Data) when byte_size(Data) =:= 0 -> 
+			append_to_io(IO, TimeStamp, Pid, LogMsg, []);
+		(TimeStamp, Pid, LogMsg, Data) -> 
+			append_to_io(IO, TimeStamp, Pid, LogMsg, io_lib:format(" [data_len = ~p]", [byte_size(Data)]))
+	end.
 
 build_logger(Opts) -> 
-	StdOutLogger = build_logger_stdout(maps:get(logger_stdout, Opts, none)),
-	StdErrLogger = build_logger_stderr(maps:get(logger_stderr, Opts, none)),
-	FileLogger = build_logger_file(maps:get(logger_file, Opts, none)),
-	fun (Fmt, Lst) ->
+	StdOutLogger = build_logger_console(maps:get(logger_stdout, Opts, none), maps:get(noiolog, Opts, none)),
+	StdErrLogger = build_logger_console(maps:get(logger_stderr, Opts, none), maps:get(noiolog, Opts, none)),
+	FileLogger = build_logger_file(maps:get(logger_file, Opts, none), maps:get(noiolog, Opts, none)),
+	fun (Pid, _Type, Fmt, Lst, Data) ->
 		TimeStamp = get_timestamp(),
 		LogMsg = io_lib:format(Fmt, Lst),
-		StdOutLogger(TimeStamp, LogMsg),
-		StdErrLogger(TimeStamp, LogMsg),
-		FileLogger(TimeStamp, LogMsg),
+		StdOutLogger(TimeStamp, Pid, LogMsg, Data),
+		StdErrLogger(TimeStamp, Pid, LogMsg, Data),
+		FileLogger(TimeStamp, Pid, LogMsg, Data),
 		ok
 	end.
 
-build_logger_file(none) -> 
-	fun (_, _) -> ok end;
-build_logger_file([]) -> 
-	fun (TimeStamp, LogMsg) -> append_to_logfile("./erlamsa.log", TimeStamp, LogMsg) end;
-build_logger_file(FileName) -> 
-	fun (TimeStamp, LogMsg) -> append_to_logfile(FileName, TimeStamp, LogMsg) end.
+build_logger_file(none, _) -> 
+	fun (_, _, _, _) -> ok end;
+build_logger_file([], DoData) -> 
+	build_logger_io("./erlamsa.log", DoData);
+build_logger_file(FileName, DoData) -> 
+	build_logger_io(FileName, DoData).
 
-build_logger_stdout(none) -> 
-	fun (_, _) -> ok end;
-build_logger_stdout(stdout) -> 
-	fun (TimeStamp, LogMsg) -> io:format("~s: ~s~n", [TimeStamp, LogMsg]) end.
-
-build_logger_stderr(none) -> 
-	fun (_, _) -> ok end;
-build_logger_stderr(stderr) -> 
-	fun (TimeStamp, LogMsg) -> io:format(standard_error, "~s: ~s~n", [TimeStamp, LogMsg]) end.
-
+build_logger_console(none, _) -> 
+	fun (_, _, _, _) -> ok end;
+build_logger_console(stdout, DoData) -> 
+	build_logger_io(standard_io, DoData);
+build_logger_console(stderr, DoData) -> 
+	build_logger_io(standard_error, DoData).
 
 start(Log) ->
     Pid = spawn(erlamsa_logger, logger, [Log]),
@@ -88,7 +104,7 @@ start(Log) ->
 
 logger(Log) ->    
     receive
-        {log, Pid, Fmt, Lst} -> 
-            Log(Fmt, Lst)           
+        {log, Pid, Type, Fmt, Lst, Data} -> 
+            Log(Pid, Type, Fmt, Lst, Data)   			        
     end,
 	logger(Log).

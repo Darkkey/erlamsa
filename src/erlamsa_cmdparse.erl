@@ -85,6 +85,7 @@ cmdline_optsspec() ->
 	 						erlamsa_gen:tostring(		erlamsa_gen:generators())},		"<arg>, which data generators to use"},
 	 {meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"},
 	 {logger	, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename or stdout (-) or stderr (-err)"},
+	 {noiolog   , $N,   "no-io-logging",undefined,				"disable logging of incoming and outgoing data"},
 	 {workers	, $w, 	"workers",		integer, 				"<arg>, number of working threads"},
 %	 {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},	 
 	 {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose, show some progress during generation"},	 
@@ -331,6 +332,8 @@ parse_opts([{sleep, Sleep}|T], Dict) ->
 	parse_opts(T, maps:put(sleep, Sleep, Dict));
 parse_opts([{logger, LogOpts}|T], Dict) ->
 	parse_opts(T, parse_logger_opts(LogOpts, Dict));
+parse_opts([{noiolog, LogOpts}|T], Dict) ->
+	parse_opts(T, maps:put(noiolog, true, Dict));
 parse_opts([{external, ModuleName}|T], Dict) ->
 	parse_opts(T, maps:put(external, ModuleName, Dict));	
 parse_opts([{proxyprob, ProxyProbOpts}|T], Dict) ->
