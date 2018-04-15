@@ -1,1 +1,1 @@
-escript erlamsa_cmd.erl %*
+escript erlamsa %*

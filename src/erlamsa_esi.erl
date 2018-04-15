@@ -26,14 +26,16 @@ fuzz(Sid, Env, In) ->
                 maps:put(output, return,
                     maps:put(input, InBin,
                     Opts))),    
-        erlamsa_logger:log(info, "Request from IP ~p, session ~p", [maps:get(remote_addr, Dict, nil), Sid]),   
+        erlamsa_logger:log(info, "Request from IP ~s, session ~p", [maps:get(remote_addr, Dict, nil), Sid]),   
         erlamsa_logger:log_data(info, "Input data <session = ~p>", [Sid], InBin),
         Output = erlamsa_fsupervisor:get_fuzzing_output(Dict),
         erlamsa_logger:log_data(info, "Output data <session = ~p>", [Sid], Output),
         mod_esi:deliver(Sid, [Output])
     catch
         error:badarg ->
-        	mod_esi:deliver("Invalid header option(s) specification!");
-        _Unknown ->
-        	mod_esi:deliver("Unknown unrecoverable error!")
+            erlamsa_logger:log(error, "Session ~p: invalid input options detected, ~p", [Sid, Env]),   
+        	mod_esi:deliver(Sid, ["Invalid header option(s) specification!"]);
+        UnknownError ->
+            erlamsa_logger:log(error, "Session ~p: unknown error with code ~p", [Sid, UnknownError]),   
+        	mod_esi:deliver(Sid, ["Unknown unrecoverable error!"])
     end.

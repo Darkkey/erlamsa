@@ -20,11 +20,11 @@ stop_process(_, _, undefined) ->
     ok;
 stop_process(Pid, Time, _ProcessInfo) ->
     io:format("Stopped possibly bugged process: ~p (launched @ ~p, now is ~p)~n", 
-                [Pid, Time, erlang:system_time(second)]),
+                [Pid, Time, erlang:system_time(seconds)]),
     erlang:exit(Pid, kill).
 
 update_list(Delta, H = {Time, Pid}, NewList) -> 
-    CurrentTime = erlang:system_time(second),
+    CurrentTime = erlang:system_time(seconds),
     if 
         CurrentTime - Time > Delta ->
             stop_process(Pid, Time, process_info(Pid)),
@@ -36,7 +36,7 @@ update_list(Delta, H = {Time, Pid}, NewList) ->
 handle_command(List) ->    
     receive
         {add, NewFuzzerProcessPid} -> 
-            List ++ [{erlang:system_time(second), NewFuzzerProcessPid}]            
+            List ++ [{erlang:system_time(seconds), NewFuzzerProcessPid}]            
     after 
         100 ->
             List
