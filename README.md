@@ -40,6 +40,10 @@ On Windows (`escript.exe` and `erlc.exe` should be in `%PATH%`):
 make_windows.bat
 ```
 
+### Docker
+
+Alternatively, you could use erlamsa for Docker: https://github.com/Darkkey/erlamsa-docker-image
+
 ## Standalone usage: 
 Under Linux/OS X use `./erlamsa`, under Windows -- `erlamsa.bat`.
 

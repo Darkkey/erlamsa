@@ -115,10 +115,19 @@ file_streamer(Paths, BlockScale) ->
         end
     end.
 
--spec direct_generator(binary()) -> fun().
-direct_generator(Input) ->
-    %% TODO: divide into random chunks
-    fun () -> {[Input], {generator, direct}} end.
+split_binary(Bin, BlockScale, Wanted) when byte_size(Bin) > byte_size(Wanted) ->
+    Cut = Wanted * 8,
+    <<Block:Cut, Rest/binary>> = Bin,
+    [Block | split_binary(Rest, BlockScale, rand_block_size(BlockScale))];
+split_binary(Bin, _BlockScale, Wanted) ->
+    %FIXME: Wanted - byte_size(Bin) gives too little chance, temp solution below
+    [Bin|finish(byte_size(Bin))].
+
+-spec direct_generator(binary(), non_neg_integer()) -> fun().
+direct_generator(Input, BlockScale) ->
+    fun () -> {split_binary(Input, BlockScale, rand_block_size(BlockScale)), 
+                {generator, direct}} 
+    end.
 
 %% Random input stream
 -spec random_stream(float()) -> [binary()].
@@ -167,7 +176,7 @@ make_generator_fun(Args, Inp, BlockScale, Fail, N) ->
                 direct when Inp =:= nil ->
                     false;
                 direct ->
-                    {Pri, direct_generator(Inp)};
+                    {Pri, direct_generator(Inp, BlockScale)};
                 random ->
                     {Pri, random_generator(BlockScale)};
                 _Else ->
