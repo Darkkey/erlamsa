@@ -123,6 +123,26 @@ $ python clients/erlamsa_python_client.py
 Hello erlamsa! erlamsed to rlamsa!rlallo eHello e
 ```
 
+### JSON service endpoint
+
+Erlamsa also provides JSON service extension, which allow to send request in JSON documents. Fuzzing data should be encoded in base64 format and provided in `data` field of the document, e.g.:
+
+```
+$ curl -H "Content-Type: application/json" -X POST -d '{"data":"aGVsbG8="}' http://localhost:17771/erlamsa/erlamsa_esi:json
+{"data": "bGxvbGxvaA=="}
+```
+
+### Fuzzing options
+
+For standalone Web or JSON fuzzing, along with fuzzing data, you could also provide fuzzing options, including `mutations`, `patterns`, `seed`, `blocksize`, e.t.c. The fotmat of these options should be the sames as in according command line keys. You pass them as HTTP header (for standalone Web service) and as JSON members (JSON endpoint). E.g.:
+
+```
+$ curl -H "Content-Type: application/json" -X POST -d '{"data":"aGVsbG8=","seed": "1,2,3"}' http://localhost:17771/erlamsa/erlamsa_esi:json
+{"data": "aGVsW2xv"}
+$ curl -H "Content-Type: application/json" -X POST -d '{"data":"aGVsbG8=","seed": "1,2,3"}' http://localhost:17771/erlamsa/erlamsa_esi:json
+{"data": "aGVsW2xv"}
+```
+
 ## External (extension) scripts
 
 Erlamsa could use external scripts for generation-based fuzzing, custom fuzzing, custom post-fuzzing procedures or custom mutation types. Module should be compiled with `erlc` before using and passed using `-e` option to erlamsa. Due to internal mechanism of external modules inclusion, you should pass external module ALWAYS as a FIRST argument to erlamsa.
