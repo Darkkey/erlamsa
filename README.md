@@ -1,5 +1,13 @@
 # erlamsa
-Erlang port of famous radamsa fuzzzer.
+Erlang port of famous radamsa fuzzer.
+
+## TL;DR
+
+```
+$ sudo apt-get install git gcc make erlang erlang-dev erlang-tools erlang-ssl erlang-eunit erlang-mnesia erlang-inets
+$ git clone https://github.com/Darkkey/erlamsa && cd erlamsa && make
+$ echo "Hello erlamsa!" | ./erlamsa
+```
 
 ## Installation:
 
@@ -7,7 +15,7 @@ Erlang port of famous radamsa fuzzzer.
 
 Erlamsa requires erlang/OTP 17.5+ to run.
 
-Download erlang from official website http://www.erlang.org, install and put in path to `erlc`, `erl` and `escript` binaries into `PATH` variable. Or use you system's packet manager to install it.
+Download erlang from official website http://www.erlang.org, install and put in path to `erlc`, `erl` and `escript` binaries into `PATH` variable. Or use your system's packet manager to install it.
 
 On OS X (using homebrew):
 ```
@@ -24,7 +32,13 @@ On Debian/Ubuntu/Kali:
 apt-get install erlang erlang-dev erlang-tools erlang-ssl erlang-eunit erlang-mnesia erlang-inets
 ```
 
-### Building
+### Building erlamsa    
+
+Get the latest version of erlamsa:
+``` 
+git clone https://github.com/Darkkey/erlamsa
+cd erlamsa
+```
 
 On Linux/OS X:
 ```
@@ -42,7 +56,7 @@ make_windows.bat
 
 ### Docker
 
-Alternatively, you could use erlamsa for Docker: https://github.com/Darkkey/erlamsa-docker-image
+Alternatively, you could use erlamsa Docker container: https://github.com/Darkkey/erlamsa-docker-image
 
 ## Standalone usage: 
 Under Linux/OS X use `./erlamsa`, under Windows -- `erlamsa.bat`.
@@ -58,11 +72,11 @@ $ cat <<BINARY WITH PACKET>> | ./erlamsa -o udp://<<HOST>>:<<PORT>>
 
 For help try:
 ```
-erlamsa --help
+./erlamsa --help
 ```
 or
 ```
-escript erlamsa_cmd.erl --help
+escript erlamsa --help
 ```
 
 ## Using as fuzzing proxy
@@ -70,7 +84,7 @@ Erlamsa could be used a fuzzing "MiTM" proxy for TCP and UDP protocols. This all
 
 To use it as fuzzing proxy, run as:
 ```
-./erlamsa -i proto://lport:[udpclientport:]rhost:rport -P probsc, probcs
+./erlamsa -i proto://lport:[udpclientport:]rhost:rport -P probsc,probcs
 ```
 where probsc and probcs are floats in range of 0.0 to 1.0, that represents probabilities of fuzzing packets from server to client and client to server.
 
@@ -95,7 +109,7 @@ fuzz(Data) ->
 
 Launch as service:
 ```
-erlamsa -H 127.0.0.1:17771
+./erlamsa -H 127.0.0.1:17771
 ```
 
 HTTP POST your data to `http://<Host:Port>/erlamsa/erlamsa_esi:fuzz` as `application/octet-stream`. See examples in `clients/` folder (provided for C#, node.js and python). 
@@ -125,7 +139,7 @@ Hello erlamsa! erlamsed to rlamsa!rlallo eHello e
 
 ### JSON service endpoint
 
-Erlamsa also provides JSON service extension, which allow to send request in JSON documents. Fuzzing data should be encoded in base64 format and provided in `data` field of the document, e.g.:
+Erlamsa also provides JSON service extension, which allows to send request in JSON documents. Fuzzing data should be encoded in base64 format and provided inside `data` field of the document, e.g.:
 
 ```
 $ curl -H "Content-Type: application/json" -X POST -d '{"data":"aGVsbG8="}' http://localhost:17771/erlamsa/erlamsa_esi:json
@@ -134,11 +148,9 @@ $ curl -H "Content-Type: application/json" -X POST -d '{"data":"aGVsbG8="}' http
 
 ### Fuzzing options
 
-For standalone Web or JSON fuzzing, along with fuzzing data, you could also provide fuzzing options, including `mutations`, `patterns`, `seed`, `blocksize`, e.t.c. The fotmat of these options should be the sames as in according command line keys. You pass them as HTTP header (for standalone Web service) and as JSON members (JSON endpoint). E.g.:
+For standalone Web or JSON fuzzing, along with fuzzing data, you could also provide fuzzing options, including `mutations`, `patterns`, `seed`, `blocksize`, e.t.c. The format of these options should be the same as in according command line keys. Pass them as HTTP headers (for standalone Web service) or as JSON members (for JSON endpoint). E.g.:
 
 ```
-$ curl -H "Content-Type: application/json" -X POST -d '{"data":"aGVsbG8=","seed": "1,2,3"}' http://localhost:17771/erlamsa/erlamsa_esi:json
-{"data": "aGVsW2xv"}
 $ curl -H "Content-Type: application/json" -X POST -d '{"data":"aGVsbG8=","seed": "1,2,3"}' http://localhost:17771/erlamsa/erlamsa_esi:json
 {"data": "aGVsW2xv"}
 ```

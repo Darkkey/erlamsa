@@ -102,7 +102,7 @@ stdin_generator(Online, BlockScale) ->
 file_streamer(Paths, BlockScale) ->
     N = length(Paths),
     fun () ->        
-        P = random:uniform(N), %% lists indexing from 1 in erlang
+        P = erlamsa_rnd:erand(N), %% lists indexing from 1 in erlang
         Path = lists:nth(P, Paths),
         {Res, Port} = file:open(Path, [read, raw, binary]), %% TODO: FIXME: could we use raw?
         case Res of
@@ -119,7 +119,7 @@ split_binary(Bin, BlockScale, Wanted) when byte_size(Bin) > byte_size(Wanted) ->
     Cut = Wanted * 8,
     <<Block:Cut, Rest/binary>> = Bin,
     [Block | split_binary(Rest, BlockScale, rand_block_size(BlockScale))];
-split_binary(Bin, _BlockScale, Wanted) ->
+split_binary(Bin, _BlockScale, _Wanted) ->
     %FIXME: Wanted - byte_size(Bin) gives too little chance, temp solution below
     [Bin|finish(byte_size(Bin))].
 
