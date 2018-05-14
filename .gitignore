@@ -9,5 +9,5 @@ rel/example_project
 .concrete/DEV_MODE
 .rebar
 .DS_Store
-last_seed.txt
-TODO.txt
+*.txt
+*.log
