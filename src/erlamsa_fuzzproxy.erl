@@ -125,7 +125,7 @@ loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose) ->
             erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]", [Res], Ret),
             loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose);
         {tcp, ServerSocket, Data} ->
-            erlamsa_logger:log_data(info, "from server(s->c): ~p", [Data]),
+            erlamsa_logger:log_data(info, "from server(s->c)", [], Data),
             {Res, Ret} = fuzz(Proto, ProbToClient, Opts, Data),
             gen_tcp:send(ClientSocket, Ret),
             erlamsa_logger:log_data(info, "from fuzzer(s->c) [fuzzing = ~p]", [Res], Ret),
