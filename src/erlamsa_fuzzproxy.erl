@@ -17,7 +17,7 @@
 -include("erlamsa.hrl").
 
 % API
--export([start/1, server_tcp/3, loop_udp/6]).
+-export([start/1, server_tcp/4, loop_udp/7]).
 
 listen(http, LocalPort) ->
     listen(tcp, LocalPort);
@@ -33,48 +33,52 @@ start(Opts) when is_list(Opts) ->
 start(Opts) ->
     Workers = maps:get(workers, Opts, 10),
     Verbose = erlamsa_utils:verb(stdout, maps:get(verbose, Opts, 0)),
-    {StrProto, LocalPort, _, _, _} = maps:get(proxy_address, Opts),
-    Proto = list_to_atom(StrProto),
-    case listen(Proto, LocalPort) of
-        {ok, ListenSock} ->
-            start_servers(transport(Proto), Workers, ListenSock, Opts, Verbose),
-            {ok, Port} = inet:port(ListenSock),
-            Port;
-        {error,Reason} ->
-            io:format("~s", [Reason]),
-            {error,Reason}
-    end.
+    ProxyAddrList = maps:get(proxy_address, Opts),
+    lists:map( 
+        fun(L) ->
+            {StrProto, LocalPort, _, _, _} = L,
+            Proto = list_to_atom(StrProto),
+            case listen(Proto, LocalPort) of
+                {ok, ListenSock} ->
+                    start_servers(transport(Proto), Workers, ListenSock, L, Opts, Verbose),
+                    {ok, Port} = inet:port(ListenSock),
+                    Port;
+                {error,Reason} ->
+                    io:format("~s", [Reason]),
+                    {error,Reason}
+            end
+        end, ProxyAddrList).
 
 transport(http) -> tcp;
 transport(Tr) -> Tr.
 
-start_servers(tcp, Workers, ListenSock, Opts, Verbose) ->
-    start_tcp_servers(Workers, ListenSock, Opts, Verbose);
-start_servers(udp, _Workers, ListenSock, Opts, Verbose) ->
-    erlamsa_logger:log(info, "udp proxy worker process started, socket id ~p", [ListenSock]),
-    Pid = spawn(?MODULE, loop_udp, [ListenSock, init_clientsocket, [], 0, Opts, Verbose]),
+start_servers(tcp, Workers, ListenSock, Endpoint, Opts, Verbose) ->
+    start_tcp_servers(Workers, ListenSock, Endpoint, Opts, Verbose);
+start_servers(udp, _Workers, ListenSock, Endpoint, Opts, Verbose) ->
+    erlamsa_logger:log(info, "udp proxy worker process started, socket id ~p, bind to ~s:~d", [ListenSock]),
+    Pid = spawn(?MODULE, loop_udp, [ListenSock, Endpoint, init_clientsocket, [], 0, Opts, Verbose]),
     gen_udp:controlling_process(ListenSock, Pid).
 
-start_tcp_servers(0, _ListenSock, _Opts, _Verbose) -> ok;
-start_tcp_servers(Workers, ListenSock, Opts, Verbose) ->
-    spawn(?MODULE, server_tcp,[ListenSock, Opts, Verbose]),
-    start_tcp_servers(Workers - 1, ListenSock, Opts, Verbose).
+start_tcp_servers(0, _ListenSock, _Endpoint, _Opts, _Verbose) -> ok;
+start_tcp_servers(Workers, ListenSock, Endpoint, Opts, Verbose) ->
+    spawn(?MODULE, server_tcp,[ListenSock, Endpoint, Opts, Verbose]),
+    start_tcp_servers(Workers - 1, ListenSock, Endpoint, Opts, Verbose).
 
-server_tcp(ListenSock, Opts, Verbose) ->
-    {Proto, _, _, DHost, DPort} = maps:get(proxy_address, Opts),
-    erlamsa_logger:log(info, "tcp proxy worker process started", []),
+server_tcp(ListenSock, Endpoint, Opts, Verbose) ->
+    {Proto, LPort, _, DHost, DPort} = Endpoint,
+    erlamsa_logger:log(info, "tcp proxy worker process started, listening on ~p (port :~p)", [ListenSock, LPort]),
     random:seed(now()),
     case gen_tcp:accept(ListenSock) of
         {ok, ClientSocket} ->
-            erlamsa_logger:log(info, "new connect(c->s)", []),
+            erlamsa_logger:log(info, "initiating new connection to ~s:~p(c->s), sockets: l:~p/c:~p", [inet:ntoa(DHost), DPort, ListenSock, ClientSocket]),
             case gen_tcp:connect(DHost, DPort,
 				 [binary, {packet,0}, {active, true}]) of
 		          {ok, ServerSocket} ->
 		              loop_tcp(list_to_atom(Proto), ClientSocket, ServerSocket, Opts, Verbose),
-                      server_tcp(ListenSock, Opts, Verbose);
+                      spawn(?MODULE, server_tcp, [ListenSock, Endpoint, Opts, Verbose]);
 		          E ->
 		              io:format("Error: connect to server failed!~n"),
-                      erlamsa_logger:log(info, "error: worker connect to server failed!", []),
+                      erlamsa_logger:log(info, "error: worker connect to server ~s:~p failed!", [inet:ntoa(DHost), DPort]),
 		          E
 		      end,
 		  ok;
@@ -84,34 +88,38 @@ server_tcp(ListenSock, Opts, Verbose) ->
             ok
     end.
 
-loop_udp(SrvSocket, init_clientsocket, ClientHost, ClientPort, Opts, Verbose) ->
+%%TODO: check for memory consumption and tail recursion correctness
+%%FIXME: fuzzing for multiple endpoints?
+loop_udp(SrvSocket, Endpoint, init_clientsocket, ClientHost, ClientPort, Opts, Verbose) ->
     random:seed(now()),
-    {"udp", _LPort, ClSocketPort, _, _} = maps:get(proxy_address, Opts),
+    {"udp", _LPort, ClSocketPort, _, _} = Endpoint,
     {ok, ClSocket} = listen(udp, ClSocketPort),
     gen_udp:controlling_process(ClSocket, self()),
-    loop_udp(SrvSocket, ClSocket, ClientHost, ClientPort, Opts, Verbose);
-loop_udp(SrvSocket, ClSocket, ClientHost, ClientPort, Opts, Verbose) ->
+    loop_udp(SrvSocket, ClSocket, Endpoint, ClientHost, ClientPort, Opts, Verbose);
+loop_udp(SrvSocket, ClSocket, Endpoint, ClientHost, ClientPort, Opts, Verbose) ->
     {"udp", _, _, ServerHost, ServerPort} = maps:get(proxy_address, Opts),
     {ProbToClient, ProbToServer} = maps:get(proxy_probs, Opts, {0.0, 0.0}),
-    receive
-        {udp, SrvSocket, Host, Port, Data} ->
-            erlamsa_logger:log_data(info, "from udp client(c->s ~p:~p)",[Host, Port], Data),
-            {Res, Ret} = fuzz(udp, ProbToServer, Opts, Data),
-            erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]", [Res], Ret),
-            gen_udp:send(ClSocket, ServerHost, ServerPort, Ret),
-            loop_udp(SrvSocket, ClSocket, Host, Port, Opts, Verbose);
-        {udp, ClSocket, ServerHost, ServerPort, Data} ->
-            erlamsa_logger:log_data(info, "from udp server(s->c, ~p:~p)",[ServerHost, ServerPort], Data),
-            case ClientHost of
-                [] ->
-                    loop_udp(SrvSocket, ClSocket, [], 0, Opts, Verbose);
-                _Else ->
-                    {Res, Ret} = fuzz(udp, ProbToClient, Opts, Data),
-                    gen_udp:send(SrvSocket, ClientHost, ClientPort, Ret),
-                    erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]",[Res], Ret),
-                    loop_udp(SrvSocket, ClSocket, ClientHost, ClientPort, Opts, Verbose)
-            end
-    end.
+    {NewHost, NewPort} = 
+        receive
+            {udp, SrvSocket, Host, Port, Data} ->
+                erlamsa_logger:log_data(info, "from udp client(c->s ~p:~p)",[Host, Port], Data),
+                {Res, Ret} = fuzz(udp, ProbToServer, Opts, Data),
+                erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]", [Res], Ret),
+                gen_udp:send(ClSocket, ServerHost, ServerPort, Ret),
+                {Host, Port};
+            {udp, ClSocket, ServerHost, ServerPort, Data} ->
+                erlamsa_logger:log_data(info, "from udp server(s->c, ~p:~p)",[ServerHost, ServerPort], Data),
+                case ClientHost of
+                    [] ->
+                        {[], 0};
+                    _Else ->
+                        {Res, Ret} = fuzz(udp, ProbToClient, Opts, Data),
+                        gen_udp:send(SrvSocket, ClientHost, ClientPort, Ret),
+                        erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]",[Res], Ret),
+                        {ClientHost, ClientPort}
+                end
+        end,
+    loop_udp(SrvSocket, ClSocket, Endpoint, NewHost, NewPort, Opts, Verbose).
 
 
 loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose) ->
@@ -132,11 +140,11 @@ loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose) ->
             loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose);
         {tcp_closed, ClientSocket} ->
             gen_tcp:close(ServerSocket),
-            erlamsa_logger:log(info, "client close (c->s)", []),
+            erlamsa_logger:log(info, "client close (c->s), c:~p ", [ClientSocket]),
             ok;
         {tcp_closed, ServerSocket}->
             gen_tcp:close(ClientSocket),
-            erlamsa_logger:log(info, "server close (s->c)", []),
+            erlamsa_logger:log(info, "server close (s->c)m l:~p/c:~p ", [ServerSocket, ClientSocket]),
             ok
     end.
 

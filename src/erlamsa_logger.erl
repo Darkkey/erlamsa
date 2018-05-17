@@ -100,7 +100,8 @@ build_logger_console(stderr, DoData) ->
 
 start(Log) ->
     Pid = spawn(erlamsa_logger, logger, [Log]),
-    global:register_name(logger, Pid).
+    global:register_name(logger, Pid),
+	Pid.
 
 logger(Log) ->    
     receive

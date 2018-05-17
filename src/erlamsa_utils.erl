@@ -178,8 +178,13 @@ get(Key, DefaultValue, Tree) ->
     end.
 
 -spec error(any()) -> any().
+error(Err = {_Reason, Desc}) ->
+    io:format(standard_error, "Error: ~s~n~n", [Desc]),
+    erlamsa_logger:log(error, "Error: ~s", [Desc]),
+    throw(Err);
 error(Err) ->
-    io:format("Error: ~s~n~n", [Err]),
+    io:format(standard_error, "Error: ~s~n~n", [Err]),
+    erlamsa_logger:log(error, "Error: ~s", [Err]),
     throw(Err).
 
 resolve_addr(Host) ->

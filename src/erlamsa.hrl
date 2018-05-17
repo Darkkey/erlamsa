@@ -22,6 +22,7 @@
 -define(ABSMAX_BINARY_BLOCK, 2*?ABSMAXHALF_BINARY_BLOCK).
 -define(TCP_TIMEOUT, 5000).
 -define(DEFAULT_UDPPROXY_CLIENTPORT, 44443).
+-define(TOO_MANY_FAILED_ATTEMPTS, 10).
 
 -ifdef(USE_PROCKET).
 -define(LOAD_PROCKET(R), code:add_pathz(R ++ "/deps/procket/ebin")).

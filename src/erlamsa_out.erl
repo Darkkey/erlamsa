@@ -23,6 +23,8 @@ flush([]) -> <<>>;
 flush([H|T]) when is_binary(H) -> R = flush(T), <<H/binary, R/binary>>.
 
 -spec output(lazy_list_of_bins(), output_dest(), fun()) -> {fun(), meta(), integer(), binary()}.
+output([], Fd, Post) ->
+    erlamsa_utils:error({fderror, "Something wrong happened with output FD."});
 output(Ll, Fd, Post) ->
     {NLl, NewFd, Data, N} = blocks_port(Ll, Fd, Post),
     %% (ok? (and (pair? ll) (tuple? (car ll)))) ;; all written? <-- do we really need to check this?
@@ -86,7 +88,7 @@ tcpsock_writer(Addr, Port) ->
                 }, [{output, tcpsock} | Meta]};
             _Else -> 
                 Err = lists:flatten(io_lib:format("Error opening tcp socket to ~s:~p '~s'", [Addr, Port, Sock])), 
-                erlamsa_utils:error(Err)
+                erlamsa_utils:error({cantconnect, Err})
         end
     end.
      

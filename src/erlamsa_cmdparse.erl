@@ -74,6 +74,7 @@ cmdline_optsspec() ->
 	 {external	, $e,   "external", 	string,					"external pre/post/generation/mutation module"},	 
 	 {proxyprob	, $P,	"proxy",		string,					"<arg>, activate proxy mode, param is fuzzing probability in form of s->c,c->s e.g.: 0.5,0.5"},
 	 {genfuzz	, $G,	"genfuzz",		float,					"<arg>, activate generation-based fuzzer, arg is base probablity"},
+	 {debug		, $d,	"debug",		undefined,				"run in debug/profiler mode, activates verbose"},
 	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or ip://172.16.0.1:47 or http://example.com [-]"},
 	 {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
 	 {blockscale, $b, 	"blockscale",	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize multiplier"},
@@ -89,6 +90,7 @@ cmdline_optsspec() ->
 	 {generators, $g,	"generators",	{string,
 	 						erlamsa_gen:tostring(		erlamsa_gen:generators())},		"<arg>, which data generators to use"},
 	 {meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"},
+	 {monitor	, $O,   "monitor",      string,					"<arg>, monitor specification"},
 	 {logger	, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename or stdout (-) or stderr (-err)"},
 	 {noiolog   , $N,   "no-io-logging",undefined,				"disable logging of incoming and outgoing data"},
 	 {workers	, $w, 	"workers",		integer, 				"<arg>, number of working threads"},
@@ -174,6 +176,8 @@ parse_logger_opt([LogOpt|T], Dict) ->
 parse_proxyprob_opts(ProxyProbOpts, Dict) ->
 	case string:tokens(ProxyProbOpts, ",") of
 		[SC, CS] ->
+			%%TODO: in future, allow set different probabilities for different proxies
+			%%maps:put(proxy_probs, [{list_to_float(SC), list_to_float(CS)} | maps:get(proxy_probs, Dict, [])], Dict);
 			maps:put(proxy_probs, {list_to_float(SC), list_to_float(CS)}, Dict);
 		_Else -> fail(io_lib:format("invalid proxy fuzzing probability specification: '~s'", [ProxyProbOpts]))
 	end.
@@ -184,18 +188,22 @@ parse_input_opts(InputOpts, Dict) ->
 			maps:put(input_endpoint, {Proto,
 				list_to_integer(hd(string:tokens(ListenPort, "/")))}, Dict);
 		[Proto, LPortD, RHost, RPort] ->
-			maps:put(proxy_address, {Proto,
+			maps:put(proxy_address, 
+				[{Proto,
 				list_to_integer(hd(string:tokens(LPortD, "/"))),
 				?DEFAULT_UDPPROXY_CLIENTPORT,
 				erlamsa_utils:resolve_addr(RHost),
-				list_to_integer(RPort)},
+				list_to_integer(RPort)} 
+				| maps:get(proxy_address, Dict, [])],
 			maps:put(mode, proxy, Dict));
 		["udp", LPortD, UDPClientPort, RHost, RPort] ->
-				maps:put(proxy_address, {"udp",
+				maps:put(proxy_address, 
+				[{"udp",
 				list_to_integer(hd(string:tokens(LPortD, "/"))),
 				UDPClientPort,
 				erlamsa_utils:resolve_addr(RHost), 
-				list_to_integer(RPort)},
+				list_to_integer(RPort)} 
+				| maps:get(proxy_address, Dict, [])],
 				maps:put(mode, proxy, Dict));
 		_Else -> fail(io_lib:format("invalid input specification: '~s'", [InputOpts]))
 	end.
@@ -318,8 +326,14 @@ parse_opts([list|_T], _Dict) ->
 	io:format("Inputs ~n~s~nOutputs (-o)~n~s~nGenerators (-g)~n~s~nMutations (-m)~n~s~nPatterns (-p)~n~s",
 		[Is, Os, Gs, Ms, Ps]),
 	halt(0);
+parse_opts([{monitor, MonitorSpec}|T], Dict) ->
+	%%Syntax is monitor_name:params 
+	%%TODO: temporary solution, only r2 monitor is supported now
+	parse_opts(T, maps:put(monitor, {cdb,MonitorSpec}, Dict));	
 parse_opts([{verbose, Lvl}|T], Dict) ->
 	parse_opts(T, maps:put(verbose, Lvl, Dict));
+parse_opts([debug|T], Dict) ->
+	parse_opts(T, maps:put(debug, debug, maps:put(verbose, 10, Dict)));
 parse_opts([{meta, Path}|T], Dict) ->
 	parse_opts(T, maps:put(metadata, convert_metapath(Path), Dict));	
 parse_opts([recursive|T], Dict) ->

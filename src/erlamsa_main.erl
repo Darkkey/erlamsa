@@ -124,7 +124,7 @@ fuzzer(Dict) ->
             Out = erlamsa_out:string_outputs(maps:get(output, Dict, "-")),
             Post = erlamsa_utils:make_post(maps:get(external, Dict, nil)),
             Sleep = maps:get(sleep, Dict, 0),
-            fuzzer_loop(Muta, Gen, Pat, Out, Record_Meta, Verbose, 1, N, Sleep, Post, [])
+            fuzzer_loop(Muta, Gen, Pat, Out, Record_Meta, Verbose, {1,0}, N, Sleep, Post, [])
     end.
 
 -spec record_result(binary(), list()) -> list().
@@ -132,16 +132,31 @@ record_result(<<>>, Acc) -> Acc;
 record_result(X, Acc) -> [X | Acc].
 
 -spec fuzzer_loop(fun(), fun(), fun(), fun(), fun(), fun(), non_neg_integer(), non_neg_integer(), non_neg_integer() | inf, fun(), list()) -> [binary()].
-fuzzer_loop(_, _, _, _, RecordMetaFun, _Verbose, I, N, _, _, Acc) when is_integer(N) andalso N < I -> RecordMetaFun({close, ok}), lists:reverse(Acc); 
-fuzzer_loop(Muta, Gen, Pat, Out, RecordMetaFun, Verbose, I, N, Sleep, Post, Acc) ->
+fuzzer_loop(_, _, _, _, RecordMetaFun, _Verbose, {I,_}, N, _, _, Acc) when is_integer(N) andalso N < I -> 
+    RecordMetaFun({close, ok}), lists:reverse(Acc); 
+fuzzer_loop(_, _, _, _, RecordMetaFun, Verbose, {_, FailedI}, _, _, _, Acc) when FailedI > ?TOO_MANY_FAILED_ATTEMPTS  -> 
+    io:format(standard_error, "Too many failed output attempts (~p), stopping.~n", [FailedI]),
+    erlamsa_logger:log(error, "Too many failed output attempts (~p), stopping.~n", [FailedI]),
+    RecordMetaFun({status, toomanyfailedoutputs}), RecordMetaFun({close, ok}), lists:reverse(Acc); 
+fuzzer_loop(Muta, Gen, Pat, Out, RecordMetaFun, Verbose, {I, Fails}, N, Sleep, Post, Acc) ->
     {Ll, GenMeta} = Gen(), 
-    {NewOut, Fd, OutMeta} = Out(I, [{nth, I}, GenMeta]),    
-    Tmp = Pat(Ll, Muta, OutMeta),
-    {NewMuta, Meta, Written, Data} = erlamsa_out:output(Tmp, Fd, Post),
-    RecordMetaFun([{written, Written}| Meta]),  
-    Verbose(io_lib:format("output: ~p~n", [Written])),      
+    {NewOut, NewMuta, Data, NewFails} =
+        try        
+            {CandidateOut, Fd, OutMeta} = Out(I, [{nth, I}, GenMeta]),    
+            Tmp = Pat(Ll, Muta, OutMeta),
+            {CandidateMuta, Meta, Written, CandidateData} = erlamsa_out:output(Tmp, Fd, Post),
+            RecordMetaFun([{written, Written}| Meta]),  
+            Verbose(io_lib:format("output: ~p~n", [Written])),      
+            {CandidateOut, CandidateMuta, CandidateData, 0}
+        catch 
+            {cantconnect, _Err} ->   
+                {Out, Muta, <<>>, Fails + 1};
+            {fderror, _Err} ->   
+                {Out, Muta, <<>>, Fails + 1}
+        end,
     timer:sleep(Sleep),
-    fuzzer_loop(NewMuta, Gen, Pat, NewOut, RecordMetaFun, Verbose, I + 1, N, Sleep, Post, record_result(Data, Acc)).
+    %%FIXME: record_result could lead to memory exhaustion on long loops, fix it
+    fuzzer_loop(NewMuta, Gen, Pat, NewOut, RecordMetaFun, Verbose, {I + 1, NewFails}, N, Sleep, Post, record_result(Data, Acc)).
 
 
 
