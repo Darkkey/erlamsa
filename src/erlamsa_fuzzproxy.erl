@@ -66,6 +66,8 @@ start_tcp_servers(Workers, ListenSock, Endpoint, Opts, Verbose) ->
 
 server_tcp(ListenSock, Endpoint, Opts, Verbose) ->
     {Proto, LPort, _, DHost, DPort} = Endpoint,
+    {ProbToClient, ProbToServer} = maps:get(proxy_probs, Opts, {0.0, 0.0}),
+    DescentCoeff = maps:get(descent_coeff, Opts, 1),
     erlamsa_logger:log(info, "tcp proxy worker process started, listening on ~p (port :~p)", [ListenSock, LPort]),
     random:seed(now()),
     case gen_tcp:accept(ListenSock) of
@@ -74,7 +76,8 @@ server_tcp(ListenSock, Endpoint, Opts, Verbose) ->
             case gen_tcp:connect(DHost, DPort,
 				 [binary, {packet,0}, {active, true}]) of
 		          {ok, ServerSocket} ->
-		              loop_tcp(list_to_atom(Proto), ClientSocket, ServerSocket, Opts, Verbose),
+		              loop_tcp(list_to_atom(Proto), ClientSocket, ServerSocket, 
+                        {ProbToClient/DescentCoeff, ProbToServer/DescentCoeff, DescentCoeff}, Opts, Verbose),
                       spawn(?MODULE, server_tcp, [ListenSock, Endpoint, Opts, Verbose]);
 		          E ->
 		              io:format("Error: connect to server failed!~n"),
@@ -87,6 +90,12 @@ server_tcp(ListenSock, Endpoint, Opts, Verbose) ->
             erlamsa_logger:log(info, "error: accept returned ~p", [Other]),
             ok
     end.
+
+raise_prob(0.0, _) -> 0.0;
+raise_prob(Prob, 1) -> Prob;
+raise_prob(Prob, DC) -> 
+    erlamsa_logger:log(info, "increasing Prob from ~p to ~p", [Prob, Prob + Prob/DC]),
+    Prob + Prob/DC.
 
 %%TODO: check for memory consumption and tail recursion correctness
 %%FIXME: fuzzing for multiple endpoints?
@@ -121,9 +130,7 @@ loop_udp(SrvSocket, ClSocket, Endpoint, ClientHost, ClientPort, Opts, Verbose) -
         end,
     loop_udp(SrvSocket, ClSocket, Endpoint, NewHost, NewPort, Opts, Verbose).
 
-
-loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose) ->
-    {ProbToClient, ProbToServer} = maps:get(proxy_probs, Opts, {0.0, 0.0}),
+loop_tcp(Proto, ClientSocket, ServerSocket, {ProbToClient, ProbToServer, DescentCoeff}, Opts, Verbose) ->
     inet:setopts(ClientSocket, [{active,once}]),
     receive
         {tcp, ClientSocket, Data} ->
@@ -131,13 +138,17 @@ loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose) ->
             {Res, Ret} = fuzz(Proto, ProbToServer, Opts, Data),
             gen_tcp:send(ServerSocket, Ret),
             erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]", [Res], Ret),
-            loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose);
+            loop_tcp(Proto, ClientSocket, ServerSocket, 
+                    {ProbToClient, raise_prob(ProbToServer, DescentCoeff),  DescentCoeff}, 
+                    Opts, Verbose);
         {tcp, ServerSocket, Data} ->
             erlamsa_logger:log_data(info, "from server(s->c)", [], Data),
             {Res, Ret} = fuzz(Proto, ProbToClient, Opts, Data),
             gen_tcp:send(ClientSocket, Ret),
             erlamsa_logger:log_data(info, "from fuzzer(s->c) [fuzzing = ~p]", [Res], Ret),
-            loop_tcp(Proto, ClientSocket, ServerSocket, Opts, Verbose);
+            loop_tcp(Proto, ClientSocket, ServerSocket, 
+                    {raise_prob(ProbToClient, DescentCoeff), ProbToServer, DescentCoeff}, 
+                    Opts, Verbose);
         {tcp_closed, ClientSocket} ->
             gen_tcp:close(ServerSocket),
             erlamsa_logger:log(info, "client close (c->s), c:~p ", [ClientSocket]),
@@ -208,4 +219,4 @@ call_fuzzer(_Prob, Opts, Data) ->
                maps:put(output, return,
                 maps:put(input, Data,
                   Opts))),
-    erlamsa_utils:extract_function(erlamsa_main:fuzzer(NewOpts)).
+    erlamsa_fsupervisor:get_fuzzing_output(NewOpts).

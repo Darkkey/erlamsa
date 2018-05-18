@@ -2,7 +2,7 @@
 -export([start/1, fsupervisor/2, get_fuzzing_output/1, launch_fuzzing_process/2]).
 
 launch_fuzzing_process(Dict, ParentPid) ->
-    Output = erlamsa_utils:extract_function(erlamsa_main:fuzzer(Dict)),
+    Output = erlamsa_utils:extract_function(erlamsa_main:fuzzer(maps:put(parentpid, ParentPid, Dict))),
     ParentPid ! {ok, self(), Output}.
 
 get_fuzzing_output(Dict) ->
