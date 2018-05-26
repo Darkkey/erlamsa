@@ -75,13 +75,23 @@ build_logger(Opts) ->
 	StdOutLogger = build_logger_console(maps:get(logger_stdout, Opts, none), maps:get(noiolog, Opts, none)),
 	StdErrLogger = build_logger_console(maps:get(logger_stderr, Opts, none), maps:get(noiolog, Opts, none)),
 	FileLogger = build_logger_file(maps:get(logger_file, Opts, none), maps:get(noiolog, Opts, none)),
-	fun (Pid, _Type, Fmt, Lst, Data) ->
-		TimeStamp = get_timestamp(),
-		LogMsg = io_lib:format(Fmt, Lst),
-		StdOutLogger(TimeStamp, Pid, LogMsg, Data),
-		StdErrLogger(TimeStamp, Pid, LogMsg, Data),
-		FileLogger(TimeStamp, Pid, LogMsg, Data),
-		ok
+	OutputToLog =
+		fun (Pid, Fmt, Lst, Data) ->
+			TimeStamp = get_timestamp(),
+			LogMsg = io_lib:format(Fmt, Lst),
+			StdOutLogger(TimeStamp, Pid, LogMsg, Data),
+			StdErrLogger(TimeStamp, Pid, LogMsg, Data),
+			FileLogger(TimeStamp, Pid, LogMsg, Data),
+			ok
+		end,
+	case maps:get(verbose, Opts, 0) of
+		V when V > 0 ->
+			fun (Pid, _Type, Fmt, Lst, Data) -> OutputToLog(Pid, Fmt, Lst, Data) end;
+		_Else ->
+			fun 
+				(_Pid, debug, _Fmt, _Lst, _Data) -> ok; 
+				(Pid, _Type, Fmt, Lst, Data) -> OutputToLog(Pid, Fmt, Lst, Data) 
+			end
 	end.
 
 build_logger_file(none, _) -> 

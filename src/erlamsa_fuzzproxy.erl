@@ -53,16 +53,11 @@ transport(http) -> tcp;
 transport(Tr) -> Tr.
 
 start_servers(tcp, Workers, ListenSock, Endpoint, Opts, Verbose) ->
-    start_tcp_servers(Workers, ListenSock, Endpoint, Opts, Verbose);
+    length([spawn(?MODULE, server_tcp,[ListenSock, Endpoint, Opts, Verbose]) || _N <- lists:seq(1, Workers)]);
 start_servers(udp, _Workers, ListenSock, Endpoint, Opts, Verbose) ->
     erlamsa_logger:log(info, "udp proxy worker process started, socket id ~p, bind to ~s:~d", [ListenSock]),
     Pid = spawn(?MODULE, loop_udp, [ListenSock, Endpoint, init_clientsocket, [], 0, Opts, Verbose]),
     gen_udp:controlling_process(ListenSock, Pid).
-
-start_tcp_servers(0, _ListenSock, _Endpoint, _Opts, _Verbose) -> ok;
-start_tcp_servers(Workers, ListenSock, Endpoint, Opts, Verbose) ->
-    spawn(?MODULE, server_tcp,[ListenSock, Endpoint, Opts, Verbose]),
-    start_tcp_servers(Workers - 1, ListenSock, Endpoint, Opts, Verbose).
 
 server_tcp(ListenSock, Endpoint, Opts, Verbose) ->
     {Proto, LPort, _, DHost, DPort} = Endpoint,
@@ -97,7 +92,7 @@ server_tcp(ListenSock, Endpoint, Opts, Verbose) ->
 raise_prob(0.0, _) -> 0.0;
 raise_prob(Prob, 1.0) -> Prob;
 raise_prob(Prob, DC) -> 
-    erlamsa_logger:log(info, "increasing Prob from ~p to ~p", [Prob, Prob + Prob/DC]),
+    erlamsa_logger:log(debug, "increasing Prob from ~p to ~p", [Prob, Prob + Prob/DC]),
     Prob + Prob/DC.
 
 %%TODO: check for memory consumption and tail recursion correctness
@@ -204,7 +199,7 @@ pack_http_packet([], Data, Acc) ->
     <<Hdr/binary, Data/binary>>.
 
 fuzz(_Proto, _Prob, ByPass, N, _Opts, Data) when N < ByPass ->
-    erlamsa_logger:log(info, "Packet No. ~p < ~p, bypassing data", [N, ByPass]),
+    erlamsa_logger:log(debug, "Packet No. ~p < ~p, bypassing data", [N, ByPass]),
     {nofuzz, Data};
 fuzz(Proto, Prob, _ByPass, _N, Opts, Data) ->
     fuzz(Proto, Prob, Opts, Data).
