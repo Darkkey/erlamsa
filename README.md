@@ -112,7 +112,7 @@ Eshell V9.0  (abort with ^G)
 
 2) Remotely, on another node:
 
-a) Start and test fuzzing node:
+    a) Start and test fuzzing node:
 ```
 $ erl -pa ebin -pa deps/*/ebin -sname erlamsa
 Erlang/OTP 20 [erts-9.0] [source] [64-bit] [smp:8:8] [ds:8:8:10] [async-threads:10] [hipe] [kernel-poll:false] [dtrace]
@@ -125,7 +125,7 @@ ok
 (erlamsa@server)3>
 ```
 
-b) Run on client node: 
+    b) Run on client node: 
 ```
 $ erl -pa ebin -pa deps/*/ebin -sname client
 Erlang/OTP 20 [erts-9.0] [source] [64-bit] [smp:8:8] [ds:8:8:10] [async-threads:10] [hipe] [kernel-poll:false] [dtrace]
