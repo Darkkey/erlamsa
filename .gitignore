@@ -15,3 +15,4 @@ clients/csharp/erlamsa_csharp_client/erlamsa_csharp_client/obj/*
 clients/csharp/erlamsa_csharp_client/erlamsa_csharp_client/bin/*
 *.bin
 *.fuzzed
+tmp

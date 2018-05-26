@@ -1,5 +1,5 @@
 # erlamsa
-Erlang port of famous radamsa fuzzer.
+Erlamsa -- "smart dumb fuzzer" aka erlang port of famous radamsa fuzzer.
 
 ## TL;DR
 
