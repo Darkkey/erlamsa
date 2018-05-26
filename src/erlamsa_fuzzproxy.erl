@@ -67,6 +67,7 @@ start_tcp_servers(Workers, ListenSock, Endpoint, Opts, Verbose) ->
 server_tcp(ListenSock, Endpoint, Opts, Verbose) ->
     {Proto, LPort, _, DHost, DPort} = Endpoint,
     {ProbToClient, ProbToServer} = maps:get(proxy_probs, Opts, {0.0, 0.0}),
+    ByPass = maps:get(bypass, Opts, 0),
     DescentCoeff = maps:get(descent_coeff, Opts, 1),
     erlamsa_logger:log(info, "tcp proxy worker process started, listening on ~p (port :~p)", [ListenSock, LPort]),
     random:seed(now()),
@@ -77,7 +78,9 @@ server_tcp(ListenSock, Endpoint, Opts, Verbose) ->
 				 [binary, {packet,0}, {active, true}]) of
 		          {ok, ServerSocket} ->
 		              loop_tcp(list_to_atom(Proto), ClientSocket, ServerSocket, 
-                        {ProbToClient/DescentCoeff, ProbToServer/DescentCoeff, DescentCoeff}, Opts, Verbose),
+                        {ProbToClient/DescentCoeff, ProbToServer/DescentCoeff, DescentCoeff}, 
+                        {ByPass, 0,0},
+                        Opts, Verbose),
                       spawn(?MODULE, server_tcp, [ListenSock, Endpoint, Opts, Verbose]);
 		          E ->
 		              io:format("Error: connect to server failed!~n"),
@@ -92,7 +95,7 @@ server_tcp(ListenSock, Endpoint, Opts, Verbose) ->
     end.
 
 raise_prob(0.0, _) -> 0.0;
-raise_prob(Prob, 1) -> Prob;
+raise_prob(Prob, 1.0) -> Prob;
 raise_prob(Prob, DC) -> 
     erlamsa_logger:log(info, "increasing Prob from ~p to ~p", [Prob, Prob + Prob/DC]),
     Prob + Prob/DC.
@@ -130,24 +133,24 @@ loop_udp(SrvSocket, ClSocket, Endpoint, ClientHost, ClientPort, Opts, Verbose) -
         end,
     loop_udp(SrvSocket, ClSocket, Endpoint, NewHost, NewPort, Opts, Verbose).
 
-loop_tcp(Proto, ClientSocket, ServerSocket, {ProbToClient, ProbToServer, DescentCoeff}, Opts, Verbose) ->
+loop_tcp(Proto, ClientSocket, ServerSocket, {ProbToClient, ProbToServer, DescentCoeff}, {ByPass, NC, NS}, Opts, Verbose) ->
     inet:setopts(ClientSocket, [{active,once}]),
     receive
         {tcp, ClientSocket, Data} ->
 	        erlamsa_logger:log_data(info, "from client(c->s)", [], Data),
-            {Res, Ret} = fuzz(Proto, ProbToServer, Opts, Data),
+            {Res, Ret} = fuzz(Proto, ProbToServer, ByPass, NC, Opts, Data),
             gen_tcp:send(ServerSocket, Ret),
             erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]", [Res], Ret),
             loop_tcp(Proto, ClientSocket, ServerSocket, 
-                    {ProbToClient, raise_prob(ProbToServer, DescentCoeff),  DescentCoeff}, 
+                    {ProbToClient, raise_prob(ProbToServer, DescentCoeff),  DescentCoeff}, {ByPass, NC+1, NS},
                     Opts, Verbose);
         {tcp, ServerSocket, Data} ->
             erlamsa_logger:log_data(info, "from server(s->c)", [], Data),
-            {Res, Ret} = fuzz(Proto, ProbToClient, Opts, Data),
+            {Res, Ret} = fuzz(Proto, ProbToClient, ByPass, NS, Opts, Data),
             gen_tcp:send(ClientSocket, Ret),
             erlamsa_logger:log_data(info, "from fuzzer(s->c) [fuzzing = ~p]", [Res], Ret),
             loop_tcp(Proto, ClientSocket, ServerSocket, 
-                    {raise_prob(ProbToClient, DescentCoeff), ProbToServer, DescentCoeff}, 
+                    {raise_prob(ProbToClient, DescentCoeff), ProbToServer, DescentCoeff}, {ByPass, NC, NS+1},
                     Opts, Verbose);
         {tcp_closed, ClientSocket} ->
             gen_tcp:close(ServerSocket),
@@ -200,18 +203,24 @@ pack_http_packet([], Data, Acc) ->
     Hdr = list_to_binary(Acc),
     <<Hdr/binary, Data/binary>>.
 
+fuzz(_Proto, _Prob, ByPass, N, _Opts, Data) when N < ByPass ->
+    erlamsa_logger:log(info, "Packet No. ~p < ~p, bypassing data", [N, ByPass]),
+    {nofuzz, Data};
+fuzz(Proto, Prob, _ByPass, _N, Opts, Data) ->
+    fuzz(Proto, Prob, Opts, Data).
+
 fuzz(Proto, Prob, Opts, Data) ->
     case maps:get(external, Opts, nil) of
-        nil -> fuzz(Proto, Prob, erlamsa_rnd:rand_float(), Opts, Data);
+        nil -> fuzz_rnd(Proto, Prob, erlamsa_rnd:rand_float(), Opts, Data);
         Module -> 
             erlang:apply(list_to_atom(Module), fuzzer, [Proto, Data, maps:put(fuzzprob, Prob, Opts)])
     end.
 
-fuzz(_, Prob, Rnd, _Opts, Data) when Rnd >= Prob -> {nofuzz, Data};
-fuzz(http, Prob, _Rnd, Opts, Data) -> 
+fuzz_rnd(_, Prob, Rnd, _Opts, Data) when Rnd >= Prob -> {nofuzz, Data};
+fuzz_rnd(http, Prob, _Rnd, Opts, Data) -> 
     {Status, HTTPHeaders, HTTPData} = extract_http(Data),
     {ok, pack_http(Status, HTTPHeaders, call_fuzzer(Prob, Opts, HTTPData))};
-fuzz(_Proto, Prob, _Rnd, Opts, Data) ->
+fuzz_rnd(_Proto, Prob, _Rnd, Opts, Data) ->
     {ok, call_fuzzer(Prob, Opts, Data)}.
 
 call_fuzzer(_Prob, Opts, Data) ->

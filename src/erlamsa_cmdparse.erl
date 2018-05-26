@@ -76,6 +76,7 @@ cmdline_optsspec() ->
 	 {genfuzz	, $G,	"genfuzz",		float,					"<arg>, activate generation-based fuzzer, arg is base probablity"},
 	 {debug		, $d,	"debug",		undefined,				"run in debug/profiler mode, activates verbose"},
 	 {descent	, $D,	"descent",		{float, 1.0},			"<arg>, use ascent/descent coefficient for fuzzing probablity"},
+	 {bypass	, $B,	"bypass",		{integer, 0},			"<arg>, bypass first <arg> packets before start fuzzing"},
 	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or ip://172.16.0.1:47 or http://example.com [-]"},
 	 {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
 	 {blockscale, $b, 	"blockscale",	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize multiplier"},
@@ -333,6 +334,8 @@ parse_opts([{monitor, MonitorSpec}|T], Dict) ->
 	parse_opts(T, maps:put(monitor, {cdb,MonitorSpec}, Dict));	
 parse_opts([{descent, DC}|T], Dict) ->
 	parse_opts(T, maps:put(descent_coeff, DC, Dict));
+parse_opts([{bypass, DC}|T], Dict) ->
+	parse_opts(T, maps:put(bypass, DC, Dict));
 parse_opts([{verbose, Lvl}|T], Dict) ->
 	parse_opts(T, maps:put(verbose, Lvl, Dict));
 parse_opts([debug|T], Dict) ->

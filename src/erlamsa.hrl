@@ -23,6 +23,8 @@
 -define(TCP_TIMEOUT, 5000).
 -define(DEFAULT_UDPPROXY_CLIENTPORT, 44443).
 -define(TOO_MANY_FAILED_ATTEMPTS, 10).
+-define(MAX_LOG_DATA, 10000000).
+-define(START_MONITOR_ATTEMPTS, 5).
 
 -ifdef(USE_PROCKET).
 -define(LOAD_PROCKET(R), code:add_pathz(R ++ "/deps/procket/ebin")).
