@@ -680,13 +680,18 @@ pick_sublist(Lst) ->
 
 %% TODO: type for fun().
 -spec edit_sublist(list(), list(), fun()) -> list().
+edit_sublist(Lst, Sub, Op) ->
+    lists:reverse(edit_sublist(Lst, Sub, Op, [])).
+
 %% replace the node (sub . tail) with (op (sub . tail))
-edit_sublist(Lst = [H|_T], Sub, Op) when H =:= Sub ->
-    Op(Lst);
-edit_sublist([H|T], Sub, Op) -> 
-    [edit_sublist(H, Sub, Op) | edit_sublist(T, Sub, Op)];
-edit_sublist(Lst, _Sub, _Op) -> 
-    Lst.
+-spec edit_sublist(list(), list(), fun(), list()) -> list().
+edit_sublist(Lst = [H|_T], Sub, Op, Acc) when H =:= Sub ->
+    [Op(Lst)|Acc];
+edit_sublist([H|T], Sub, Op, Acc) -> 
+    NewH = edit_sublist(H, Sub, Op),
+    edit_sublist(T, Sub, Op, [NewH|Acc]);
+edit_sublist(Lst, _Sub, _Op, Acc) -> 
+    [Lst|Acc].
 
 %% TODO: type for fun().
 -spec edit_sublists(list(), gb_trees:tree()) -> list().
@@ -795,8 +800,14 @@ construct_sed_tree_swap(Op, Name) ->
 repeat_path(Parent, _Child, N) when N < 2 ->
     Parent; %% <- causes at least 1 extra path to be made, saves one useless replace cycle
 repeat_path(Parent, Child, N) ->
-    edit_sublist(Parent, Child, 
-        fun ([_H|T]) -> [repeat_path(Parent, Child, N-1) | T] end).
+    %% preventing too deep lists
+    case erlang:process_info(self(), memory) of
+        {memory, Mem} when Mem > 256000000 ->
+            Parent;
+        _Else ->
+            edit_sublist(Parent, Child, 
+                fun ([_H|T]) -> [repeat_path(Parent, Child, N-1) | T] end)
+    end.
 
 -spec choose_child(list()) -> false | list().
 choose_child(Node) ->
@@ -835,7 +846,6 @@ sed_tree_stutter(Ll = [H|T], Meta) ->
                         [{tree_stutter, 1} | Meta], 1}
             end
     end.
-
 
 %%
 %% UTF-8
