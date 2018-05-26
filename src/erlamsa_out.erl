@@ -23,7 +23,7 @@ flush([]) -> <<>>;
 flush([H|T]) when is_binary(H) -> R = flush(T), <<H/binary, R/binary>>.
 
 -spec output(lazy_list_of_bins(), output_dest(), fun()) -> {fun(), meta(), integer(), binary()}.
-output([], Fd, Post) ->
+output([], _Fd, _Post) ->
     erlamsa_utils:error({fderror, "Something wrong happened with output FD."});
 output(Ll, Fd, Post) ->
     {NLl, NewFd, Data, N} = blocks_port(Ll, Fd, Post),
@@ -60,8 +60,8 @@ file_writer(Str) ->
         end
     end.
 
--spec rawsock_writer(inet:ip_address(), non_neg_integer()) -> fun().
-rawsock_writer(Addr, Proto) ->
+-spec ipsock_writer(inet:ip_address(), non_neg_integer()) -> fun().
+ipsock_writer(Addr, Proto) ->
     fun F(_N, Meta) ->
         {Res, FD} = procket:open(0, [{protocol, Proto}, {type, raw}, {family, inet}]),
         case Res of 
@@ -70,12 +70,28 @@ rawsock_writer(Addr, Proto) ->
                 {F, {net, 
                     fun (Data) -> gen_udp:send(Sock, Addr, 0, Data) end,                
                     fun () -> gen_udp:close(Sock), procket:close(FD), ok end 
-                }, [{output, tcpsock} | Meta]};
-            _Else -> 
-                Err = lists:flatten(io_lib:format("Error creating raw socket to ip://~s:~p '~s'", [Addr, Proto, FD])), 
+                }, [{output, ipsock} | Meta]};
+            Else ->
+                Err = lists:flatten(io_lib:format("Error creating raw socket to ip://~s protocol no. ~p: ~p", [Addr, Proto, Else])), 
                 erlamsa_utils:error(Err)
         end
     end.
+
+-spec rawsock_writer(inet:ip_address(), list()) -> fun().
+rawsock_writer(Addr, Iface) ->
+    fun F(_N, Meta) ->
+        {Res, FD} = procket:open(0, [{protocol, raw}, {interface, Iface}, {type, raw}, {family, inet}]),
+        case Res of 
+            ok ->          
+                {F, {net, 
+                    fun (Data) -> procket:sendto(FD, Data) end,                
+                    fun () -> procket:close(FD), ok end 
+                }, [{output, rawsock} | Meta]};
+            Else ->
+                Err = lists:flatten(io_lib:format("Error creating raw socket to raw://~s on interface ~s: ~p", [Addr, Iface, Else])), 
+                erlamsa_utils:error(Err)
+        end
+    end.    
 
 -spec tcpsock_writer(inet:ip_address(), inet:port_number()) -> fun().
 tcpsock_writer(Addr, Port) ->
@@ -166,9 +182,10 @@ string_outputs(Str) ->
     case Str of
         "-" -> fun stdout_stream/2;
         return -> fun return_stream/2;
-        {tcp, {Addr, Port}} -> tcpsock_writer(Addr, Port);
-        {udp, {Addr, Port}} -> udpsock_writer(Addr, Port);
-        {ip, {Addr, Proto}} -> rawsock_writer(Addr, Proto);
+        {tcp, {Addr, Port}} -> tcpsock_writer(Addr, list_to_integer(Port));
+        {udp, {Addr, Port}} -> udpsock_writer(Addr, list_to_integer(Port));
+        {ip, {Addr, Proto}} -> ipsock_writer(Addr, list_to_integer(Proto));
+        {raw, {Addr, Iface}} -> rawsock_writer(Addr, Iface); 
         {http, Params} -> http_writer(Params);
         _Else -> file_writer(Str)
     end.

@@ -59,7 +59,8 @@ inputs() ->
 outputs() ->
 	[
 		{"filename_iter%n.txt", "data will be written to files with template filename_iter%n.txt, where %n will be replaced by current interation number"},
-		{"[tcp|udp]://ipaddr:port", "send fuzzed data to remote tcp or udp port located at ipaddr"},
+		{"[tcp|udp]://ipaddr:port", "send fuzzed data to remote tcp or udp <port> located at <ipaddr>"},
+		{"[ip|raw]://ipaddr:iface", "send fuzzed data to remote host located at <ipaddr> using protocols on top of IP or raw protocol, outgoing interface is specified with <iface>"},
 		{"http://addr[:port]/path?params,[GET|POST],header1,...", "send fuzzed date to remote http host located at addr"}
 		].
 
@@ -215,7 +216,7 @@ parse_sock_addr(SockType, Addr) ->
 	Tokens = string:tokens(Addr, ":"),
 	case length(Tokens) of
 		2 ->
-			{SockType, {hd(Tokens), list_to_integer(hd(tl(Tokens)))}};
+			{SockType, {hd(Tokens), hd(tl(Tokens))}};
 		_Else ->
 			fail(io_lib:format("invalid socket address specification: '~s'", [Addr]))
 	end.
@@ -230,6 +231,8 @@ parse_url([<<"udp">>|T], _URL) ->
 	parse_sock_addr(udp, binary_to_list(hd(T)));
 parse_url([<<"ip">>|T], _URL) ->
 	parse_sock_addr(ip, binary_to_list(hd(T)));	
+parse_url([<<"raw">>|T], _URL) ->
+	parse_sock_addr(raw, binary_to_list(hd(T)));		
 parse_url([<<"tcp">>|T], _URL) ->
 	parse_sock_addr(tcp, binary_to_list(hd(T)));
 parse_url([<<"http">>|_T], URL) ->
