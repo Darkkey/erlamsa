@@ -144,7 +144,7 @@ pat_burst(Ll, Mutator, Meta) ->
 
 -spec patterns() -> [pattern()].
 patterns() -> [{1, fun pat_once_dec/3, od, "Mutate once pattern"},
-               {1, fun pat_many_dec/3, nd, "Mutate possibly many times"},
+               {2, fun pat_many_dec/3, nd, "Mutate possibly many times"},
                {1, fun pat_burst/3, bu, "Make several mutations closeby once"}
                 ].
 
