@@ -111,31 +111,29 @@ Eshell V9.0  (abort with ^G)
 ```
 
 2) Remotely, on another node:
-
     a) Start and test fuzzing node:
-```
-$ erl -pa ebin -pa deps/*/ebin -sname erlamsa
-Erlang/OTP 20 [erts-9.0] [source] [64-bit] [smp:8:8] [ds:8:8:10] [async-threads:10] [hipe] [kernel-poll:false] [dtrace]
+    ```
+    $ erl -pa ebin -pa deps/*/ebin -sname erlamsa
+    Erlang/OTP 20 [erts-9.0] [source] [64-bit] [smp:8:8] [ds:8:8:10] [async-threads:10] [hipe] [kernel-poll:false] [dtrace]
 
-Eshell V9.0  (abort with ^G)
-(erlamsa@server)1> erlamsa_app:start(direct, maps:new()).
-ok
-(erlamsa@server)2> erlamsa_app:call(erlamsa, <<"123">>).
-<<"12311223123">>
-(erlamsa@server)3>
-```
-
+    Eshell V9.0  (abort with ^G)
+    (erlamsa@server)1> erlamsa_app:start(direct, maps:new()).
+    ok
+    (erlamsa@server)2> erlamsa_app:call(erlamsa, <<"123">>).
+    <<"12311223123">>
+    (erlamsa@server)3>
+    ```
     b) Run on client node: 
-```
-$ erl -pa ebin -pa deps/*/ebin -sname client
-Erlang/OTP 20 [erts-9.0] [source] [64-bit] [smp:8:8] [ds:8:8:10] [async-threads:10] [hipe] [kernel-poll:false] [dtrace]
+    ```
+    $ erl -pa ebin -pa deps/*/ebin -sname client
+    Erlang/OTP 20 [erts-9.0] [source] [64-bit] [smp:8:8] [ds:8:8:10] [async-threads:10] [hipe] [kernel-poll:false] [dtrace]
 
-Eshell V9.0  (abort with ^G)
-(client@user)1> erlamsa_app:start(remote, {erlamsa, 'erlamsa@server'}).
-{test,<0.66.0>}
-(client@user)2> erlamsa_app:call(erlamsa, <<"321">>).
-<<"3321">>
-```
+    Eshell V9.0  (abort with ^G)
+    (client@user)1> erlamsa_app:start(remote, {erlamsa, 'erlamsa@server'}).
+    {test,<0.66.0>}
+    (client@user)2> erlamsa_app:call(erlamsa, <<"321">>).
+    <<"3321">>
+    ```
 
 ## Using as service ##
 
