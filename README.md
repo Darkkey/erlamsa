@@ -1,5 +1,5 @@
 # erlamsa
-Erlamsa -- "smart dumb fuzzer" aka erlang port of famous radamsa fuzzer.
+Erlamsa -- "`<<smart>>` dumb fuzzer" aka erlang port of famous radamsa fuzzer.
 
 ## TL;DR
 
@@ -95,14 +95,46 @@ E.g. erlamsa, that is started as
 will accept packets on port 7777 (on all network interfaces, basically on 0.0.0.0 interface) and send them to host's 192.168.0.1 port 7777. All packets coming from server to client will be fuzzed with probability of 10%, from client to server -- with probability of 90%. In this case, to start fuzzing just point your client application to erlamsa's host and port 7777. `-L -` options means that all logging will be output to stdout.
 
 ## Example usage from erlang code
+
+There are two possible ways to call erlamsa from your code: static (same host, library call) and dynamic (query the application on another node)
+
+1) Static direct usage: see `erlamsa_app:fuzz/1` and `erlamsa_app:fuzz/2`, e.g.:
 ```
--spec fuzz(binary()) -> binary().
-fuzz(Data) -> 
-    Opts = maps:put(paths, [direct],
-            maps:put(output, return,
-             maps:put(input, Data, maps:new()))),
-    MutatedData = erlamsa_utils:extract_function(erlamsa_main:fuzzer(Opts)),
-    MutatedData.
+$ ./rebar shell
+==> erlamsa (shell)
+Erlang/OTP 20 [erts-9.0] [source] [64-bit] [smp:8:8] [ds:8:8:10] [async-threads:10] [hipe] [kernel-poll:false] [dtrace]
+
+Eshell V9.0  (abort with ^G)
+1> erlamsa_app:fuzz(<<"123">>).
+<<243,160,128,169,49,50,51>>
+2>
+```
+
+2) Remotely, on another node:
+
+a) Start and test fuzzing node:
+```
+$ erl -pa ebin -pa deps/*/ebin -sname erlamsa
+Erlang/OTP 20 [erts-9.0] [source] [64-bit] [smp:8:8] [ds:8:8:10] [async-threads:10] [hipe] [kernel-poll:false] [dtrace]
+
+Eshell V9.0  (abort with ^G)
+(erlamsa@server)1> erlamsa_app:start(direct, maps:new()).
+ok
+(erlamsa@server)2> erlamsa_app:call(erlamsa, <<"123">>).
+<<"12311223123">>
+(erlamsa@server)3>
+```
+
+b) Run on client node: 
+```
+$ erl -pa ebin -pa deps/*/ebin -sname client
+Erlang/OTP 20 [erts-9.0] [source] [64-bit] [smp:8:8] [ds:8:8:10] [async-threads:10] [hipe] [kernel-poll:false] [dtrace]
+
+Eshell V9.0  (abort with ^G)
+(client@user)1> erlamsa_app:start(remote, {erlamsa, 'erlamsa@server'}).
+{test,<0.66.0>}
+(client@user)2> erlamsa_app:call(erlamsa, <<"321">>).
+<<"3321">>
 ```
 
 ## Using as service ##

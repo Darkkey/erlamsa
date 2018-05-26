@@ -7,11 +7,19 @@
 -endif.
 
 %% Application callbacks
--export([start/2, stop/1]).
+-export([start/2, stop/1, start/1, loop/1, call/2, fuzz/1, fuzz/2]).
 
 %% ===================================================================
 %% Application callbacks
 %% ===================================================================
+
+get_supervisor_opts(Opts) ->								
+	[#{id => ?MODULE,
+	start => {?MODULE, start, [Opts]},
+	restart => permanent,
+	shutdown => brutal_kill,
+	type => worker,
+	modules => [?MODULE]}].
 
 sleep() ->
 	timer:sleep(infinity).
@@ -44,12 +52,55 @@ start_behaviour(Dict) ->
 start(escript, Dict) ->
 	AuxProcesses = prepare_auxproc(Dict),
 	{MainProcess, StartFunc} = start_behaviour(Dict),
-	erlamsa_sup:start_link(lists:flatten([AuxProcesses|MainProcess])),
+	erlamsa_sup:start_link(lists:flatten([AuxProcesses | MainProcess])),
 	%% Profiler should not be supervised
 	erlamsa_profiler:start(maps:get(debug, Dict, nil), [erlamsa_logger:get_pid()]),
 	StartFunc();
+start(direct, Dict) ->
+	AuxProcesses = prepare_auxproc(Dict),
+    MainProcess = get_supervisor_opts(Dict),
+	erlamsa_sup:start_link(lists:flatten([AuxProcesses | MainProcess])),
+	%% Profiler should not be supervised
+	erlamsa_profiler:start(maps:get(debug, Dict, nil), [erlamsa_logger:get_pid()]);
+start(remote, {Pid, Node}) ->
+    {Pid, Node} ! {test, self()};
 start(_StartType, _StartArgs) ->
     throw("Unknown start type!~n").
+
+start(Opts) ->
+    Pid = spawn(?MODULE, loop, [Opts]),
+    global:register_name(erlamsa, Pid),
+    {ok, Pid}.
+
+loop(Opts) ->
+    receive 
+        {fuzz, Client, Data} ->
+            NewOpts = maps:put(paths, [direct],
+                maps:put(output, return,
+                maps:put(input, Data, Opts))),
+            Client ! {fuzzing_ok, erlamsa_fsupervisor:get_fuzzing_output(NewOpts)};
+        {test, Client} -> ok
+    end,
+    loop(Opts).
+
+-spec call(pid(), binary()) -> binary().
+call(Node, Data) ->
+    global:send(Node, {fuzz, self(), Data}),
+    receive 
+        {fuzzing_ok, Result} -> Result
+    end.
+
+-spec fuzz(binary()) -> binary().
+fuzz(Data) -> 
+    fuzz(Data, maps:new()).
+
+-spec fuzz(binary(), map()) -> binary().
+fuzz(Data, Dict) -> 
+    Opts = maps:put(paths, [direct],
+            maps:put(output, return,
+             maps:put(input, Data, Dict))),
+    MutatedData = erlamsa_utils:extract_function(erlamsa_main:fuzzer(Opts)),
+    MutatedData.   
 
 stop(_State) ->
     ok.

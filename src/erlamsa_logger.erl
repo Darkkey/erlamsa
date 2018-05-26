@@ -47,11 +47,20 @@ get_supervisor_opts(Opts) ->
 	modules => [?MODULE]}.
 
 log(Type, Fmt, Lst) ->
-	global:send(logger, {log, self(), Type, Fmt, Lst, <<>>}).
+	try 
+		global:send(logger, {log, self(), Type, Fmt, Lst, <<>>})
+	catch
+		exit: {badarg, {_Name, _Msg}} -> badarg
+	end.
 
 log_data(Type, Fmt, Lst, Data) ->
-	global:send(logger, {log, self(), Type, Fmt, Lst, Data}).	
+	try
+		global:send(logger, {log, self(), Type, Fmt, Lst, Data})
+	catch
+		exit: {badarg, {_Name, _Msg}} -> badarg
+	end.
 
+%% crash if fail
 get_pid() ->
 	global:send(logger, {get_pid, self()}),
 	receive
