@@ -79,7 +79,7 @@ loop(Opts) ->
                 maps:put(output, return,
                 maps:put(input, Data, Opts))),
             Client ! {fuzzing_ok, erlamsa_fsupervisor:get_fuzzing_output(NewOpts)};
-        {test, Client} -> ok
+        {test, _Client} -> ok
     end,
     loop(Opts).
 
