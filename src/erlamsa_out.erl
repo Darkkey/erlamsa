@@ -60,10 +60,10 @@ file_writer(Str) ->
         end
     end.
 
--spec ipsock_writer(inet:ip_address(), non_neg_integer()) -> fun().
-ipsock_writer(Addr, Proto) ->
+-spec rawsock_writer(inet:ip_address(), list()) -> fun().
+rawsock_writer(Addr, Options) ->
     fun F(_N, Meta) ->
-        {Res, FD} = procket:open(0, [{protocol, Proto}, {type, raw}, {family, inet}]),
+        {Res, FD} = procket:open(0, Options),
         case Res of 
             ok ->  
                 {ok, Sock} = gen_udp:open(0, [binary, {fd, FD}]),        
@@ -72,26 +72,10 @@ ipsock_writer(Addr, Proto) ->
                     fun () -> gen_udp:close(Sock), procket:close(FD), ok end 
                 }, [{output, ipsock} | Meta]};
             Else ->
-                Err = lists:flatten(io_lib:format("Error creating raw socket to ip://~s protocol no. ~p: ~p", [Addr, Proto, Else])), 
+                Err = lists:flatten(io_lib:format("Error creating raw socket to ip://~s with options ~p: ~p", [Addr, Options, Else])), 
                 erlamsa_utils:error(Err)
         end
-    end.
-
--spec rawsock_writer(inet:ip_address(), list()) -> fun().
-rawsock_writer(Addr, Iface) ->
-    fun F(_N, Meta) ->
-        {Res, FD} = procket:open(0, [{protocol, raw}, {interface, Iface}, {type, raw}, {family, inet}]),
-        case Res of 
-            ok ->          
-                {F, {net, 
-                    fun (Data) -> procket:sendto(FD, Data) end,                
-                    fun () -> procket:close(FD), ok end 
-                }, [{output, rawsock} | Meta]};
-            Else ->
-                Err = lists:flatten(io_lib:format("Error creating raw socket to raw://~s on interface ~s: ~p", [Addr, Iface, Else])), 
-                erlamsa_utils:error(Err)
-        end
-    end.    
+    end.  
 
 -spec tcpsock_writer(inet:ip_address(), inet:port_number()) -> fun().
 tcpsock_writer(Addr, Port) ->
@@ -184,8 +168,8 @@ string_outputs(Str) ->
         return -> fun return_stream/2;
         {tcp, {Addr, Port}} -> tcpsock_writer(Addr, list_to_integer(Port));
         {udp, {Addr, Port}} -> udpsock_writer(Addr, list_to_integer(Port));
-        {ip, {Addr, Proto}} -> ipsock_writer(Addr, list_to_integer(Proto));
-        {raw, {Addr, Iface}} -> rawsock_writer(Addr, Iface); 
+        {ip, {Addr, Proto}} -> rawsock_writer(Addr, [{protocol, list_to_integer(Proto)}, {type, raw}, {family, inet}]);
+        {raw, {Addr, Iface}} -> rawsock_writer(Addr, [{protocol, raw}, {interface, Iface}, {type, raw}, {family, inet}]); 
         {http, Params} -> http_writer(Params);
         _Else -> file_writer(Str)
     end.

@@ -60,8 +60,9 @@ outputs() ->
 	[
 		{"filename_iter%n.txt", "data will be written to files with template filename_iter%n.txt, where %n will be replaced by current interation number"},
 		{"[tcp|udp]://ipaddr:port", "send fuzzed data to remote tcp or udp <port> located at <ipaddr>"},
-		{"[ip|raw]://ipaddr:iface", "send fuzzed data to remote host located at <ipaddr> using protocols on top of IP or raw protocol, outgoing interface is specified with <iface>"},
-		{"http://addr[:port]/path?params,[GET|POST],header1,...", "send fuzzed date to remote http host located at addr"}
+		{"http://addr[:port]/path?params,[GET|POST],header1,...", "send fuzzed date to remote http host located at addr"},
+		{"ip://ipaddr:proto", "send fuzzed data to remote host located at <ipaddr> using protocol no. <proto> on top of IP (Linux & OS X)"},
+		{"raw://ipaddr:iface", "send fuzzed data to remote host located at <ipaddr> raw protocol, outgoing interface is specified with <iface> (Linux only)"}
 		].
 
 %% GF-base modes:
