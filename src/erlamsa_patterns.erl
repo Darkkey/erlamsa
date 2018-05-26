@@ -149,7 +149,7 @@ patterns() -> [{1, fun pat_once_dec/3, od, "Mutate once pattern"},
                 ].
 
 -spec default() -> [{atom(), non_neg_integer()}].
-default() -> lists:map(fun ({Pri, _, Name, _}) -> {Name, Pri} end, patterns()).
+default() -> [{Name, Pri} || {Pri, _, Name, _} <- patterns()].
 
 -spec tostring(list()) -> string().
 tostring(Lst) -> 

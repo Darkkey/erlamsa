@@ -134,7 +134,7 @@ string_to_actions(Lst, What, DefaultLst) ->
     Tokens = string:tokens(Lst, ","),
     Default = maps:from_list(DefaultLst),
     try
-    	{ok, string_to_action_loop(lists:map(fun (X) -> string:tokens(X, "=") end, Tokens), Default, [])}
+    	{ok, string_to_action_loop([string:tokens(X, "=") || X <- Tokens], Default, [])}
     catch
         error:badarg ->
         	{fail, "Invalid " ++ What ++ " list specification!"};
@@ -261,7 +261,7 @@ convert_metapath("-err") -> stderr;
 convert_metapath(Path) -> Path.
 
 parse_seed(Seed) ->
-    list_to_tuple(lists:map(fun (X) -> list_to_integer(X) end, string:tokens(Seed, ","))).
+    list_to_tuple([list_to_integer(X) || X <- string:tokens(Seed, ",")]).
 parse_seed_opt(Seed, Dict) ->
 	try
 		maps:put(seed, parse_seed(Seed), Dict)

@@ -198,7 +198,7 @@ generators() -> [{random, 1, "generate random data"},
                 {stdin, 100000, "read data from standard input if no paths are given or - is among them"}].
 
 -spec default() -> list().
-default() -> lists:map(fun ({Name, Pri, _Desc}) -> {Name, Pri} end, generators()).
+default() ->[{Name, Pri} || {Name, Pri, _Desc} <- generators()].
 
 -spec tostring(list()) -> string().
 tostring(Lst) ->

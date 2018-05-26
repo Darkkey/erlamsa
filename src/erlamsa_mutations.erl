@@ -890,7 +890,7 @@ funny_unicode() ->
                     ([X,Y], Acc) -> lists:seq(X,Y) ++ Acc; 
                     (X, Acc) -> [X|Acc] 
                 end, [], Codes), 
-    Manual ++ lists:map(fun (X) -> encode_point(X) end, Numbers).
+    Manual ++ [encode_point(X) || X <- Numbers].
 
 -spec sed_utf8_widen(list_of_bins(), meta_list()) -> mutation_res().
 sed_utf8_widen([H|T], Meta) -> 
@@ -936,7 +936,7 @@ weighted_permutations([]) -> [];
 weighted_permutations(Pris) ->
     PPris = lists:map(fun (X = {S, P, _, _}) -> {erlamsa_rnd:rand(trunc(S*P)), X} end, Pris),
     SPPris = lists:sort(fun ({A,_},{B,_}) -> A>=B end, PPris),
-    lists:map(fun ({_, X}) -> X end, SPPris).
+    [ X || {_, X} <- SPPris].
 
 %% Mutators have a score they can change themselves (1-100) and a priority given by
 %% the user at command line. Activation probability is (score*priority)/SUM(total-scores).
@@ -1018,7 +1018,7 @@ mutations(CustomMutas) ->
                         |CustomMutas].
 
 -spec default(list()) -> [{atom(), non_neg_integer()}].
-default(CustomMutas) -> lists:map(fun ({_, Pri, _, Name, _Desc}) -> {Name, Pri} end, mutations(CustomMutas)).
+default(CustomMutas) -> [{Name, Pri} || {_, Pri, _, Name, _Desc} <- mutations(CustomMutas)].
 
 -spec tostring(list()) -> string().
 tostring(Lst) -> 

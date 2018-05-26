@@ -118,7 +118,7 @@ loop(Settings, Prefix, Element, Postfix) when not is_list(Postfix) ->
     loop(Settings, Prefix, Element, [Postfix]);
 loop({Min, Max, Size, FuzzProb, _Type = count}, Prefix, Element, Postfix) ->    
     Elements_Count = erlamsa_rnd:rand_range(Min, Max),
-    Elements = lists:map(fun(_V) -> Element end, lists:seq(1, Elements_Count)),
+    Elements = [Element || _V <- lists:seq(1, Elements_Count)],
     [fun (_, Prob, Session) ->
         %io:format("Loop~n"),
         Rnd = erlamsa_rnd:rand_float(), 
