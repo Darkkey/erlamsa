@@ -67,6 +67,7 @@ $ echo 'Hello erlamsa' | ./erlamsa
 Hello erlmo erlamsa
 $ erlamsa <<FILE TO FUZZ>>
 $ erlamsa <<FILE TO FUZZ>> -o erlamsa <<FILE TO FUZZ>>.fuzzed
+$ erlamsa <<FILE TO FUZZ>> -o tcp://:<<LISTEN_ON_PORT>>
 $ cat <<BINARY WITH PACKET>> | ./erlamsa -o udp://<<HOST>>:<<PORT>>
 ```
 
@@ -86,13 +87,13 @@ To use it as fuzzing proxy, run as:
 ```
 ./erlamsa -i proto://lport:[udpclientport:]rhost:rport -P probsc,probcs
 ```
-where probsc and probcs are floats in range of 0.0 to 1.0, that represents probabilities of fuzzing packets from server to client and client to server.
+where `probsc` and `probcs` are floats in range of 0.0 to 1.0, that represents probabilities of fuzzing packets from server to client and client to server.
 
 E.g. erlamsa, that is started as
 ```
 ./erlamsa -i tcp://7777:192.168.0.1:7777 -P 0.1,0.9 -L -
 ```
-will accept packets on port 7777 (on all network interfaces, basically on 0.0.0.0 interface) and send them to host's 192.168.0.1 port 7777. All packets coming from server to client will be fuzzed with probability of 10%, from client to server -- with probability of 90%. In this case, to start fuzzing just point your client application to erlamsa's host and port 7777. `-L -` options means that all logging will be output to stdout.
+will accept packets on port `7777` (on all network interfaces, basically on 0.0.0.0 interface) and send them to host's `192.168.0.1` port `7777`. All packets coming from server to client will be fuzzed with probability of `0.1`(10%), from client to server -- with probability of `0.9`(90%). In this case, to start fuzzing just point your client application to erlamsa's host and port `7777`. `-L -` options means that all logging will be output to stdout.
 
 ## Example usage from erlang code
 
@@ -207,6 +208,11 @@ Adds custom mutation to the list of erlamsa mutators. See `external_muta.erl` fo
 ### Custom post-processing extension
 
 Adds post-processing procedure that will be applied to fuzzing result just before output. Useful for fixing checksum or form of data to avoid unnessesary noise. See `external_nhrp.erl` for example.
+
+## Platform limitations
+
+* `ip://` and `raw://` outputs are not working on Windows, `raw://` output is not working on OS X
+* minimum recommended RAM to run on Windows OS is 4Gb
 
 ## Code Status
 
