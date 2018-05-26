@@ -36,13 +36,27 @@
 -include("erlamsa.hrl").
 
 % API
--export([get_timestamp/0, build_logger/1, start/1, logger/1, log/3, log_data/4]).
+-export([get_timestamp/0, get_supervisor_opts/1, start/1, logger/1, get_pid/0, log/3, log_data/4]).
+
+get_supervisor_opts(Opts) ->
+	#{id => ?MODULE,
+	start => {?MODULE, start, [build_logger(Opts)]},
+	restart => permanent,
+	shutdown => brutal_kill,
+	type => worker,
+	modules => [?MODULE]}.
 
 log(Type, Fmt, Lst) ->
 	global:send(logger, {log, self(), Type, Fmt, Lst, <<>>}).
 
 log_data(Type, Fmt, Lst, Data) ->
 	global:send(logger, {log, self(), Type, Fmt, Lst, Data}).	
+
+get_pid() ->
+	global:send(logger, {get_pid, self()}),
+	receive
+		{pid, Pid} -> Pid
+	end.
 
 get_timestamp() ->
 	{_, _, Ms} = os:timestamp(),
@@ -111,11 +125,13 @@ build_logger_console(stderr, DoData) ->
 start(Log) ->
     Pid = spawn(erlamsa_logger, logger, [Log]),
     global:register_name(logger, Pid),
-	Pid.
+	{ok, Pid}.
 
 logger(Log) ->    
     receive
         {log, Pid, Type, Fmt, Lst, Data} -> 
-            Log(Pid, Type, Fmt, Lst, Data)   			        
+            Log(Pid, Type, Fmt, Lst, Data); 
+		{get_pid, Pid} -> 
+            Pid ! {pid, self()}
     end,
 	logger(Log).

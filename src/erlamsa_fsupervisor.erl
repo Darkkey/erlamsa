@@ -1,5 +1,13 @@
 -module(erlamsa_fsupervisor).
--export([start/1, fsupervisor/2, get_fuzzing_output/1, launch_fuzzing_process/2]).
+-export([start/1, fsupervisor/2, get_supervisor_opts/1, get_fuzzing_output/1, launch_fuzzing_process/2]).
+
+get_supervisor_opts(Opts) ->
+	#{id => ?MODULE,
+	start => {?MODULE, start, [Opts]},
+	restart => permanent,
+	shutdown => brutal_kill,
+	type => worker,
+	modules => [?MODULE]}.
 
 launch_fuzzing_process(Dict, ParentPid) ->
     Output = erlamsa_utils:extract_function(erlamsa_main:fuzzer(maps:put(parentpid, ParentPid, Dict))),
@@ -45,7 +53,8 @@ handle_command(List) ->
 start(Dict) ->
     Pid = spawn(erlamsa_fsupervisor, fsupervisor, 
                     [maps:get(maxrunningtime, Dict, 30), []]),
-    global:register_name(fuzzing_supervisor, Pid).
+    global:register_name(fuzzing_supervisor, Pid),
+    {ok, Pid}.
 
 fsupervisor(Delta, []) ->
     NewList = handle_command([]),

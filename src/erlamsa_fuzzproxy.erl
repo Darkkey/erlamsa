@@ -17,7 +17,19 @@
 -include("erlamsa.hrl").
 
 % API
--export([start/1, server_tcp/4, loop_udp/7]).
+-export([get_supervisor_opts/1, start/1, start_fuzzproxy/1, server_tcp/4, loop_udp/7]).
+
+get_supervisor_opts(Opts) ->
+	#{id => ?MODULE,
+	start => {?MODULE, start, [Opts]},
+	restart => permanent,
+	shutdown => brutal_kill,
+	type => worker,
+	modules => [?MODULE]}.
+
+start(Opts) -> 
+    Pid = spawn(?MODULE, start_fuzzproxy, [Opts]),
+    {ok, Pid}.
 
 listen(http, LocalPort) ->
     listen(tcp, LocalPort);
@@ -28,9 +40,7 @@ listen(udp, LocalPort) ->
 listen(_, _P) ->
     {error, "Unsupported fuzzing layer."}.
 
-start(Opts) when is_list(Opts) ->
-    start(maps:from_list(Opts));
-start(Opts) ->
+start_fuzzproxy(Opts) ->
     Workers = maps:get(workers, Opts, 10),
     Verbose = erlamsa_utils:verb(stdout, maps:get(verbose, Opts, 0)),
     ProxyAddrList = maps:get(proxy_address, Opts),
@@ -40,20 +50,21 @@ start(Opts) ->
             Proto = list_to_atom(StrProto),
             case listen(Proto, LocalPort) of
                 {ok, ListenSock} ->
-                    start_servers(transport(Proto), Workers, ListenSock, L, Opts, Verbose),
                     {ok, Port} = inet:port(ListenSock),
+                    start_servers(transport(Proto), Workers, ListenSock, L, Opts, Verbose),
                     Port;
                 {error,Reason} ->
                     io:format("~s", [Reason]),
                     {error,Reason}
             end
-        end, ProxyAddrList).
+        end, ProxyAddrList),
+    timer:sleep(infinity).
 
 transport(http) -> tcp;
 transport(Tr) -> Tr.
 
 start_servers(tcp, Workers, ListenSock, Endpoint, Opts, Verbose) ->
-    length([spawn(?MODULE, server_tcp,[ListenSock, Endpoint, Opts, Verbose]) || _N <- lists:seq(1, Workers)]);
+    length([spawn(?MODULE, server_tcp, [ListenSock, Endpoint, Opts, Verbose]) || _N <- lists:seq(1, Workers)]);
 start_servers(udp, _Workers, ListenSock, Endpoint, Opts, Verbose) ->
     erlamsa_logger:log(info, "udp proxy worker process started, socket id ~p, bind to ~s:~d", [ListenSock]),
     Pid = spawn(?MODULE, loop_udp, [ListenSock, Endpoint, init_clientsocket, [], 0, Opts, Verbose]),

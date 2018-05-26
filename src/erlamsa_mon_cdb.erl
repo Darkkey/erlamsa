@@ -2,7 +2,7 @@
 
 -include("erlamsa.hrl").
          
--export([launch/1, start/1, init_port/3]).
+-export([init/1, start/1, init_port/3]).
 
 parse_params(["after_params=" ++ AfterParam|T], Acc) ->
     parse_params(T, maps:put(do_after_params, AfterParam, Acc));
@@ -27,10 +27,11 @@ do_after(exec, Opts) ->
     os:cmd(ExecPath); %%TODO: add result to logs
 do_after(nil, _Opts) -> ok.
 
-launch(Params) ->
-    spawn(?MODULE, start, [Params]).
+start(Params) ->
+    Pid = spawn(?MODULE, start, [Params]),
+    {ok, Pid}.
 
-start(Params) -> 
+init(Params) -> 
     MonOpts = parse_params(string:split(Params,",",all), maps:new()),
     cdb_start(MonOpts, ?START_MONITOR_ATTEMPTS).
 

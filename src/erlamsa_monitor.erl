@@ -1,25 +1,30 @@
 -module(erlamsa_monitor).           
--export([start/1, monitors/0]).
+-export([get_supervisor_opts/1, monitors/0]).
+
+get_supervisor_opts(Opts) ->
+    get_monitors(maps:get(monitor, Opts, nil)).
 
 monitors() ->
-    [{r2, fun erlamsa_mon_r2:start/1},
-     {cdb, fun erlamsa_mon_cdb:launch/1}].
+    [{r2, erlamsa_mon_r2},
+     {cdb, erlamsa_mon_cdb}].
 
-start_monitor(nil) ->
-    ok;
-start_monitor({InMonName, Params}) ->
-    L = length(
-        lists:map(
-            fun ({MonName, Func}) when MonName == InMonName-> Func(Params);
-                (_) -> ok end,
-            monitors()
-        ))
-    . %%TODO: check and write message if it's not true.
-
-start(Opts) when is_list(Opts) ->
-    start(maps:from_list(Opts));
-start(Opts) ->
-    start_monitor(maps:get(monitor, Opts, nil)).
+get_monitors(nil) ->
+    [];
+get_monitors({InMonName, Params}) ->
+    lists:foldl(
+        fun ({MonName, ModName}, Acc) when MonName == InMonName-> 
+                [#{id => ModName,
+                start => {ModName, start, [Params]},
+                restart => temporary,
+                shutdown => brutal_kill,
+                type => worker,
+                modules => [ModName]} | Acc];
+            (_, Acc) -> Acc 
+        end,
+        [],
+        monitors()
+    ).
+    
 
 
 
