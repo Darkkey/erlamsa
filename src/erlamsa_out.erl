@@ -77,6 +77,30 @@ rawsock_writer(Addr, Options) ->
         end
     end.  
 
+
+-spec tcplisten_writer(inet:port_number()) -> fun().
+tcplisten_writer(LocalPort) ->
+    fun F(_N, Meta) ->
+        {Res, ListenSock} = gen_tcp:listen(LocalPort, [binary, {active, false}, {reuseaddr, true}, {packet,0}, {send_timeout, 5000}]),
+        case Res of 
+            ok -> {F, {net, 
+                fun (Data) -> 
+                    {ok, ClientSock} = gen_tcp:accept(ListenSock), 
+                    {ok, {Address, Port}} = inet:peername(ClientSock),
+                    TmpRecv = gen_tcp:recv(ClientSock, 0, infinity),
+                    erlamsa_logger:log(info, "tcp client connect from ~p:~p: ~p", [Address, Port, TmpRecv]), 
+                    gen_tcp:send(ClientSock, Data), timer:sleep(1), 
+                    gen_tcp:close(ClientSock)
+                end,                
+                fun () -> gen_tcp:close(ListenSock), ok end %% TODO: ugly timeout before closing..., should be in another thread
+                }, 
+                [{output, tcpsock} | Meta]};
+            Else -> 
+                Err = lists:flatten(io_lib:format("Error listening on tcp port ~p: '~s'", [LocalPort, Else])), 
+                erlamsa_utils:error({cantconnect, Err})
+        end
+    end.
+
 -spec tcpsock_writer(inet:ip_address(), inet:port_number()) -> fun().
 tcpsock_writer(Addr, Port) ->
     fun F(_N, Meta) ->
@@ -91,7 +115,26 @@ tcpsock_writer(Addr, Port) ->
                 erlamsa_utils:error({cantconnect, Err})
         end
     end.
-     
+
+-spec udplisten_writer(inet:port_number()) -> fun().
+udplisten_writer(LocalPort) ->
+    fun F(_N, Meta) ->
+        {Res, Sock} = gen_udp:open(LocalPort, [binary, {active, false}, {reuseaddr, true}, {ip, {0,0,0,0}}]),
+        case Res of 
+            ok -> {F, {net, 
+                fun (Data) -> 
+                    {ok, {Address, Port, TmpPacket}} = gen_udp:recv(Sock, 0, infinity),
+                    erlamsa_logger:log(info, "udp message received from ~p:~p: ~p", [Address, Port, TmpPacket]), 
+                    gen_udp:send(Sock, Address, Port, Data) 
+                end,
+                fun () -> gen_udp:close(Sock) end
+                }, [{output, udpsock} | Meta]};
+            _Else -> 
+                Err = lists:flatten(io_lib:format("Error listen on udp port ~p: '~s'", [LocalPort, Sock])), 
+                erlamsa_utils:error(Err)
+        end
+    end.     
+
 -spec udpsock_writer(inet:ip_address(), inet:port_number()) -> fun().
 udpsock_writer(Addr, Port) ->
     fun F(_N, Meta) ->
@@ -166,6 +209,8 @@ string_outputs(Str) ->
     case Str of
         "-" -> fun stdout_stream/2;
         return -> fun return_stream/2;
+        {tcp, {Port}} -> tcplisten_writer(list_to_integer(Port));
+        {udp, {Port}} -> udplisten_writer(list_to_integer(Port));
         {tcp, {Addr, Port}} -> tcpsock_writer(Addr, list_to_integer(Port));
         {udp, {Addr, Port}} -> udpsock_writer(Addr, list_to_integer(Port));
         {ip, {Addr, Proto}} -> rawsock_writer(Addr, [{protocol, list_to_integer(Proto)}, {type, raw}, {family, inet}]);

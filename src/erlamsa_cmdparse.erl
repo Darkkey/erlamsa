@@ -60,6 +60,7 @@ outputs() ->
 	[
 		{"filename_iter%n.txt", "data will be written to files with template filename_iter%n.txt, where %n will be replaced by current interation number"},
 		{"[tcp|udp]://ipaddr:port", "send fuzzed data to remote tcp or udp <port> located at <ipaddr>"},
+		{"[tcp|udp]://:port", "listens on tcp or udp <port> and send fuzzed data upon client connect/send message"},
 		{"http://addr[:port]/path?params,[GET|POST],header1,...", "send fuzzed date to remote http host located at addr"},
 		{"ip://ipaddr:proto", "send fuzzed data to remote host located at <ipaddr> using protocol no. <proto> on top of IP (Linux & OS X)"},
 		{"raw://ipaddr:iface", "send fuzzed data to remote host located at <ipaddr> raw protocol, outgoing interface is specified with <iface> (Linux only)"}
@@ -79,7 +80,7 @@ cmdline_optsspec() ->
 	 {debug		, $d,	"debug",		undefined,				"run in debug/profiler mode, activates verbose"},
 	 {descent	, $D,	"descent",		{float, 1.0},			"<arg>, use ascent/descent coefficient for fuzzing probablity"},
 	 {bypass	, $B,	"bypass",		{integer, 0},			"<arg>, bypass first <arg> packets before start fuzzing"},
-	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or ip://172.16.0.1:47 or http://example.com [-]"},
+	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or ip://172.16.0.1:47 or http://example.com or tcp://:80 or udp://:123 [-]"},
 	 {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
 	 {blockscale, $b, 	"blockscale",	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize multiplier"},
 	 {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},	 
@@ -218,6 +219,8 @@ parse_sock_addr(SockType, Addr) ->
 	case length(Tokens) of
 		2 ->
 			{SockType, {hd(Tokens), hd(tl(Tokens))}};
+		1 ->
+			{SockType, {hd(Tokens)}};
 		_Else ->
 			fail(io_lib:format("invalid socket address specification: '~s'", [Addr]))
 	end.
