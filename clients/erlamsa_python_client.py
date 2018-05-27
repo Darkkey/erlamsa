@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2.7
 import httplib
 
 erlamsa_url = '127.0.0.1:17771' 
