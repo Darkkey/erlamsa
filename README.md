@@ -80,6 +80,56 @@ or
 escript erlamsa --help
 ```
 
+## Using as a service ##
+
+Launch as a service:
+```
+./erlamsa -H 127.0.0.1:17771
+```
+
+HTTP POST your data to `http://<Host:Port>/erlamsa/erlamsa_esi:fuzz` as `application/octet-stream`. See examples in `clients/` folder (provided for C#, node.js and python). 
+E.g. for Python 2.7:
+```python
+import httplib
+
+erlamsa_url = '127.0.0.1:17771'
+
+original_string = "Hello erlamsa!"
+
+httpconn = httplib.HTTPConnection(erlamsa_url)
+headers = {"content-type": "application/octet-stream"}
+httpconn.request('POST', '/erlamsa/erlamsa_esi:fuzz', original_string, headers)
+response = httpconn.getresponse()
+
+fuzzed_string = response.read()
+
+print(original_string + " erlamsed to " + fuzzed_string)
+```
+
+Result:
+```
+$ python clients/erlamsa_python_client.py
+Hello erlamsa! erlamsed to rlamsa!rlallo eHello e
+```
+
+### JSON service endpoint
+
+Erlamsa also provides JSON service extension, which allows to send request in JSON documents. Fuzzing data should be encoded in base64 format and provided inside `data` field of the document, e.g.:
+
+```
+$ curl -H "Content-Type: application/json" -X POST -d '{"data":"aGVsbG8="}' http://localhost:17771/erlamsa/erlamsa_esi:json
+{"data": "bGxvbGxvaA=="}
+```
+
+### Fuzzing options
+
+For standalone Web or JSON fuzzing, along with fuzzing data, you could also provide fuzzing options, including `mutations`, `patterns`, `seed`, `blockscale`, e.t.c. The format of these options should be the same as in according command line keys. Pass them as HTTP headers (for standalone Web service) or as JSON members (for JSON endpoint). E.g.:
+
+```
+$ curl -H "Content-Type: application/json" -X POST -d '{"data":"aGVsbG8=","seed": "1,2,3"}' http://localhost:17771/erlamsa/erlamsa_esi:json
+{"data": "aGVsW2xv"}
+```
+
 ## Using as fuzzing proxy
 Erlamsa could be used a fuzzing "MiTM" proxy for TCP and UDP protocols. This allow to fuzz the communication between server and client, modifying packets coming from server to client, from client to server, or in both cases.
 
@@ -133,56 +183,6 @@ $ ./rebar shell
     (client@user)2> erlamsa_app:call(erlamsa, <<"321">>).
     <<"3321">>
     ```
-
-## Using as service ##
-
-Launch as service:
-```
-./erlamsa -H 127.0.0.1:17771
-```
-
-HTTP POST your data to `http://<Host:Port>/erlamsa/erlamsa_esi:fuzz` as `application/octet-stream`. See examples in `clients/` folder (provided for C#, node.js and python). 
-E.g. for Python 2.7:
-```python
-import httplib
-
-erlamsa_url = '127.0.0.1:17771'
-
-original_string = "Hello erlamsa!"
-
-httpconn = httplib.HTTPConnection(erlamsa_url)
-headers = {"content-type": "application/octet-stream"}
-httpconn.request('POST', '/erlamsa/erlamsa_esi:fuzz', original_string, headers)
-response = httpconn.getresponse()
-
-fuzzed_string = response.read()
-
-print(original_string + " erlamsed to " + fuzzed_string)
-```
-
-Result:
-```
-$ python clients/erlamsa_python_client.py
-Hello erlamsa! erlamsed to rlamsa!rlallo eHello e
-```
-
-### JSON service endpoint
-
-Erlamsa also provides JSON service extension, which allows to send request in JSON documents. Fuzzing data should be encoded in base64 format and provided inside `data` field of the document, e.g.:
-
-```
-$ curl -H "Content-Type: application/json" -X POST -d '{"data":"aGVsbG8="}' http://localhost:17771/erlamsa/erlamsa_esi:json
-{"data": "bGxvbGxvaA=="}
-```
-
-### Fuzzing options
-
-For standalone Web or JSON fuzzing, along with fuzzing data, you could also provide fuzzing options, including `mutations`, `patterns`, `seed`, `blockscale`, e.t.c. The format of these options should be the same as in according command line keys. Pass them as HTTP headers (for standalone Web service) or as JSON members (for JSON endpoint). E.g.:
-
-```
-$ curl -H "Content-Type: application/json" -X POST -d '{"data":"aGVsbG8=","seed": "1,2,3"}' http://localhost:17771/erlamsa/erlamsa_esi:json
-{"data": "aGVsW2xv"}
-```
 
 ## External (extension) scripts
 
