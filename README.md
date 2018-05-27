@@ -103,9 +103,8 @@ There are two possible ways to call erlamsa from your code: static (same host, l
 ```
 $ ./rebar shell
 ==> erlamsa (shell)
-Erlang/OTP 20 [erts-9.0] [source] [64-bit] [smp:8:8] [ds:8:8:10] [async-threads:10] [hipe] [kernel-poll:false] [dtrace]
+...
 
-Eshell V9.0  (abort with ^G)
 1> erlamsa_app:fuzz(<<"123">>).
 <<243,160,128,169,49,50,51>>
 2>
@@ -116,9 +115,8 @@ Eshell V9.0  (abort with ^G)
     a) Start and test fuzzing node:
     ```
     $ erl -pa ebin -pa deps/*/ebin -sname erlamsa
-    Erlang/OTP 20 [erts-9.0] [source] [64-bit] [smp:8:8] [ds:8:8:10] [async-threads:10] [hipe] [kernel-poll:false] [dtrace]
+    ...
 
-    Eshell V9.0  (abort with ^G)
     (erlamsa@server)1> erlamsa_app:start(direct, maps:new()).
     ok
     (erlamsa@server)2> erlamsa_app:call(erlamsa, <<"123">>).
@@ -128,9 +126,8 @@ Eshell V9.0  (abort with ^G)
     b) Run on client node: 
     ```
     $ erl -pa ebin -pa deps/*/ebin -sname client
-    Erlang/OTP 20 [erts-9.0] [source] [64-bit] [smp:8:8] [ds:8:8:10] [async-threads:10] [hipe] [kernel-poll:false] [dtrace]
+    ...
 
-    Eshell V9.0  (abort with ^G)
     (client@user)1> erlamsa_app:start(remote, {erlamsa, 'erlamsa@server'}).
     {test,<0.66.0>}
     (client@user)2> erlamsa_app:call(erlamsa, <<"321">>).
@@ -146,7 +143,7 @@ Launch as service:
 
 HTTP POST your data to `http://<Host:Port>/erlamsa/erlamsa_esi:fuzz` as `application/octet-stream`. See examples in `clients/` folder (provided for C#, node.js and python). 
 E.g. for Python 2.7:
-```
+```python
 import httplib
 
 erlamsa_url = '127.0.0.1:17771'
@@ -180,7 +177,7 @@ $ curl -H "Content-Type: application/json" -X POST -d '{"data":"aGVsbG8="}' http
 
 ### Fuzzing options
 
-For standalone Web or JSON fuzzing, along with fuzzing data, you could also provide fuzzing options, including `mutations`, `patterns`, `seed`, `blocksize`, e.t.c. The format of these options should be the same as in according command line keys. Pass them as HTTP headers (for standalone Web service) or as JSON members (for JSON endpoint). E.g.:
+For standalone Web or JSON fuzzing, along with fuzzing data, you could also provide fuzzing options, including `mutations`, `patterns`, `seed`, `blockscale`, e.t.c. The format of these options should be the same as in according command line keys. Pass them as HTTP headers (for standalone Web service) or as JSON members (for JSON endpoint). E.g.:
 
 ```
 $ curl -H "Content-Type: application/json" -X POST -d '{"data":"aGVsbG8=","seed": "1,2,3"}' http://localhost:17771/erlamsa/erlamsa_esi:json

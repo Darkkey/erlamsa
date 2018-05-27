@@ -929,6 +929,41 @@ sed_utf8_insert([H|T], Meta) ->
 nomutation(Ll, Meta) ->    
     {fun nomutation/2, Ll, [{nomutation, -1}|Meta], -1}.
 
+%%
+%% Length predict mutations -- trying to mutate len
+%%
+
+%% TODO: correct spec
+%%-spec mutate_length(binary()) -> {integer(), binary()}.
+mutate_length(Binary, []) -> {-2, Binary};
+mutate_length(Binary, Elem = {ok, Size, Len, A, B}) ->
+    Am8 = A * 8, Bm8 = B * 8,
+    <<H:Am8, Len:Size, Blob:Bm8, Rest/binary>> = Binary,
+    NewLenBin = erlamsa_rnd:random_block(trunc(Size/8)),
+    <<NewLen:Size>> = NewLenBin,
+    Result = 
+        case erlamsa_rnd:rand(7) of
+            %% set len field = 0
+            0 -> <<H:Am8, 0:Size, Blob:Bm8, Rest/binary>>;  
+            %% set len field = 0xFF..FF
+            1 -> <<H:Am8, -1:Size, Blob:Bm8, Rest/binary>>;
+            %% expand blob field with random data 
+            2 -> %%TODO: limit block if too big
+                RndBlock = erlamsa_rnd:random_block(NewLen*2),
+                TmpBin = <<H:Am8, Len:Size, Blob:Bm8, RndBlock/binary>>,
+                <<TmpBin/binary, Rest/binary>>;
+            %% drop blob field
+            3 -> <<H:Am8, Len:Size, Rest/binary>>;
+            %% set len field = random bytes(..)
+            _Else -> <<H:Am8, NewLen:Size, Blob:Bm8, Rest/binary>>
+        end,
+    {+1, Result}.
+
+-spec length_predict(list_of_bins(), meta_list()) -> mutation_res().
+length_predict([H|T], Meta) ->
+    Elem = erlamsa_rnd:rand_elem(erlamsa_len_predict:get_possible_simple_lens(H)),
+    {D, Bin} = mutate_length(H, Elem),  
+    {fun length_predict/2, [Bin|T], [{muta_len, D}|Meta], D}.
 
 %%
 %%  Main Mutation Functions
@@ -1024,6 +1059,7 @@ mutations(CustomMutas) ->
                         {?MAX_SCORE, 2, fun sed_fuse_this/2, ft, "jump to a similar position in block"},
                         {?MAX_SCORE, 1, fun sed_fuse_next/2, fn, "likely clone data between similar positions"},
                         {?MAX_SCORE, 2, fun sed_fuse_old/2, fo, "fuse previously seen data elsewhere"},
+                        {?MAX_SCORE, 2, fun length_predict/2, len, "predicted length mutation"},
                         {?MAX_SCORE, 0, fun nomutation/2, nil, "no mutation will occur (debugging purposes)"}
                         |CustomMutas].
 
