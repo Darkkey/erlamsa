@@ -32,6 +32,10 @@
 -define(LOAD_PROCKET(R), true).
 -endif.
 
+%% Logging table structure
+
+-record(log_entry, {date, type, pid, message, data}).
+
 %% Common inter-module types.
 
 -type prioritized_list() :: [{number(), any()}].

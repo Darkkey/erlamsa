@@ -69,39 +69,41 @@ outputs() ->
 %% GF-base modes:
 
 cmdline_optsspec() ->
-	[{help		, $h, 	"help", 		undefined, 				"show this thing"},
-	 {httpsvc   , $H,   "httpservice",  string,				    "<arg>, run as HTTP service on <host:port>, e.g.: 127.0.0.1:17771"},
-	 {about		, $a, 	"about", 		undefined, 				"what is this thing"},
-	 {version	, $V, 	"version",		undefined, 				"show program version"},
-	 {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or proto://:port, proto://host:port for data endpoint (generation mode/FAAS)"},
-	 {external	, $e,   "external", 	string,					"external pre/post/generation/mutation module"},	 
-	 {proxyprob	, $P,	"proxy",		string,					"<arg>, activate proxy mode, param is fuzzing probability in form of s->c,c->s e.g.: 0.5,0.5"},
-	 {genfuzz	, $G,	"genfuzz",		float,					"<arg>, activate generation-based fuzzer, arg is base probablity"},
-	 {debug		, $d,	"debug",		undefined,				"run in debug/profiler mode, activates verbose"},
-	 {descent	, $D,	"descent",		{float, 1.0},			"<arg>, use ascent/descent coefficient for fuzzing probablity"},
-	 {bypass	, $B,	"bypass",		{integer, 0},			"<arg>, bypass first <arg> packets before start fuzzing"},
-	 {output	, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or ip://172.16.0.1:47 or http://example.com or tcp://:80 or udp://:123 [-]"},
-	 {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
-	 {blockscale, $b, 	"blockscale",	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize multiplier"},
-	 {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},	 
-	 {seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int"},
-	 {maxrunningtime
-	 			, $t, 	"maxrunningtime",
-				 						{integer, 30}, 			"<arg>, maximum running time for fuzzing instance (service/proxy modes only)"},
-	 {mutations , $m,   "mutations",	{string,
-	  					 	erlamsa_mutations:tostring(	erlamsa_mutations:mutations())}, 	"<arg>, which mutations to use"},
-	 {patterns	, $p,	"patterns",		{string,
-	 						erlamsa_patterns:tostring(	erlamsa_patterns:patterns())},	"<arg>, which mutation patterns to use"},
-	 {generators, $g,	"generators",	{string,
-	 						erlamsa_gen:tostring(		erlamsa_gen:generators())},		"<arg>, which data generators to use"},
-	 {meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"},
-	 {monitor	, $O,   "monitor",      string,					"<arg>, monitor specification"},
-	 {logger	, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename or stdout (-) or stderr (-err)"},
-	 {noiolog   , $N,   "no-io-logging",undefined,				"disable logging of incoming and outgoing data"},
-	 {workers	, $w, 	"workers",		integer, 				"<arg>, number of working threads"},
+[
+	{about		, $a, 	"about", 		undefined, 				"what is this thing"},
+	{blockscale , $b, 	"blockscale",	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize multiplier"},
+	{bypass		, $B,	"bypass",		{integer, 0},			"<arg>, fuzzing proxy: bypass first <arg> packets before start fuzzing (TCP/HTTP only)"},
+	{debug		, $d,	"debug",		undefined,				"run in debug/profiler mode, activates verbose"},
+	{descent	, $D,	"descent",		{float, 1.0},			"<arg>, fuzzing proxy: use ascent/descent coefficient for fuzzing probability (TCP/HTTP only)"},	
+	{external	, $e,   "external", 	string,					"external pre/post/generation/mutation module"},	 
+	{generators , $g,	"generators",	{string,
+ 						erlamsa_gen:tostring(		erlamsa_gen:generators())},		"<arg>, which data generators to use"},
+	{genfuzz	, $G,	"genfuzz",		float,					"<arg>, activate generation-based fuzzer, arg is base probablity"},
+ 	{help		, $h, 	"help", 		undefined, 				"show this thing"},
+	{httpsvc    , $H,   "httpservice",  string,				    "<arg>, run as HTTP service on <host:port>, e.g.: 127.0.0.1:17771"},
+	{input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or proto://:port, proto://host:port for data endpoint (generation mode/FAAS)"},
+ 	{list		, $l,	"list",			undefined,				"list i/o options, mutations, patterns and generators"},
+	{logger		, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename, csv=filename.csv, mnesia=dir or stdout (-) or stderr (-err)"},
+	{meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"},
+	{mutations  , $m,   "mutations",	{string,
+	  				erlamsa_mutations:tostring(	erlamsa_mutations:mutations())}, 	"<arg>, which mutations to use"},
+	{count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
+	{noiolog   	, $N,   "no-io-logging",undefined,				"disable logging of incoming and outgoing data"},
+	{monitor	, $O,   "monitor",      string,					"<arg>, monitor specification"},
+	{output		, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or ip://172.16.0.1:47 or http://example.com or tcp://:80 or udp://:123 [-]"},
+	{patterns	, $p,	"patterns",		{string,
+					erlamsa_patterns:tostring(	erlamsa_patterns:patterns())},	"<arg>, which mutation patterns to use"},
+	{proxyprob	, $P,	"proxy",		string,					"<arg>, activate fuzzing proxy mode, param is fuzzing probability in form of s->c,c->s e.g.: 0.5,0.5"},
 %	 {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},	 
-	 {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose, show some progress during generation"},	 
-	 {list		, $l,	"list",			undefined,				"list i/o options, mutations, patterns and generators"}].
+	{seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int"},
+	{sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},	 
+	{maxrunningtime
+	 			, $t, 	"maxrunningtime",
+				 						{integer, 30}, 			"<arg>, maximum running time for fuzzing instance (service/proxy modes only)"},		  
+	{verbose	, $v,	"verbose",		{integer, 0},			"be more verbose, show some progress during generation"},	 
+	{version	, $V, 	"version",		undefined, 				"show program version"},
+	{workers	, $w, 	"workers",		integer, 				"<arg>, number of working threads"}
+].
 
 usage() ->
 	getopt:usage(cmdline_optsspec(), "erlamsa", "[file ...]").
@@ -175,6 +177,10 @@ parse_logger_opt([LogOpt|T], Dict) ->
 	case string:tokens(LogOpt, "=") of
 		["file", FName] ->
 			parse_logger_opt(T, maps:put(logger_file, FName, Dict));
+		["csv", FName] ->
+			parse_logger_opt(T, maps:put(logger_csv, FName, Dict));
+		["mnesia", FName] ->
+			parse_logger_opt(T, maps:put(logger_mnesia, FName, Dict));
 		_Else -> fail(io_lib:format("invalid logger specification: '~s'", [LogOpt]))
 	end.
 

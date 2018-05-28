@@ -201,6 +201,8 @@ pack_http_packet([{http_header, _, 'Content-Length', _, _}|T], Data, Acc) ->
     pack_http_packet(T, Data, [list_to_binary(io_lib:format("Content-Length: ~p~c~n", [Len, 13])) | Acc]);
 pack_http_packet([{http_header, _, HdrName, _, HdrValue}|T], Data, Acc) ->
     pack_http_packet(T, Data, [list_to_binary(io_lib:format("~s: ~s~c~n", [atom_to_list(HdrName), HdrValue, 13])) | Acc]);
+pack_http_packet([{http_request, Method, {abs_path, Path}, {VerMajor, VerMinor}}|T], Data, Acc) ->
+    pack_http_packet(T, Data, [list_to_binary(io_lib:format("~s ~s HTTP/~p.~p~p~n", [Method, Path, VerMajor, VerMinor, 13])) | Acc]);
 pack_http_packet([{http_response, {VerMajor, VerMinor}, Code, Status}|T], Data, Acc) ->
     pack_http_packet(T, Data, [list_to_binary(io_lib:format("HTTP ~p.~p ~p ~s~c~n", [VerMajor, VerMinor, Code, Status, 13])) | Acc]);
 pack_http_packet([{http_error, ErrHdr}|T], Data, Acc) ->

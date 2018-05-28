@@ -73,6 +73,13 @@ get_timestamp() ->
     {H, Min, S} = time(),
     io_lib:format('~4..0b-~2..0b-~2..0b ~2..0b:~2..0b:~2..0b.~3..0b', [Y, M, D, H, Min, S, round(Ms/1000)]).
 
+remove_newlines_from_data(Data) ->
+	[X || X <- io_lib:format("~p", [Data]), X =/= 10].
+
+
+%% 
+%% Basic I/O and file logger
+%%
 append_to_io(IO, TimeStamp, Pid, LogMsg, Data) when is_atom(IO) ->
 	io:format(IO, "~s <~p>: ~s~s~n", [TimeStamp, Pid, LogMsg, Data]); 
 append_to_io(FileName, TimeStamp, Pid, LogMsg, Data) when is_list(FileName) -> 
@@ -94,17 +101,66 @@ build_logger_io(IO, _DoData) ->
 			append_to_io(IO, TimeStamp, Pid, LogMsg, [])
 	end.
 
+%% 
+%% CSV Logger
+%%
+append_to_csv(FileName, TimeStamp, Pid, LogMsg, Data) when is_list(FileName) -> 
+	file:write_file(FileName, io_lib:format("~s,~p,\"~s\",~s~n", [TimeStamp, Pid, LogMsg, Data]), [append]).
+
+%% by default, data logging is now enabled --> none is default value
+build_logger_csv(none, _None) -> 
+	[];
+build_logger_csv(FName, none) -> 
+	fun 
+		(TimeStamp, Pid, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 -> 
+			append_to_csv(FName, TimeStamp, Pid, LogMsg, io_lib:format("~p,\"~s\"", [byte_size(Data), remove_newlines_from_data(Data)])); 
+		(TimeStamp, Pid, LogMsg, _Data) -> 
+			append_to_csv(FName, TimeStamp, Pid, LogMsg, ",")
+	end;
+build_logger_csv(FName, _DoData) -> 
+	fun 
+		(TimeStamp, Pid, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 -> 
+			append_to_csv(FName, TimeStamp, Pid, LogMsg, io_lib:format("~p,\"\"", [byte_size(Data)]));
+		(TimeStamp, Pid, LogMsg, _Data) -> 
+			append_to_csv(FName, TimeStamp, Pid, LogMsg, ",")
+	end.
+
+%% 
+%% Mnesia logger
+%%
+
+build_logger_mnesia(none, _None) -> 
+	[];
+build_logger_mnesia(Dir, _DoData) -> 
+	application_controller:set_env(mnesia, dir, Dir),
+	mnesia:create_schema([node()]),
+	mnesia:start(),
+	mnesia:create_table(log_entry, [{attributes, record_info(fields, log_entry)}]),
+	fun 
+		(TimeStamp, Pid, LogMsg, Data) -> 
+			mnesia:transaction(fun () ->
+				mnesia:write(#log_entry{date = TimeStamp, pid = Pid, message = LogMsg, data = Data})
+			end),
+			io:format("~p", [mnesia:info()])
+	end.
+
+%%
+%% Build loggers based on options
+%%
 build_logger(Opts) -> 
-	StdOutLogger = build_logger_console(maps:get(logger_stdout, Opts, none), maps:get(noiolog, Opts, none)),
-	StdErrLogger = build_logger_console(maps:get(logger_stderr, Opts, none), maps:get(noiolog, Opts, none)),
-	FileLogger = build_logger_file(maps:get(logger_file, Opts, none), maps:get(noiolog, Opts, none)),
+	Loggers = 
+		lists:flatten([
+			build_logger_console(maps:get(logger_stdout, Opts, none), maps:get(noiolog, Opts, none)),
+			build_logger_console(maps:get(logger_stderr, Opts, none), maps:get(noiolog, Opts, none)),
+			build_logger_file(maps:get(logger_file, Opts, none), maps:get(noiolog, Opts, none)),
+			build_logger_csv(maps:get(logger_csv, Opts, none), maps:get(noiolog, Opts, none)),
+			build_logger_mnesia(maps:get(logger_mnesia, Opts, none), maps:get(noiolog, Opts, none))
+		]),
 	OutputToLog =
 		fun (Pid, Fmt, Lst, Data) ->
 			TimeStamp = get_timestamp(),
 			LogMsg = io_lib:format(Fmt, Lst),
-			StdOutLogger(TimeStamp, Pid, LogMsg, Data),
-			StdErrLogger(TimeStamp, Pid, LogMsg, Data),
-			FileLogger(TimeStamp, Pid, LogMsg, Data),
+			[F(TimeStamp, Pid, LogMsg, Data) || F <- Loggers],
 			ok
 		end,
 	case maps:get(verbose, Opts, 0) of
@@ -118,14 +174,14 @@ build_logger(Opts) ->
 	end.
 
 build_logger_file(none, _) -> 
-	fun (_, _, _, _) -> ok end;
+	[];
 build_logger_file([], DoData) -> 
 	build_logger_io("./erlamsa.log", DoData);
 build_logger_file(FileName, DoData) -> 
 	build_logger_io(FileName, DoData).
 
 build_logger_console(none, _) -> 
-	fun (_, _, _, _) -> ok end;
+	[];
 build_logger_console(stdout, DoData) -> 
 	build_logger_io(standard_io, DoData);
 build_logger_console(stderr, DoData) -> 
