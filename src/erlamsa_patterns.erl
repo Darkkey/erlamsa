@@ -59,8 +59,60 @@ split({This, LlN}) when is_binary(This), byte_size(This) > ?ABSMAX_BINARY_BLOCK 
 split(U) ->
     U.
 
+%% unpack until we got [ binary(), ..., binary(), { muta, meta } ]
+%% TODO: move to utils?
+-spec prepare4sizer(list(any())) -> {binary(), any()}.
+prepare4sizer(L) -> 
+    Res = prepare4sizer(L, []),
+    %io:format("~p~n", [Res]),
+    Res.
+
+-spec prepare4sizer(list(any()), list()) -> {binary(), any()}.
+prepare4sizer([T], Acc) when is_list(T) -> 
+    prepare4sizer(T, Acc);
+prepare4sizer([H|T], Acc) when is_binary(H) -> 
+    prepare4sizer(T, [H|Acc]);
+prepare4sizer([H|T], Acc) when is_function(H) -> 
+    prepare4sizer([H()|T], Acc);
+prepare4sizer(H, Acc) -> 
+    {erlang:iolist_to_binary(lists:reverse(Acc)), H}.
+
+%%TODO: fix spec
+-spec mutate_once_sizer(binary(), any(), any(), integer(), mutator(), 
+                        meta_list(), mutator_cont_fun()) -> list().
+mutate_once_sizer(Binary, [], Rest, Ip, Mutator, Meta, NextPat) ->
+    %% do nothing, go for next pattern
+    SizerMeta = [{sizer, failed} | Meta],
+    {This, LlN} = split({Binary, Rest}),
+    if
+        This /= false ->
+            mutate_once_loop(Mutator, SizerMeta, NextPat, Ip, This, LlN);
+        true ->
+            NextPat([], Mutator, SizerMeta)
+    end;
+mutate_once_sizer(Binary, Elem = {ok, Size, Len, A, _B}, Rest, Ip, Mutator, Meta, NextPat) ->
+    Am8 = A * 8, Len8 = Len * 8,
+    <<H:Am8, Len:Size, Blob:Len8, TailBin/binary>> = Binary,
+    {This, LlN} = split({<<Blob:Len8>>, Rest}),
+    SizerMeta = [{sizer, Elem} | Meta],
+    {NewBlob, RestLst} = prepare4sizer(mutate_once_loop(Mutator, SizerMeta, NextPat, Ip, This, LlN)),
+    NewLen = size(NewBlob),
+    %io:format(standard_error, "~nNewLen = ~p/~p/~p/~p~n", [NewLen, NewBlob, TailBin, RestLst]),
+    NewBin = <<H:Am8, NewLen:Size, NewBlob/binary>>,
+    [NewBin, TailBin | RestLst].
+
+%% mutate_once for sizer pattern
+-spec mutate_once_sizer(any(), mutator(), meta_list(), mutator_cont_fun()) -> list().
+mutate_once_sizer(Ll, Mutator, Meta, NextPat) -> 
+    Ip = erlamsa_rnd:rand(?INITIAL_IP),
+    {Bin, Rest} = erlamsa_utils:uncons(Ll, false),
+    Elem = erlamsa_rnd:rand_elem(erlamsa_len_predict:get_possible_simple_lens(Bin)),
+    %io:format("Elem = ~p~n", [Elem]),
+    mutate_once_sizer(Bin, Elem, Rest, Ip, Mutator, Meta, NextPat).
+
+%% mutate_once for skipper pattern
 -spec mutate_once_skipper(any(), mutator(), meta_list(), mutator_cont_fun()) -> list().
-mutate_once_skipper(Ll, Mutator, Meta, Cont) -> 
+mutate_once_skipper(Ll, Mutator, Meta, NextPat) -> 
     Ip = erlamsa_rnd:rand(?INITIAL_IP),
     {Bin, Rest} = erlamsa_utils:uncons(Ll, false),
     Len = erlamsa_rnd:rand(floor(size(Bin)/2))*8,
@@ -69,9 +121,9 @@ mutate_once_skipper(Ll, Mutator, Meta, Cont) ->
     SkipperMeta = [{skipped, Len/8} | Meta],
     Res =   if
                 This /= false ->
-                    mutate_once_loop(Mutator, SkipperMeta, Cont, Ip, This, LlN);
+                    mutate_once_loop(Mutator, SkipperMeta, NextPat, Ip, This, LlN);
                 true ->
-                    Cont([], Mutator, SkipperMeta)
+                    [{Mutator, SkipperMeta}]
             end,
     [<<HeadBin:Len>>| Res].
 
@@ -158,18 +210,29 @@ pat_burst_cont (Ll, Mutator, Meta, N) ->
 pat_burst(Ll, Mutator, Meta) ->
     mutate_once(Ll, Mutator, [{pattern, burst}|Meta], fun pat_burst_cont/3).
 
-
 -spec pat_skip(any(), mutator(), meta_list()) -> list().
 pat_skip(Ll, Mutator, Meta) ->
-    mutate_once_skipper(Ll, Mutator, [{pattern, skipper}|Meta], fun pat_many_dec_cont/3).
+    {_, ContPatF, _, _} = erlamsa_rnd:rand_elem(patterns()),
+    mutate_once_skipper(Ll, Mutator, [{pattern, skipper}|Meta], ContPatF).
+
+-spec pat_sizer(any(), mutator(), meta_list()) -> list().
+pat_sizer(Ll, Mutator, Meta) ->
+    %%we're avoiding skipper or format predictor pattern?
+    ContPatF = erlamsa_rnd:rand_elem(simple_patterns()),
+    mutate_once_sizer(Ll, Mutator, [{pattern, sizer}|Meta], ContPatF).
 
 %% /Patterns
+
+-spec simple_patterns() -> [fun()].
+simple_patterns() -> [fun pat_once_dec/3, fun pat_many_dec/3, fun pat_burst/3].
 
 -spec patterns() -> [pattern()].
 patterns() -> [{1, fun pat_once_dec/3, od, "Mutate once pattern"},
                {2, fun pat_many_dec/3, nd, "Mutate possibly many times"},
                {1, fun pat_burst/3, bu, "Make several mutations closeby once"},
-               {3, fun pat_skip/3, sk, "Skil random block and mutate possibly many times"}
+               {1, fun pat_skip/3, sk, "Skip random block and mutate possibly many times"},
+               {1, fun pat_sizer/3, sz, "Try to find sizer and mutate enclosed data"}
+               %TODO: {0, fun nomutation/2, nu, "Pattern that calls no mutations"
                 ].
 
 -spec default() -> [{atom(), non_neg_integer()}].
@@ -200,12 +263,16 @@ make_pattern(Lst) ->
         patterns()),
     mux_patterns(Pats).
 
+-spec choose_pattern_fun({[pattern()], integer()}) -> fun().
+choose_pattern_fun({SortedPatterns, N}) -> 
+    RIdxPs = erlamsa_rnd:rand(N),
+    erlamsa_utils:choose_pri(SortedPatterns, RIdxPs).
+
 %% [{Pri, Pat}, ...] -> fun(rs, ll, muta, meta) .. pattern_output .. end
 -spec mux_patterns([pattern()]) -> fun((any(), mutator(), meta_list()) -> list()).
 mux_patterns(Patterns) ->
-    {SortedPatterns, N} = erlamsa_utils:sort_by_priority(Patterns),
+    SortedPatterns = erlamsa_utils:sort_by_priority(Patterns),
     fun(Ll, Muta, Meta) ->
-        RIdxPs = erlamsa_rnd:rand(N),
-        PatF = erlamsa_utils:choose_pri(SortedPatterns, RIdxPs),
+        PatF = choose_pattern_fun(SortedPatterns),
         PatF(Ll, Muta, Meta)
     end.
