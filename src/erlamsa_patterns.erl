@@ -210,6 +210,7 @@ pat_burst_cont (Ll, Mutator, Meta, N) ->
 pat_burst(Ll, Mutator, Meta) ->
     mutate_once(Ll, Mutator, [{pattern, burst}|Meta], fun pat_burst_cont/3).
 
+%%TODO: refactor and unify two funcs below
 -spec pat_skip(any(), mutator(), meta_list()) -> list().
 pat_skip(Ll, Mutator, Meta) ->
     {_, ContPatF, _, _} = erlamsa_rnd:rand_elem(patterns()),
@@ -217,20 +218,16 @@ pat_skip(Ll, Mutator, Meta) ->
 
 -spec pat_sizer(any(), mutator(), meta_list()) -> list().
 pat_sizer(Ll, Mutator, Meta) ->
-    %%we're avoiding skipper or format predictor pattern?
-    ContPatF = erlamsa_rnd:rand_elem(simple_patterns()),
+    {_, ContPatF, _, _} = erlamsa_rnd:rand_elem(patterns()),
     mutate_once_sizer(Ll, Mutator, [{pattern, sizer}|Meta], ContPatF).
 
 %% /Patterns
-
--spec simple_patterns() -> [fun()].
-simple_patterns() -> [fun pat_once_dec/3, fun pat_many_dec/3, fun pat_burst/3].
 
 -spec patterns() -> [pattern()].
 patterns() -> [{1, fun pat_once_dec/3, od, "Mutate once pattern"},
                {2, fun pat_many_dec/3, nd, "Mutate possibly many times"},
                {1, fun pat_burst/3, bu, "Make several mutations closeby once"},
-               {1, fun pat_skip/3, sk, "Skip random block and mutate possibly many times"},
+               {1, fun pat_skip/3, sk, "Skip random block and mutate rest"},
                {1, fun pat_sizer/3, sz, "Try to find sizer and mutate enclosed data"}
                %TODO: {0, fun nomutation/2, nu, "Pattern that calls no mutations"
                 ].
