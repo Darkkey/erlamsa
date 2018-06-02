@@ -1,5 +1,5 @@
 % Copyright (c) 2011-2014 Aki Helin
-% Copyright (c) 2014-2015 Alexander Bolshev aka dark_k3y
+% Copyright (c) 2014-2018 Alexander Bolshev aka dark_k3y
 %
 % Permission is hereby granted, free of charge, to any person obtaining a copy
 % of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,7 @@
 %%%-------------------------------------------------------------------
 %%% @author dark_k3y
 %%% @doc
-%%% Logger.
+%%% Logger service process.
 %%% @end
 %%%-------------------------------------------------------------------
 
@@ -39,164 +39,176 @@
 -export([get_timestamp/0, get_supervisor_opts/1, start/1, logger/1, get_pid/0, log/3, log_data/4]).
 
 get_supervisor_opts(Opts) ->
-	#{id => ?MODULE,
-	start => {?MODULE, start, [build_logger(Opts)]},
-	restart => permanent,
-	shutdown => brutal_kill,
-	type => worker,
-	modules => [?MODULE]}.
+    #{id => ?MODULE,
+    start => {?MODULE, start, [build_logger(Opts)]},
+    restart => permanent,
+    shutdown => brutal_kill,
+    type => worker,
+    modules => [?MODULE]}.
 
 log(Type, Fmt, Lst) ->
-	try 
-		global:send(logger, {log, self(), Type, Fmt, Lst, <<>>})
-	catch
-		exit: {badarg, {_Name, _Msg}} -> badarg
-	end.
+    try
+        global:send(logger, {log, self(), Type, Fmt, Lst, <<>>})
+    catch
+        exit: {badarg, {_Name, _Msg}} -> badarg
+    end.
 
 log_data(Type, Fmt, Lst, Data) ->
-	try
-		global:send(logger, {log, self(), Type, Fmt, Lst, Data})
-	catch
-		exit: {badarg, {_Name, _Msg}} -> badarg
-	end.
+    try
+        global:send(logger, {log, self(), Type, Fmt, Lst, Data})
+    catch
+        exit: {badarg, {_Name, _Msg}} -> badarg
+    end.
 
 %% crash if fail
 get_pid() ->
-	global:send(logger, {get_pid, self()}),
-	receive
-		{pid, Pid} -> Pid
-	end.
+    global:send(logger, {get_pid, self()}),
+    receive
+        {pid, Pid} -> Pid
+    end.
 
 get_timestamp() ->
-	{_, _, Ms} = os:timestamp(),
-	{Y, M, D} = date(),
+    {_, _, Ms} = os:timestamp(),
+    {Y, M, D} = date(),
     {H, Min, S} = time(),
-    io_lib:format('~4..0b-~2..0b-~2..0b ~2..0b:~2..0b:~2..0b.~3..0b', [Y, M, D, H, Min, S, round(Ms/1000)]).
+    io_lib:format('~4..0b-~2..0b-~2..0b ~2..0b:~2..0b:~2..0b.~3..0b',
+                  [Y, M, D, H, Min, S, round(Ms/1000)]).
 
 remove_newlines_from_data(Data) ->
-	[X || X <- io_lib:format("~p", [Data]), X =/= 10].
+    [X || X <- io_lib:format("~p", [Data]), X =/= 10].
 
 
-%% 
+%%
 %% Basic I/O and file logger
 %%
 append_to_io(IO, TimeStamp, Pid, LogMsg, Data) when is_atom(IO) ->
-	io:format(IO, "~s <~p>: ~s~s~n", [TimeStamp, Pid, LogMsg, Data]); 
-append_to_io(FileName, TimeStamp, Pid, LogMsg, Data) when is_list(FileName) -> 
-	file:write_file(FileName, io_lib:format("~s <~p>: ~s~s~n", [TimeStamp, Pid, LogMsg, Data]), [append]).
+    io:format(IO, "~s <~p>: ~s~s~n", [TimeStamp, Pid, LogMsg, Data]);
+append_to_io(FileName, TimeStamp, Pid, LogMsg, Data) when is_list(FileName) ->
+    file:write_file(FileName, io_lib:format("~s <~p>: ~s~s~n",
+                    [TimeStamp, Pid, LogMsg, Data]), [append]).
 
 %% by default, data logging is now enabled --> none is default value
-build_logger_io(IO, none) -> 
-	fun 
-		(TimeStamp, Pid, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 -> 
-			append_to_io(IO, TimeStamp, Pid, LogMsg, io_lib:format(" [data(len = ~p) = ~p]", [byte_size(Data), Data])); 
-		(TimeStamp, Pid, LogMsg, _Data) -> 
-			append_to_io(IO, TimeStamp, Pid, LogMsg, [])
-	end;
-build_logger_io(IO, _DoData) -> 
-	fun 
-		(TimeStamp, Pid, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 -> 
-			append_to_io(IO, TimeStamp, Pid, LogMsg, io_lib:format(" [data_len = ~p]", [byte_size(Data)]));
-		(TimeStamp, Pid, LogMsg, _Data) -> 
-			append_to_io(IO, TimeStamp, Pid, LogMsg, [])
-	end.
+build_logger_io(IO, none) ->
+    fun
+        (TimeStamp, Pid, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 ->
+            append_to_io(IO, TimeStamp, Pid, LogMsg,
+                         io_lib:format(" [data(len = ~p) = ~p]", [byte_size(Data), Data]));
+        (TimeStamp, Pid, LogMsg, _Data) ->
+            append_to_io(IO, TimeStamp, Pid, LogMsg, [])
+    end;
+build_logger_io(IO, _DoData) ->
+    fun
+        (TimeStamp, Pid, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 ->
+            append_to_io(IO, TimeStamp, Pid, LogMsg,
+                         io_lib:format(" [data_len = ~p]", [byte_size(Data)]));
+        (TimeStamp, Pid, LogMsg, _Data) ->
+            append_to_io(IO, TimeStamp, Pid, LogMsg, [])
+    end.
 
-%% 
+%%
 %% CSV Logger
 %%
-append_to_csv(FileName, TimeStamp, Pid, LogMsg, Data) when is_list(FileName) -> 
-	file:write_file(FileName, io_lib:format("~s,~p,\"~s\",~s~n", [TimeStamp, Pid, LogMsg, Data]), [append]).
+append_to_csv(FileName, TimeStamp, Pid, LogMsg, Data) when is_list(FileName) ->
+    file:write_file(FileName,
+                    io_lib:format("~s,~p,\"~s\",~s~n", [TimeStamp, Pid, LogMsg, Data]), [append]).
 
 %% by default, data logging is now enabled --> none is default value
-build_logger_csv(none, _None) -> 
-	[];
-build_logger_csv(FName, none) -> 
-	fun 
-		(TimeStamp, Pid, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 -> 
-			append_to_csv(FName, TimeStamp, Pid, LogMsg, io_lib:format("~p,\"~s\"", [byte_size(Data), remove_newlines_from_data(Data)])); 
-		(TimeStamp, Pid, LogMsg, _Data) -> 
-			append_to_csv(FName, TimeStamp, Pid, LogMsg, ",")
-	end;
-build_logger_csv(FName, _DoData) -> 
-	fun 
-		(TimeStamp, Pid, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 -> 
-			append_to_csv(FName, TimeStamp, Pid, LogMsg, io_lib:format("~p,\"\"", [byte_size(Data)]));
-		(TimeStamp, Pid, LogMsg, _Data) -> 
-			append_to_csv(FName, TimeStamp, Pid, LogMsg, ",")
-	end.
+build_logger_csv(none, _None) ->
+    [];
+build_logger_csv(FName, none) ->
+    fun
+        (TimeStamp, Pid, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 ->
+            append_to_csv(FName, TimeStamp, Pid, LogMsg,
+                          io_lib:format("~p,\"~s\"", [byte_size(Data),
+                                        remove_newlines_from_data(Data)]));
+        (TimeStamp, Pid, LogMsg, _Data) ->
+            append_to_csv(FName, TimeStamp, Pid, LogMsg, ",")
+    end;
+build_logger_csv(FName, _DoData) ->
+    fun
+        (TimeStamp, Pid, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 ->
+            append_to_csv(FName, TimeStamp, Pid, LogMsg,
+                          io_lib:format("~p,\"\"", [byte_size(Data)]));
+        (TimeStamp, Pid, LogMsg, _Data) ->
+            append_to_csv(FName, TimeStamp, Pid, LogMsg, ",")
+    end.
 
-%% 
+%%
 %% Mnesia logger
 %%
 
-build_logger_mnesia(none, _None) -> 
-	[];
-build_logger_mnesia(Dir, _DoData) -> 
-	application_controller:set_env(mnesia, dir, Dir),
-	mnesia:create_schema([node()]),
-	mnesia:start(),
-	mnesia:create_table(log_entry, [{attributes, record_info(fields, log_entry)}]),
-	fun 
-		(TimeStamp, Pid, LogMsg, Data) -> 
-			mnesia:transaction(fun () ->
-				mnesia:write(#log_entry{date = TimeStamp, pid = Pid, message = LogMsg, data = Data})
-			end),
-			io:format("~p", [mnesia:info()])
-	end.
+build_logger_mnesia(none, _None) ->
+    [];
+build_logger_mnesia(Dir, _DoData) ->
+    application_controller:set_env(mnesia, dir, Dir),
+    mnesia:create_schema([node()]),
+    mnesia:start(),
+    mnesia:create_table(log_entry, [{attributes, record_info(fields, log_entry)}]),
+    fun
+        (TimeStamp, Pid, LogMsg, Data) ->
+            mnesia:transaction(fun () ->
+                mnesia:write(#log_entry{date = TimeStamp, pid = Pid, message = LogMsg, data = Data})
+            end),
+            io:format("~p", [mnesia:info()])
+    end.
 
 %%
 %% Build loggers based on options
 %%
-build_logger(Opts) -> 
-	Loggers = 
-		lists:flatten([
-			build_logger_console(maps:get(logger_stdout, Opts, none), maps:get(noiolog, Opts, none)),
-			build_logger_console(maps:get(logger_stderr, Opts, none), maps:get(noiolog, Opts, none)),
-			build_logger_file(maps:get(logger_file, Opts, none), maps:get(noiolog, Opts, none)),
-			build_logger_csv(maps:get(logger_csv, Opts, none), maps:get(noiolog, Opts, none)),
-			build_logger_mnesia(maps:get(logger_mnesia, Opts, none), maps:get(noiolog, Opts, none))
-		]),
-	OutputToLog =
-		fun (Pid, Fmt, Lst, Data) ->
-			TimeStamp = get_timestamp(),
-			LogMsg = io_lib:format(Fmt, Lst),
-			[F(TimeStamp, Pid, LogMsg, Data) || F <- Loggers],
-			ok
-		end,
-	case maps:get(verbose, Opts, 0) of
-		V when V > 0 ->
-			fun (Pid, _Type, Fmt, Lst, Data) -> OutputToLog(Pid, Fmt, Lst, Data) end;
-		_Else ->
-			fun 
-				(_Pid, debug, _Fmt, _Lst, _Data) -> ok; 
-				(Pid, _Type, Fmt, Lst, Data) -> OutputToLog(Pid, Fmt, Lst, Data) 
-			end
-	end.
+build_logger(Opts) ->
+    Loggers =
+        lists:flatten([
+            build_logger_console(maps:get(logger_stdout, Opts, none),
+                                 maps:get(noiolog, Opts, none)
+                                ),
+            build_logger_console(maps:get(logger_stderr, Opts, none),
+                                 maps:get(noiolog, Opts, none)
+                                ),
+            build_logger_file(maps:get(logger_file, Opts, none), maps:get(noiolog, Opts, none)),
+            build_logger_csv(maps:get(logger_csv, Opts, none), maps:get(noiolog, Opts, none)),
+            build_logger_mnesia(maps:get(logger_mnesia, Opts, none), maps:get(noiolog, Opts, none))
+        ]),
+    OutputToLog =
+        fun (Pid, Fmt, Lst, Data) ->
+            TimeStamp = get_timestamp(),
+            LogMsg = io_lib:format(Fmt, Lst),
+            [F(TimeStamp, Pid, LogMsg, Data) || F <- Loggers],
+            ok
+        end,
+    case maps:get(verbose, Opts, 0) of
+        V when V > 0 ->
+            fun (Pid, _Type, Fmt, Lst, Data) -> OutputToLog(Pid, Fmt, Lst, Data) end;
+        _Else ->
+            fun
+                (_Pid, debug, _Fmt, _Lst, _Data) -> ok;
+                (Pid, _Type, Fmt, Lst, Data) -> OutputToLog(Pid, Fmt, Lst, Data)
+            end
+    end.
 
-build_logger_file(none, _) -> 
-	[];
-build_logger_file([], DoData) -> 
-	build_logger_io("./erlamsa.log", DoData);
-build_logger_file(FileName, DoData) -> 
-	build_logger_io(FileName, DoData).
+build_logger_file(none, _) ->
+    [];
+build_logger_file([], DoData) ->
+    build_logger_io("./erlamsa.log", DoData);
+build_logger_file(FileName, DoData) ->
+    build_logger_io(FileName, DoData).
 
-build_logger_console(none, _) -> 
-	[];
-build_logger_console(stdout, DoData) -> 
-	build_logger_io(standard_io, DoData);
-build_logger_console(stderr, DoData) -> 
-	build_logger_io(standard_error, DoData).
+build_logger_console(none, _) ->
+    [];
+build_logger_console(stdout, DoData) ->
+    build_logger_io(standard_io, DoData);
+build_logger_console(stderr, DoData) ->
+    build_logger_io(standard_error, DoData).
 
 start(Log) ->
     Pid = spawn(erlamsa_logger, logger, [Log]),
     global:register_name(logger, Pid),
-	{ok, Pid}.
+    {ok, Pid}.
 
-logger(Log) ->    
+logger(Log) ->
     receive
-        {log, Pid, Type, Fmt, Lst, Data} -> 
-            Log(Pid, Type, Fmt, Lst, Data); 
-		{get_pid, Pid} -> 
+        {log, Pid, Type, Fmt, Lst, Data} ->
+            Log(Pid, Type, Fmt, Lst, Data);
+        {get_pid, Pid} ->
             Pid ! {pid, self()}
     end,
-	logger(Log).
+    logger(Log).

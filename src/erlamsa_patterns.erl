@@ -1,5 +1,5 @@
 % Copyright (c) 2011-2014 Aki Helin
-% Copyright (c) 2014-2015 Alexander Bolshev aka dark_k3y
+% Copyright (c) 2014-2018 Alexander Bolshev aka dark_k3y
 %
 % Permission is hereby granted, free of charge, to any person obtaining a copy
 % of this software and associated documentation files (the "Software"), to deal
@@ -42,9 +42,9 @@
 
 %% during mutation a very large block could appear, here we splitting it into
 %% blocks that could be processed by erlang bitstring engine
-split_into_maxblocks(This, Acc) when byte_size(This) > ?ABSMAX_BINARY_BLOCK -> 
+split_into_maxblocks(This, Acc) when byte_size(This) > ?ABSMAX_BINARY_BLOCK ->
     S = ?ABSMAXHALF_BINARY_BLOCK,
-    AS = (S + erlamsa_rnd:rand(S) - 1)*8, 
+    AS = (S + erlamsa_rnd:rand(S) - 1)*8,
     <<A:AS, B/binary>> = This,
     split_into_maxblocks(B, [<<A:AS>> | Acc]);
 split_into_maxblocks(This, Acc) ->
@@ -75,7 +75,8 @@ mutate_once(Ll, Mutator, Meta, Cont) ->
     end.
 
 %% TODO: temporary contract, fix it.
--spec mutate_once_loop(mutator(), meta_list(), mutator_cont_fun(), non_neg_integer(), any(), any()) -> list().
+-spec mutate_once_loop(mutator(), meta_list(), mutator_cont_fun(), non_neg_integer(), any(), any())
+    -> list().
 mutate_once_loop(Mutator, Meta, Cont, Ip, This, Ll) when is_function(Ll) ->
     mutate_once_loop(Mutator, Meta, Cont, Ip, This, Ll());
 mutate_once_loop(Mutator, Meta, Cont, Ip, This, Ll) ->
@@ -93,7 +94,8 @@ mutate_once_loop(Mutator, Meta, Cont, Ip, This, Ll) ->
 %% TODO: check what is really used, should we use ++ or can just return tuple {list, {...}} or smth
 
 %% pat :: ll muta meta -> ll' ++ (list (tuple mutator meta))
-%% WARNING: in radamsa it should return list ++ tuple{mutator, meta}, here we're returning [list ++ {mutator, meta}]
+%% WARNING: in radamsa it should return list ++ tuple{mutator, meta}, here
+%% we're returning [list ++ {mutator, meta}]
 %% TODO: UGLY, need to refactor
 %% TODO: temporary contract, fix it.
 -spec pat_once_dec(any(), mutator(), meta_list()) -> list().
@@ -121,8 +123,8 @@ pat_many_dec(Ll, Mutator, Meta) ->
 %% TODO: temporary contract, fix it.
 -spec pat_burst_cont(any(), mutator(), meta_list()) -> list().
 %% TODO: UGLY, need to refactor
-pat_burst_cont (Ll, Mutator, Meta) -> 
-    pat_burst_cont (Ll, Mutator, Meta, 1). 
+pat_burst_cont (Ll, Mutator, Meta) ->
+    pat_burst_cont (Ll, Mutator, Meta, 1).
 
 pat_burst_cont (Ll, Mutator, Meta, N) ->
     P = erlamsa_rnd:rand_occurs(?REMUTATE_PROBABILITY),
@@ -152,21 +154,22 @@ patterns() -> [{1, fun pat_once_dec/3, od, "Mutate once pattern"},
 default() -> [{Name, Pri} || {Pri, _, Name, _} <- patterns()].
 
 -spec tostring(list()) -> string().
-tostring(Lst) -> 
-    lists:foldl(fun ({_Pri, _Fun, Name, _Desc}, Acc) -> 
+tostring(Lst) ->
+    lists:foldl(fun ({_Pri, _Fun, Name, _Desc}, Acc) ->
         atom_to_list(Name) ++ "," ++ Acc
     end, [], Lst).
 
 %% TODO: rewrite?
 %-spec string_patterns([pattern()]) -> fun((any(), mutator(), meta_list()) -> list()).
-%string_patterns(PatDefaultList) -> mux_patterns(lists:map(fun ({Pri, F, _, _}) -> {Pri, F} end, PatDefaultList)).
+%string_patterns(PatDefaultList) -> mux_patterns(lists:map(fun ({Pri, F, _, _})
+%% -> {Pri, F} end, PatDefaultList)).
 -spec make_pattern([{atom(), non_neg_integer()}]) -> fun().
 make_pattern(Lst) ->
     SelectedPats = maps:from_list(Lst),
     Pats = lists:foldl(
         fun ({_Pri, F, Name, _Desc}, Acc) ->
             Val = maps:get(Name, SelectedPats, notfound),
-            case Val of 
+            case Val of
                 notfound -> Acc;
                 _Else -> [{Val, F} | Acc]
             end

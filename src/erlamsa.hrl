@@ -70,4 +70,6 @@
 
 -type mutation() :: {non_neg_integer(), non_neg_integer(), mutation_fun(), atom()}.
 
+-type options() :: map().
+
 %% /Common inter-module types.

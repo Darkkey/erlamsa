@@ -1,8 +1,8 @@
 % Copyright (c) 2014-2018 Alexander Bolshev aka dark_k3y
 % Initial implementation was a little slow, so:
-% - several optimizations approaches is heavilly based on JSONE implementation 
+% - several optimizations approaches is heavilly based on JSONE implementation
 % by Copyright (c) 2013-2016, Takeru Ohta <phjgt308@gmail.com> (MIT LICENSE)
-% see https://github.com/sile/jsone/blob/master/src/jsone_decode.erl 
+% see https://github.com/sile/jsone/blob/master/src/jsone_decode.erl
 % for more details
 % Usage of original JSONE was not possible due to the fact, that
 % erlamsa should be able to parse badly crafted JSON docs
@@ -43,7 +43,10 @@
 %% API
 -export([tokenize/1, tokens_to_erlang/1]).
 
--define(NOT_SEPARATOR(C), C =/= $ , C =/= $\n, C =/= $\r, C =/= $\t, C =/= $,, C =/= $], C =/= $}, C =/= $:).
+-define(NOT_SEPARATOR(C),
+        C =/= $ , C =/= $\n, C =/= $\r, C =/= $\t, C =/= $,, C =/= $], C =/= $}, C =/= $:).
+
+%% TODO: add specs
 
 %%%
 %%% JSON tokenizer
@@ -54,8 +57,8 @@
 % ws : \x20 | \t | \r | \n
 % value: string | number | object | array | true | false | null
 % elements: value | value ws , ws elements
-% array: ws [ ws ] | ws [ ws elements ws ] 
-% object: ws { ws }  | ws { ws members ws } 
+% array: ws [ ws ] | ws [ ws elements ws ]
+% object: ws { ws }  | ws { ws members ws }
 % members: pair | pair ws , ws members
 % pair: string : value
 
@@ -68,30 +71,30 @@ ws(<<$\n, Rest/binary>>, Context, Acc) -> ws(Rest, Context, Acc);
 ws(<<$\r, Rest/binary>>, Context, Acc) -> ws(Rest, Context, Acc);
 ws(<<$  , Rest/binary>>, Context, Acc) -> ws(Rest, Context, Acc);
 ws(<<>>, _, Acc) -> Acc;
-ws(Bin, Context = [Term|RestContext], Acc) -> 
+ws(Bin, Context = [Term|RestContext], Acc) ->
     %io:format("111111 ~p~n", [Bin]),
     case Term of
         array ->                array(Bin, [array_end|RestContext], Acc);
         {elements, List} ->     elements(Bin, RestContext, List, Acc);
-        object ->               object(Bin, [object_end|RestContext], Acc);   
+        object ->               object(Bin, [object_end|RestContext], Acc);
         {members, Pairs} ->     members(Bin, RestContext, Pairs, Acc);
         pair ->                 pair(Bin, RestContext, Acc);
-        pair_delim ->           pair(Bin, Context, Acc);    
+        pair_delim ->           pair(Bin, Context, Acc);
         value ->                value(Bin, RestContext, Acc)
     end.
 
 value(<<$[, Rest/binary>>, Context, Acc) ->
     ws(Rest, [array|Context], Acc);
 value(<<${, Rest/binary>>, Context, Acc) ->
-    ws(Rest, [object|Context], Acc);    
+    ws(Rest, [object|Context], Acc);
 value(<<"true", Rest/binary>>, Context, Acc) ->
-    push(Rest, Context, {constant, true}, Acc);  
+    push(Rest, Context, {constant, true}, Acc);
 value(<<"false", Rest/binary>>, Context, Acc) ->
-    push(Rest, Context, {constant, false}, Acc);  
+    push(Rest, Context, {constant, false}, Acc);
 value(<<"null", Rest/binary>>, Context, Acc) ->
-    push(Rest, Context, {constant, null}, Acc);  
+    push(Rest, Context, {constant, null}, Acc);
 value(<<$", Rest/binary>>, Context, Acc) ->
-    string(Rest, Context, [], Acc);    
+    string(Rest, Context, [], Acc);
 value(Bin, Context, Acc) ->
     number(Bin, Context, Acc).
 
@@ -113,13 +116,13 @@ object(<<$}, Rest/binary>>, [object_end|Context],  Acc) ->
     %io:format("mmmmmm~n"),
     push(Rest, Context, {object, []}, Acc);
 object(Bin, Context, Acc) ->
-    ws(Bin, [pair, {members, []}|Context], Acc).    
+    ws(Bin, [pair, {members, []}|Context], Acc).
 
 members(<<$}, Rest/binary>>, [object_end|Context], Pairs, Acc) ->
     %io:format("nnnnnnnnn ~p~n", [{Rest, [value|Context], [{object, lists:reverse(Pairs)}|Acc]}]),
     push(Rest, Context, {object, lists:reverse(Pairs)}, Acc);
 members(<<$,, Rest/binary>>, Context, Pairs, Acc) ->
-    ws(Rest, [pair, {members, Pairs}|Context], Acc).    
+    ws(Rest, [pair, {members, Pairs}|Context], Acc).
 
 pair(<<$:, Rest/binary>>, [pair_delim | Context], Acc) ->
     %io:format("1: ~p~n", [{Rest, Context, Acc}]),
@@ -128,7 +131,7 @@ pair(Bin, Context, Acc) ->
     %io:format("2: ~p~n", [{Bin, Context, Acc}]),
     ws(Bin, [value, pair_delim | Context], Acc).
 
-%% Primitive values parsing 
+%% Primitive values parsing
 push(Bin, [], Value, Acc) ->
     ws(Bin, [], [Value|Acc]);
 push(Bin, [{elements, List} | Context], Value, Acc) ->
@@ -145,11 +148,11 @@ push(Bin, [pair_end, {pair_start, Key} | Context], Value, Acc) ->
 
 %% TODO: more effective way to handle big strings
 %% this may be slow in some cases
-string(<<$", Rest/binary>>, Context, RevStr, Acc) -> 
+string(<<$", Rest/binary>>, Context, RevStr, Acc) ->
     push(Rest, Context, {string, lists:reverse(RevStr)}, Acc);
-string(<<C:8, Rest/binary>>, Context, RevStr, Acc) -> 
+string(<<C:8, Rest/binary>>, Context, RevStr, Acc) ->
     string(Rest, Context, [C|RevStr], Acc);
-string(<<>>, Context, RevStr, Acc) -> 
+string(<<>>, Context, RevStr, Acc) ->
     push(<<>>, Context, {junkstring, lists:reverse([$"|RevStr])}, Acc).
 
 number(<<C:8, Rest/binary>>, Context, Acc) when ?NOT_SEPARATOR(C) ->
@@ -168,14 +171,15 @@ tokens_to_erlang(Ast) when is_list(Ast) ->
     lists:map(fun tokens_to_erlang/1, Ast);
 tokens_to_erlang({object, Lst}) ->
     Pairs = lists:map(fun tokens_to_erlang/1, Lst),
-    lists:foldl(fun ({Key, Value}, Acc) -> maps:put(Key, Value, Acc) end, 
+    lists:foldl(fun ({Key, Value}, Acc) -> maps:put(Key, Value, Acc) end,
                 maps:new(), Pairs);
 tokens_to_erlang({array, Lst}) ->
     lists:map(fun tokens_to_erlang/1, Lst);
 tokens_to_erlang({pair, Key, Value}) ->
-    {tokens_to_erlang(Key), tokens_to_erlang(Value)};    
+    {tokens_to_erlang(Key), tokens_to_erlang(Value)};
 tokens_to_erlang({string, Value}) ->
     Value;
+%% TODO: nested try/catch, fix me:
 tokens_to_erlang({number, Value}) ->
     try list_to_integer(Value) of
         Int -> Int
@@ -185,7 +189,7 @@ tokens_to_erlang({number, Value}) ->
         catch error:badarg ->
             invalid_number
         end
-    end;    
+    end;
 tokens_to_erlang(Token) ->
     Token.
 

@@ -38,16 +38,19 @@
 % API
 -export([start/2, profiler/1]).
 
+-spec start(nil | debug, list()) -> ok | no_return().
 start(nil, _Args) ->
     ok;
 start(debug, Args) ->
     spawn(observer, start, []),
     spawn(erlamsa_profiler, profiler, [Args]).
-    
-profiler(Args) ->    
+
+-spec profiler(list()) -> no_return().
+profiler(Args) ->
     ProcessCount = length(erlang:processes()),
     Memory = erlang:memory(total),
     LoggerMemory = process_info(hd(Args), [memory]),
-    erlamsa_logger:log(info, "Profiler report: procs = ~p, memory = ~p, logger_memory = ~p", [ProcessCount, Memory, LoggerMemory]),
+    erlamsa_logger:log(info, "Profiler report: procs = ~p, memory = ~p, logger_memory = ~p",
+                       [ProcessCount, Memory, LoggerMemory]),
     timer:sleep(5000),
     profiler(Args).

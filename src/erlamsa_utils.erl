@@ -42,10 +42,15 @@
         flush_bvecs/2, applynth/3, sort_by_priority/1,
         check_empty/1, stderr_probe/2, halve/1, error/1,
         resolve_addr/1, make_post/1, make_fuzzer/1, make_mutas/1,
-        load_deps/1]).
+        load_deps/1, get_direct_fuzzing_opts/2]).
 
 load_deps(RuntimeDir) ->
-	true and ?LOAD_PROCKET(RuntimeDir).         
+    true and ?LOAD_PROCKET(RuntimeDir).
+
+get_direct_fuzzing_opts(Data, Opts) ->
+    maps:put(paths, [direct],
+        maps:put(output, return,
+            maps:put(input, Data, Opts))).
 
 cons_revlst([H|T], L) ->
     cons_revlst(T, [H|L]);
@@ -79,7 +84,7 @@ forcell(X) when is_function(X) -> X().
 
 -spec sort_by_priority(prioritized_list()) -> {prioritized_list(), number()}.
 sort_by_priority(L) ->
-    SL = lists:sort(fun ({A,_},{B,_}) -> A > B end, L),
+    SL = lists:sort(fun ({A, _}, {B, _}) -> A > B end, L),
     N = lists:foldl(fun ({A, _}, Acc) -> Acc + A end, 0, SL),
     {SL, N}.
 
@@ -117,7 +122,7 @@ list_halves_walk(T, [_Head|Tail], Acc) when Tail =:= [] ->
 list_halves_walk([A|B], [_Head|Tail], Acc) ->
     list_halves_walk(B, tl(Tail), [A | Acc]).
 
-%% TODO: Check if correct <---!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+%% TODO: Check if correct <---!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 -spec merge(false | binary(), binary()) -> binary().
 merge(false, B) -> B;
 merge(A, B) -> <<A/binary, B/binary>>.
@@ -166,7 +171,8 @@ applynth(I, [E|Rest], Fun) -> [E|applynth(I-1, Rest, Fun)].
 %% Fun MUST return list!
 %% WARN: TODO: Ugly, need rewrite
 % led(L, Pos, Fun) ->
-%     % io:write({L, Pos, Fun, lists:sublist(L, Pos - 1), Fun(lists:nth(Pos,L)), lists:nthtail(Pos,L)}),
+%     % io:write({L, Pos, Fun, lists:sublist(L, Pos - 1), Fun(lists:nth(Pos,L)),
+%     %   lists:nthtail(Pos,L)}),
 %     lists:sublist(L, Pos - 1) ++ Fun(lists:nth(Pos,L)) ++ lists:nthtail(Pos,L).
 
 %% get an element by key from gb_tree, return DefaultValue if none exists
@@ -199,7 +205,9 @@ make_post(ModuleName) ->
 make_fuzzer(nil) ->
     fun (_Proto, Data, _Opts) -> Data end;
 make_fuzzer(ModuleName) ->
-    fun (Proto, Data, Opts) -> erlang:apply(list_to_atom(ModuleName), fuzzer, [Proto, Data, Opts]) end.
+    fun (Proto, Data, Opts) ->
+        erlang:apply(list_to_atom(ModuleName), fuzzer, [Proto, Data, Opts])
+    end.
 
 make_mutas(nil) ->
     [];

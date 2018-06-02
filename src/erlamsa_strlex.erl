@@ -57,15 +57,15 @@ texty_enough(Lst) -> texty_enough(Lst, ?MIN_TEXTY).
 -spec texty_enough(string(), non_neg_integer()) -> true | false.
 texty_enough([], _) -> true; % match short textual input, accidentally also short trailing ones
 texty_enough(_, 0) -> true;
-texty_enough([H|T], N) -> 
-    case texty(H) of 
+texty_enough([H|T], N) ->
+    case texty(H) of
         true -> texty_enough(T, N - 1);
         false -> false
     end.
 
 %% TODO: fix spec of chunk
 -spec flush_type_node(chunk_type(), string(), chunk_list()) -> chunk_list().
-flush_type_node(Type, Bytes, Chunks) ->    
+flush_type_node(Type, Bytes, Chunks) ->
     [{Type, lists:reverse(Bytes)} | Chunks].
 
 %% (byte ..) -> (node ...)
@@ -76,29 +76,29 @@ lex(Lst) -> string_lex_step(Lst, [], []).
 
 %% TODO: fix spec of chunk
 -spec string_lex_step(string(), string(), chunk_list()) -> chunk_list().
-string_lex_step([], [], Chunks) -> 
+string_lex_step([], [], Chunks) ->
     lists:reverse(Chunks);
-string_lex_step([], Rawr, Chunks) -> 
+string_lex_step([], Rawr, Chunks) ->
     lists:reverse(flush_type_node(byte, Rawr, Chunks));
 %% WARN: TODO: ugly, need rewrite
-string_lex_step(Lst = [H|T], Rawr, Chunks) -> 
+string_lex_step(Lst = [H|T], Rawr, Chunks) ->
     case texty_enough(Lst) of
         true ->
-            if 
-                Rawr =:= [] -> 
+            if
+                Rawr =:= [] ->
                     step_text(Lst, [], Chunks);
-                true -> 
-                    step_text(Lst, [], 
+                true ->
+                    step_text(Lst, [],
                         flush_type_node(byte, Rawr, Chunks))
             end;
-        false -> 
+        false ->
             string_lex_step(T, [H | Rawr], Chunks)
     end.
 
 
 %% TODO: fix spec of chunk
 -spec step_text(string(), string(), chunk_list()) -> chunk_list().
-step_text([], Seenr, Chunks) -> 
+step_text([], Seenr, Chunks) ->
     lists:reverse(flush_type_node(text, Seenr, Chunks));
 step_text([H|T], Seenr, Chunks) when H == 34; H == 39 ->
     %%fun (End) ->
@@ -120,16 +120,17 @@ step_text(Lst = [H|T], Seenr, Chunks) ->
 step_delimited([], _Start, _End, AfterR, PrevR, Chunks) ->
     lists:reverse(flush_type_node(text, AfterR ++ PrevR, Chunks));
 %% finish text chunk
-step_delimited(_Lst = [H|T], Start, End, AfterR, _PrevR = [_PrevrH | PrevrT], Chunks) when H =:= End ->
+step_delimited(_Lst = [H|T], Start, End, AfterR,
+               _PrevR = [_PrevrH | PrevrT], Chunks) when H =:= End ->
     Node = {delimited, Start, lists:reverse(AfterR), End},
     case PrevrT =:= [] of
         true -> string_lex_step(T, [], [Node | Chunks]);
         false -> string_lex_step(T, [], [Node, {text, lists:reverse(PrevrT)} | Chunks])
     end;
-%% skip byte after quotation, if it seems texty    
-step_delimited(_Lst = [H|T], Start, End, AfterR, PrevR, Chunks) when H =:= 92, T =:= [] -> %% \
+%% skip byte after quotation, if it seems texty
+step_delimited(_Lst = [H|T], Start, End, AfterR, PrevR, Chunks) when H =:= 92, T =:= [] ->
     step_delimited(T, Start, End, [92 | AfterR], PrevR, Chunks);
-step_delimited(_Lst = [H|T], Start, End, AfterR, PrevR, Chunks) when H =:= 92 -> %% \
+step_delimited(_Lst = [H|T], Start, End, AfterR, PrevR, Chunks) when H =:= 92 ->
     case texty(hd(T)) of
         true -> step_delimited(tl(T), Start, End, [hd(T), 92 | AfterR], PrevR, Chunks);
         false -> step_delimited(T, Start, End, [H | AfterR], PrevR, Chunks)
@@ -144,12 +145,12 @@ step_delimited(Lst = [H|T], Start, End, AfterR, PrevR, Chunks) ->
 -spec unlex(chunk_list()) -> string().
 unlex(Chunks) ->
     lists:foldr(
-        fun 
+        fun
             ({byte, T}, Tail) ->
                 T ++ Tail;
             ({delimited, LD, L, RD}, Tail) ->
                 [LD | L] ++ [RD | Tail];
-            ({text, T}, Tail) -> 
+            ({text, T}, Tail) ->
                 T ++ Tail
         end
         , [], Chunks).

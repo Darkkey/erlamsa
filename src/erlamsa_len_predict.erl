@@ -1,4 +1,3 @@
-% Copyright (c) 2011-2014 Aki Helin
 % Copyright (c) 2014-2018 Alexander Bolshev aka dark_k3y
 %
 % Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,7 +24,7 @@
 %%% Length field predictors.
 %%% @end
 %%%-------------------------------------------------------------------
--module(erlamsa_len_predict). 
+-module(erlamsa_len_predict).
 -author("dark_k3y").
 
 -include("erlamsa.hrl").
@@ -38,20 +37,26 @@
 %% API
 -export([get_possible_simple_lens/1]).
 
-basic_8len({A, B}, Binary) when A < B, B > 0, A < size(Binary) ->
+-type lenfield_range() :: {integer(), integer()}.
+-type sizer_location() :: {ok, integer(), integer(), integer(), integer()}.
+
+-spec basic_u8len(lenfield_range(), binary()) -> [] | sizer_location().
+basic_u8len({A, B}, Binary) when A < B, B > 0, A < size(Binary) ->
     Am8 = A*8,
     RestLen = B - A,
     case Binary of
         <<_H:Am8, Len:8, _Rest/binary>> when Len =:= RestLen, Len > 2 -> {ok, 8, Len, A, B};
         _Else -> []
     end;
-basic_8len(_Range, _Binary) -> [].
+basic_u8len(_Range, _Binary) -> [].
 
-simple_8len(A, Binary) ->
+-spec simple_u8len(integer(), binary()) -> [] | sizer_location().
+simple_u8len(A, Binary) ->
     lists:flatten([
-        basic_8len({A, (size(Binary)-X)}, Binary) || X <- lists:seq(0,8)      
+        basic_u8len({A, (size(Binary)-X)}, Binary) || X <- lists:seq(0, 8)
     ]).
 
+-spec basic_len(lenfield_range(), binary()) -> [] | sizer_location().
 basic_len({A, B}, Binary) when A < B, B > 0, A < size(Binary) ->
     Am8 = A*8,
     RestLen = B - A,
@@ -63,7 +68,8 @@ basic_len({A, B}, Binary) when A < B, B > 0, A < size(Binary) ->
     end;
 basic_len(_Range, _Binary) -> [].
 
-simple_len({A,B}, Binary)->
+-spec simple_len(lenfield_range(), binary()) -> [] | sizer_location().
+simple_len({A, B}, Binary)->
     lists:flatten([
         basic_len({A, (B)}, Binary),
         basic_len({A, (B-1)}, Binary),
@@ -72,19 +78,19 @@ simple_len({A,B}, Binary)->
         basic_len({A, (B-8)}, Binary)
     ]).
 
+-spec get_possible_simple_lens(binary()) -> list(sizer_location()).
 get_possible_simple_lens(Binary) when size(Binary) > 10 ->
     Len = size(Binary),
     SubLen = trunc(Len/5),
     FirstSeq = lists:seq(0, SubLen),
-    
     VarBSeq = [erlamsa_rnd:rand_range(SubLen, Len) || _A <- FirstSeq],
     Ranges = [{X, Y} || X <- FirstSeq, Y <- VarBSeq],
     AllRanges = lists:foldr(fun (A, Acc) -> [{A, Len}|Acc] end, Ranges, FirstSeq),
-    BigLens = lists:foldl(fun ({A,B}, Acc) -> [simple_len({A, B}, Binary) | Acc] end, [], AllRanges),
-    
-    SmallLens = [simple_8len(A, Binary) || A <- FirstSeq],
+    BigLens = lists:foldl(fun ({A, B}, Acc) ->
+                [simple_len({A, B}, Binary) | Acc] end, [], AllRanges),
+    SmallLens = [simple_u8len(A, Binary) || A <- FirstSeq],
     lists:flatten([SmallLens | BigLens]);
-get_possible_simple_lens(Binary) -> 
+get_possible_simple_lens(Binary) ->
     lists:flatten([
-        [simple_len({X, size(Binary)}, Binary), simple_8len(X, Binary)] 
-            || X <- lists:seq(0,3)]).
+        [simple_len({X, size(Binary)}, Binary), simple_u8len(X, Binary)]
+            || X <- lists:seq(0, 3)]).

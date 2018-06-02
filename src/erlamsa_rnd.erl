@@ -1,3 +1,5 @@
+% Copyright (c) 2011-2014 Aki Helin
+% Copyright (c) 2014-2018 Alexander Bolshev aka dark_k3y
 %
 % Permission is hereby granted, free of charge, to any person obtaining a copy
 % of this software and associated documentation files (the "Software"), to deal
@@ -33,9 +35,9 @@
 
 %% API
 -export([rand/1, erand/1, rand_float/0, rand_bit/0, rand_occurs/1, rand_occurs_fixed/2,
-		rand_nbit/1, rand_log/1, rand_elem/1, random_block/1, 
-		random_numbers/2, random_permutation/1, rand_range/2,
-		reservoir_sample/2, rand_delta/0, rand_delta_up/0, random_bitstring/1]).
+        rand_nbit/1, rand_log/1, rand_elem/1, random_block/1,
+        random_numbers/2, random_permutation/1, rand_range/2,
+        reservoir_sample/2, rand_delta/0, rand_delta_up/0, random_bitstring/1]).
 
 %% Constants
 -define(P_WEAKLY_USUALLY_NOM, 11).
@@ -126,8 +128,8 @@ rand_elem(L) ->
 random_block(N) -> random_block(N, []).
 
 %% Generate random block of bits
-random_bitstring(Bits) ->             
-    RB = rand_range(0, round(math:pow(2,Bits))),
+random_bitstring(Bits) ->
+    RB = rand_range(0, round(math:pow(2, Bits))),
     <<RB:Bits>>.
 
 -spec random_block(non_neg_integer(), list(byte())) -> binary().
@@ -138,7 +140,8 @@ random_block(N, Out) -> random_block(N - 1, [rand(256) | Out]).
 -spec random_numbers(non_neg_integer(), non_neg_integer()) -> [non_neg_integer()].
 random_numbers(Bound, Cnt) -> random_numbers(Bound, Cnt, []).
 
--spec random_numbers(non_neg_integer(), non_neg_integer(), [non_neg_integer()]) -> [non_neg_integer()].
+-spec random_numbers(non_neg_integer(), non_neg_integer(), [non_neg_integer()])
+    -> [non_neg_integer()].
 random_numbers(_, 0, Acc) -> Acc;
 random_numbers(Bound, Cnt, Acc) -> random_numbers(Bound, Cnt - 1, [rand(Bound) | Acc]).
 
@@ -153,21 +156,22 @@ random_permutation(Lst = [A, B]) ->
         false -> Lst
     end;
 random_permutation(L) ->
-    [Y || {_, Y} <- lists:sort([{random:uniform(),X} || X <- L])].
+    [Y || {_, Y} <- lists:sort([{random:uniform(), X} || X <- L])].
 
 
 %% see http://en.wikipedia.org/wiki/Reservoir_sampling
 -spec reservoir_sample(list(), non_neg_integer()) -> list().
 reservoir_sample(Ll, K) when K >= length(Ll) -> Ll;
-reservoir_sample(Ll, K) ->     
+reservoir_sample(Ll, K) ->
     reservoir_sample(list_to_tuple(Ll), length(Ll), K, K+1, list_to_tuple(lists:sublist(Ll, K))).
 
--spec reservoir_sample(tuple(), non_neg_integer(), non_neg_integer(), non_neg_integer(), tuple()) -> list().
+-spec reservoir_sample(tuple(), non_neg_integer(), non_neg_integer(), non_neg_integer(), tuple())
+    -> list().
 reservoir_sample(_S, N, _K, I, R) when I > N -> tuple_to_list(R);
 reservoir_sample(S, N, K, I, R) ->
     J = erand(I),
     case J =< K of
-        true -> reservoir_sample(S, N, K, I+1, 
+        true -> reservoir_sample(S, N, K, I+1,
             setelement(J, R, element(I, S)));
         false -> reservoir_sample(S, N, K, I+1, R)
     end.
