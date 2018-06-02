@@ -59,6 +59,22 @@ split({This, LlN}) when is_binary(This), byte_size(This) > ?ABSMAX_BINARY_BLOCK 
 split(U) ->
     U.
 
+-spec mutate_once_skipper(any(), mutator(), meta_list(), mutator_cont_fun()) -> list().
+mutate_once_skipper(Ll, Mutator, Meta, Cont) -> 
+    Ip = erlamsa_rnd:rand(?INITIAL_IP),
+    {Bin, Rest} = erlamsa_utils:uncons(Ll, false),
+    Len = erlamsa_rnd:rand(floor(size(Bin)/2))*8,
+    <<HeadBin:Len, TailBin/binary>> = Bin,
+    {This, LlN} = split({TailBin, Rest}),
+    SkipperMeta = [{skipped, Len/8} | Meta],
+    Res =   if
+                This /= false ->
+                    mutate_once_loop(Mutator, SkipperMeta, Cont, Ip, This, LlN);
+                true ->
+                    Cont([], Mutator, SkipperMeta)
+            end,
+    [<<HeadBin:Len>>| Res].
+
 %% Ll -- list of smth
 %% TODO: WARNING: Ll could be a function in Radamsa terms
 %% TODO: WARNING: check this code!
@@ -142,12 +158,18 @@ pat_burst_cont (Ll, Mutator, Meta, N) ->
 pat_burst(Ll, Mutator, Meta) ->
     mutate_once(Ll, Mutator, [{pattern, burst}|Meta], fun pat_burst_cont/3).
 
+
+-spec pat_skip(any(), mutator(), meta_list()) -> list().
+pat_skip(Ll, Mutator, Meta) ->
+    mutate_once_skipper(Ll, Mutator, [{pattern, skipper}|Meta], fun pat_many_dec_cont/3).
+
 %% /Patterns
 
 -spec patterns() -> [pattern()].
 patterns() -> [{1, fun pat_once_dec/3, od, "Mutate once pattern"},
                {2, fun pat_many_dec/3, nd, "Mutate possibly many times"},
-               {1, fun pat_burst/3, bu, "Make several mutations closeby once"}
+               {1, fun pat_burst/3, bu, "Make several mutations closeby once"},
+               {3, fun pat_skip/3, sk, "Skil random block and mutate possibly many times"}
                 ].
 
 -spec default() -> [{atom(), non_neg_integer()}].

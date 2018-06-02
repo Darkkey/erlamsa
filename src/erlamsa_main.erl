@@ -144,10 +144,10 @@ record_result(X, Acc) -> [X | Acc].
 
 -spec fuzzer_loop(fun(), fun(), fun(), fun(), fun(), fun(), non_neg_integer(),
                   non_neg_integer(), non_neg_integer() | inf, fun(), list()) -> [binary()].
-fuzzer_loop(_, _, _, _, RecordMetaFun, _Verbose, {I, _}, N, _, _, Acc)
+fuzzer_loop(_, _, _, _, RecordMetaFun, _, {I, _}, N, _, _, Acc)
                                                     when is_integer(N) andalso N < I ->
     RecordMetaFun({close, ok}), lists:reverse(Acc);
-fuzzer_loop(_, _, _, _, RecordMetaFun, Verbose, {_, FailedI}, _, _, _, Acc)
+fuzzer_loop(_, _, _, _, RecordMetaFun, _, {_, FailedI}, _, _, _, Acc)
                                                     when FailedI > ?TOO_MANY_FAILED_ATTEMPTS  ->
     io:format(standard_error, "Too many failed output attempts (~p), stopping.~n", [FailedI]),
     erlamsa_logger:log(error, "Too many failed output attempts (~p), stopping.~n", [FailedI]),
