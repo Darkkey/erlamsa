@@ -78,7 +78,11 @@ maybe_meta_logger(Path, _) ->
       stdout -> erlamsa_utils:verb(stdout, 10);
       _Else -> make_verb_to_file(Path)
   end,
-  fun (X) -> Verb(io_lib:format("~p", [X])) end.
+  fun 
+      F([X|T]) -> Verb(io_lib:format("~p~n", [X])), F(T);
+      F([]) -> []; 
+      F(X) -> Verb(io_lib:format("~p~n", [X])) 
+  end.
 
 -spec test() -> list().
 test() -> fuzzer(maps:put(paths, ["test.1"], maps:put(verbose, 0,
@@ -129,9 +133,8 @@ fuzzer(Dict) ->
                                             ),
             RecordMeta = maybe_meta_logger( maps:get(metadata, Dict, nil), Fail),
             RecordMeta({seed, maps:get(seed, Dict)}),
-            Pat = erlamsa_patterns:make_pattern(maps:get(patterns, Dict,
-                                                erlamsa_patterns:default())
-                                               ),
+            PatList = maps:get(patterns, Dict, erlamsa_patterns:default()),
+            Pat = erlamsa_patterns:make_pattern(PatList),
             Out = erlamsa_out:string_outputs(maps:get(output, Dict, "-")),
             Post = erlamsa_utils:make_post(maps:get(external, Dict, nil)),
             Sleep = maps:get(sleep, Dict, 0),
@@ -160,7 +163,7 @@ fuzzer_loop(Muta, Gen, Pat, Out, RecordMetaFun, Verbose, {I, Fails}, N, Sleep, P
             {CandidateOut, Fd, OutMeta} = Out(I, [{nth, I}, GenMeta]),
             Tmp = Pat(Ll, Muta, OutMeta),
             {CandidateMuta, Meta, Written, CandidateData} = erlamsa_out:output(Tmp, Fd, Post),
-            RecordMetaFun([{written, Written}| Meta]),
+            RecordMetaFun(lists:reverse([{written, Written}| Meta])),
             Verbose(io_lib:format("output: ~p~n", [Written])),
             {CandidateOut, CandidateMuta, CandidateData, 0}
         catch
