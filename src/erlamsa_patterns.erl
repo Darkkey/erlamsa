@@ -227,7 +227,7 @@ pat_sizer(Ll, Mutator, Meta) ->
 patterns() -> [{1, fun pat_once_dec/3, od, "Mutate once pattern"},
                {2, fun pat_many_dec/3, nd, "Mutate possibly many times"},
                {1, fun pat_burst/3, bu, "Make several mutations closeby once"},
-               {1, fun pat_skip/3, sk, "Skip random block and mutate rest"},
+               {1, fun pat_skip/3, sk, "Skip random sized block and mutate rest"},
                {1, fun pat_sizer/3, sz, "Try to find sizer and mutate enclosed data"}
                %TODO: {0, fun nomutation/2, nu, "Pattern that calls no mutations"
                 ].
