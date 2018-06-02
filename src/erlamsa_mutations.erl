@@ -936,26 +936,26 @@ nomutation(Ll, Meta) ->
 %% TODO: correct spec
 %%-spec mutate_length(binary()) -> {integer(), binary()}.
 mutate_length(Binary, []) -> {-2, Binary};
-mutate_length(Binary, Elem = {ok, Size, Len, A, B}) ->
-    Am8 = A * 8, Bm8 = B * 8,
-    <<H:Am8, Len:Size, Blob:Bm8, Rest/binary>> = Binary,
+mutate_length(Binary, _Elem = {ok, Size, Len, A, _B}) ->
+    Am8 = A * 8, Len8 = Len * 8,
+    <<H:Am8, Len:Size, Blob:Len8, Rest/binary>> = Binary,
     NewLenBin = erlamsa_rnd:random_block(trunc(Size/8)),
     <<NewLen:Size>> = NewLenBin,
     Result = 
         case erlamsa_rnd:rand(7) of
             %% set len field = 0
-            0 -> <<H:Am8, 0:Size, Blob:Bm8, Rest/binary>>;  
+            0 -> <<H:Am8, 0:Size, Blob:Len8, Rest/binary>>;  
             %% set len field = 0xFF..FF
-            1 -> <<H:Am8, -1:Size, Blob:Bm8, Rest/binary>>;
+            1 -> <<H:Am8, -1:Size, Blob:Len8, Rest/binary>>;
             %% expand blob field with random data 
             2 -> %%TODO: limit block if too big
                 RndBlock = erlamsa_rnd:random_block(NewLen*2),
-                TmpBin = <<H:Am8, Len:Size, Blob:Bm8, RndBlock/binary>>,
+                TmpBin = <<H:Am8, Len:Size, Blob:Len8, RndBlock/binary>>,
                 <<TmpBin/binary, Rest/binary>>;
             %% drop blob field
             3 -> <<H:Am8, Len:Size, Rest/binary>>;
             %% set len field = random bytes(..)
-            _Else -> <<H:Am8, NewLen:Size, Blob:Bm8, Rest/binary>>
+            _Else -> <<H:Am8, NewLen:Size, Blob:Len8, Rest/binary>>
         end,
     {+1, Result}.
 
