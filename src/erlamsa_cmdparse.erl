@@ -321,15 +321,15 @@ parse_opts([list|_T], _Dict) ->
         ,[],
         lists:sort(fun ({_,N1,_}, {_,N2,_}) -> N1 =< N2 end,
             erlamsa_gen:generators())),
-    MutPatToStr =
-        fun({_,_,_,N,D}, Acc) ->
-                [io_lib:format("    ~-3s: ~s~n",[atom_to_list(N),D])|Acc]
-        end, 
-    Ms = lists:foldl(MutPatToStr, [], 
-        lists:sort(fun ({_,_,_,N1,_}, {_,_,_,N2,_}) -> N1 >= N2 end,
-            erlamsa_mutations:mutations())),
-    Ps = lists:foldl(MutPatToStr, [], 
-        erlamsa_patterns:patterns()),
+    Ms = lists:foldl(fun({_,_,_,N,D}, Acc) ->
+                        [io_lib:format("    ~-3s: ~s~n",[atom_to_list(N),D])|Acc]
+                     end, [], 
+                     lists:sort(fun ({_,_,_,N1,_}, {_,_,_,N2,_}) -> N1 >= N2 end,
+                     erlamsa_mutations:mutations())),
+    Ps = lists:foldr(fun({_,_,N,D}, Acc) ->
+                        [io_lib:format("    ~-3s: ~s~n",[atom_to_list(N),D])|Acc]
+                     end, [], 
+                     erlamsa_patterns:patterns()),
     io:format("Inputs ~n~s~nOutputs (-o)~n~s~nGenerators (-g)~n~s~nMutations (-m)~n~s~nPatterns (-p)~n~s",
         [Is, Os, Gs, Ms, Ps]),
     halt(0);
