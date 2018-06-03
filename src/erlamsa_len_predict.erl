@@ -81,7 +81,7 @@ simple_len({A, B}, Binary)->
 -spec get_possible_simple_lens(binary()) -> list(sizer_location()).
 get_possible_simple_lens(Binary) when size(Binary) > 10 ->
     Len = size(Binary),
-    SubLen = trunc(Len/5),
+    SubLen = min(trunc(Len/5), ?SIZER_MAX_FIRST_BYTES),
     FirstSeq = lists:seq(0, SubLen),
     VarBSeq = [erlamsa_rnd:rand_range(SubLen, Len) || _A <- FirstSeq],
     Ranges = [{X, Y} || X <- FirstSeq, Y <- VarBSeq],
