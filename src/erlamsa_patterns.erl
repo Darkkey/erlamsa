@@ -132,6 +132,9 @@ mutate_once_skipper(Ll, Mutator, Meta, NextPat) ->
 %% TODO: WARNING: check this code!
 %% TODO: temporary contract, fix it.
 -spec mutate_once(any(), mutator(), meta_list(), mutator_cont_fun()) -> list().
+mutate_once([<<>>], Mutator, Meta, _Cont) ->
+    %% FIXME: We're not calling Cont here, it's ok UNTIL we have pat that accepts empty binary
+    {Mutator, [{mutate_once, empty_stopped}|Meta]};
 mutate_once(Ll, Mutator, Meta, Cont) ->
     Ip = erlamsa_rnd:rand(?INITIAL_IP),
     {This, LlN} = split(erlamsa_utils:uncons(Ll, false)),
@@ -151,9 +154,12 @@ mutate_once_loop(Mutator, Meta, Cont, Ip, This, Ll) ->
     N = erlamsa_rnd:rand(Ip),
     if
         N =:= 0 orelse Ll =:= [] ->  %% or TODO: Ll == nil???
+            %io:format("~p~p~p~n", [Mutator, Meta, [This | Ll]]),
             {M, L, Mt} = Mutator([This | Ll], Meta),
+            %io:format("ll empty ~p~n",[Meta]),
             Cont(L, M, Mt);
         true ->
+            %io:format("ll not empty ~p~n",[Meta]),
             [This, fun () -> mutate_once_loop(Mutator, Meta, Cont, Ip, hd(Ll), tl(Ll)) end]
     end.
 
