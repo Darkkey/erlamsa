@@ -43,9 +43,9 @@
 -spec basic_u8len(lenfield_range(), binary()) -> [] | sizer_location().
 basic_u8len({A, B}, Binary) when A < B, B > 0, A < size(Binary) ->
     Am8 = A*8,
-    RestLen = B - A,
     case Binary of
-        <<_H:Am8, Len:8, _Rest/binary>> when Len =:= RestLen, Len > 2 -> {ok, 8, Len, A, B};
+        <<_H:Am8, Len:8, _Rest/binary>> when Len =:= B - A - 1, Len > 2
+            -> {ok, 8, Len, A, B};
         _Else -> []
     end;
 basic_u8len(_Range, _Binary) -> [].
@@ -59,11 +59,10 @@ simple_u8len(A, Binary) ->
 -spec basic_len(lenfield_range(), binary()) -> [] | sizer_location().
 basic_len({A, B}, Binary) when A < B, B > 0, A < size(Binary) ->
     Am8 = A*8,
-    RestLen = B - A,
     case Binary of
-        <<_H:Am8, Len:16, _Rest/binary>> when Len =:= RestLen, Len > 2 -> {ok, 16, Len, A, B};
-        <<_H:Am8, Len:32, _Rest/binary>> when Len =:= RestLen, Len > 2 -> {ok, 32, Len, A, B};
-        <<_H:Am8, Len:64, _Rest/binary>> when Len =:= RestLen, Len > 2 -> {ok, 64, Len, A, B};
+        <<_H:Am8, Len:16, _Rest/binary>> when Len =:= B - A - 2, Len > 2 -> {ok, 16, Len, A, B};
+        <<_H:Am8, Len:32, _Rest/binary>> when Len =:= B - A - 4, Len > 2 -> {ok, 32, Len, A, B};
+        <<_H:Am8, Len:64, _Rest/binary>> when Len =:= B - A - 8, Len > 2 -> {ok, 64, Len, A, B};
         _Else -> []
     end;
 basic_len(_Range, _Binary) -> [].

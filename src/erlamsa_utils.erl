@@ -129,6 +129,8 @@ merge(A, B) -> <<A/binary, B/binary>>.
 
 %% [{Pri, El}, ...], N -> El
 -spec choose_pri(prioritized_list(), number()) -> any().
+choose_pri([{_, El}| _], 0) ->  %% Handle case with 0-only elements
+    El;
 choose_pri([{This, El }| _], N) when N < This ->
      El;
 choose_pri([{This, _ }| Tail], N) ->

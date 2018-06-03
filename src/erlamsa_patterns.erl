@@ -107,7 +107,7 @@ mutate_once_sizer(Ll, Mutator, Meta, NextPat) ->
     Ip = erlamsa_rnd:rand(?INITIAL_IP),
     {Bin, Rest} = erlamsa_utils:uncons(Ll, false),
     Elem = erlamsa_rnd:rand_elem(erlamsa_len_predict:get_possible_simple_lens(Bin)),
-    %io:format("Elem = ~p~n", [Elem]),
+    %io:format("Elem = ~p ~p ~p~n", [Elem, size(Bin), NextPat]),
     mutate_once_sizer(Bin, Elem, Rest, Ip, Mutator, Meta, NextPat).
 
 %% mutate_once for skipper pattern
@@ -214,18 +214,30 @@ pat_burst_cont (Ll, Mutator, Meta, N) ->
 %% TODO: temporary contract, fix it.
 -spec pat_burst(any(), mutator(), meta_list()) -> list().
 pat_burst(Ll, Mutator, Meta) ->
-    mutate_once(Ll, Mutator, [{pattern, burst}|Meta], fun pat_burst_cont/3).
+    mutate_once(Ll, Mutator, [{pattern, burst} | Meta], fun pat_burst_cont/3).
 
-%%TODO: refactor and unify two funcs below
--spec pat_skip(any(), mutator(), meta_list()) -> list().
-pat_skip(Ll, Mutator, Meta) ->
-    {_, ContPatF, _, _} = erlamsa_rnd:rand_elem(patterns()),
-    mutate_once_skipper(Ll, Mutator, [{pattern, skipper}|Meta], ContPatF).
 
--spec pat_sizer(any(), mutator(), meta_list()) -> list().
-pat_sizer(Ll, Mutator, Meta) ->
-    {_, ContPatF, _, _} = erlamsa_rnd:rand_elem(patterns()),
-    mutate_once_sizer(Ll, Mutator, [{pattern, sizer}|Meta], ContPatF).
+-spec make_complex_pat(fun(), atom()) -> fun().
+make_complex_pat(MutatorFun, Type) ->
+    fun (Ll, Mutator, Meta) ->
+        {_, ContPatF, _, _} = erlamsa_rnd:rand_elem(patterns()),
+        MutatorFun(Ll, Mutator, [{pattern, Type} | Meta], ContPatF)
+    end.
+
+-spec make_pat_skip() -> fun().
+make_pat_skip() ->
+    make_complex_pat(fun mutate_once_skipper/4, skipper).
+
+-spec make_pat_sizer() -> fun().
+make_pat_sizer() ->
+    make_complex_pat(fun mutate_once_sizer/4, sizer).
+
+
+%% TODO: temporary contract, fix it.
+-spec pat_nomuta(any(), mutator(), meta_list()) -> list().
+pat_nomuta(Ll, Mutator, Meta) ->
+    {This, LlN} = split(erlamsa_utils:uncons(Ll, false)),
+    [This | LlN] ++ [{Mutator, [{pattern, no_muta} | Meta]}].
 
 %% /Patterns
 
@@ -233,10 +245,10 @@ pat_sizer(Ll, Mutator, Meta) ->
 patterns() -> [{1, fun pat_once_dec/3, od, "Mutate once pattern"},
                {2, fun pat_many_dec/3, nd, "Mutate possibly many times"},
                {1, fun pat_burst/3, bu, "Make several mutations closeby once"},
-               {1, fun pat_skip/3, sk, "Skip random sized block and mutate rest"},
-               {1, fun pat_sizer/3, sz, "Try to find sizer and mutate enclosed data"}
-               %TODO: {0, fun nomutation/2, nu, "Pattern that calls no mutations"
-                ].
+               {1, make_pat_skip(), sk, "Skip random sized block and mutate rest"},
+               {1, make_pat_sizer(), sz, "Try to find sizer and mutate enclosed data"},
+               {0, fun pat_nomuta/3, nu, "Pattern that calls no mutations"}
+              ].
 
 -spec default() -> [{atom(), non_neg_integer()}].
 default() -> [{Name, Pri} || {Pri, _, Name, _} <- patterns()].
@@ -274,8 +286,8 @@ choose_pattern_fun({SortedPatterns, N}) ->
 %% [{Pri, Pat}, ...] -> fun(rs, ll, muta, meta) .. pattern_output .. end
 -spec mux_patterns([pattern()]) -> fun((any(), mutator(), meta_list()) -> list()).
 mux_patterns(Patterns) ->
-    SortedPatterns = erlamsa_utils:sort_by_priority(Patterns),
+    SortedPats = erlamsa_utils:sort_by_priority(Patterns),
     fun(Ll, Muta, Meta) ->
-        PatF = choose_pattern_fun(SortedPatterns),
+        PatF = choose_pattern_fun(SortedPats),
         PatF(Ll, Muta, Meta)
     end.
