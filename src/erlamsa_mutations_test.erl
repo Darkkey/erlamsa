@@ -16,6 +16,8 @@
 
 init_randr() -> random:seed(now()).
 
+init_randr(Seed) -> random:seed(Seed).
+
 sprintf(Format, Vars) -> 
 	lists:flatten(io_lib:format(Format, Vars)).
 
@@ -94,13 +96,13 @@ string_lexer_test(N, Input) ->
 ascii_bad_test() ->	
 	?assert(recursive_regex_tester(
 		"----------------------------------------\"\"--------------------------------------------------",
-		"^-*\".*[%|a].*\"-*$", erlamsa_mutations:construct_ascii_bad_mutator(), 20
+		"^-*\".*[%|a].*\"-*$", erlamsa_mutations:construct_ascii_bad_mutator(), 50
 		) =:= true). 
 
 ascii_delimeter_test() ->	
 	?assert(recursive_regex_tester(
 		"----------------------------------------\"\"--------------------------------------------------",
-		"^-*\"-*$", erlamsa_mutations:construct_ascii_delimeter_mutator(), 20
+		"^-*\"-*$", erlamsa_mutations:construct_ascii_delimeter_mutator(), 50
 		) =:= true). 
 	
 %%
@@ -110,7 +112,7 @@ ascii_delimeter_test() ->
 sed_fuse_this_test() ->	
 	?assert(recursive_regex_tester(
 		"kittenslartibartfasterthaneelslartibartfastenyourseatbelts",
-		"kittenslartibartfastenyourseatbelts", fun erlamsa_mutations:sed_fuse_this/2, 120
+		"kittenslartibartfastenyourseatbelts", fun erlamsa_mutations:sed_fuse_this/2, 500
 		) =:= true). 
 
 %%
@@ -216,7 +218,7 @@ line_perm_length_test() ->
 %%
 
 st_line_ins_test() ->
-	init_randr(),
+	init_randr({1,2,3}),
 	TestString = "ABC DEF", 
 	Muta = erlamsa_mutations:construct_st_line_muta(fun erlamsa_generic:st_list_ins/2, list_ins, [0]),
 	{_F, Ll, _Meta, _D} = Muta([list_to_binary(TestString)], []),
