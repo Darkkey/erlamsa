@@ -115,7 +115,7 @@ mutate_once_sizer(Ll, Mutator, Meta, NextPat) ->
 mutate_once_skipper(Ll, Mutator, Meta, NextPat) -> 
     Ip = erlamsa_rnd:rand(?INITIAL_IP),
     {Bin, Rest} = erlamsa_utils:uncons(Ll, false),
-    Len = erlamsa_rnd:rand(floor(size(Bin)/2))*8,
+    Len = erlamsa_rnd:rand(trunc(size(Bin)/2))*8,
     <<HeadBin:Len, TailBin/binary>> = Bin,
     {This, LlN} = split({TailBin, Rest}),
     SkipperMeta = [{skipped, Len/8} | Meta],
