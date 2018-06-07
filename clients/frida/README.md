@@ -6,7 +6,7 @@ This is a simple example that demonstrates how to send data from frida to erlams
 
 ```
 $ cd erlamsa
-$ ./erlamsa -H 127.0.0.1:17771 &
+$ ./erlamsa -H 127.0.0.1:17771 -D
 $ cd clients/frida
 $ make
 $ python3 erlamsa_from_frida.py ./example

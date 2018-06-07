@@ -18,3 +18,4 @@ clients/csharp/erlamsa_csharp_client/erlamsa_csharp_client/bin/*
 tmp
 clients/frida/example
 .vscode
+*.pid

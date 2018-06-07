@@ -40,11 +40,21 @@
 -type start_type() :: escript | direct | remote | atom().
 
 %% Application callbacks
--export([start/2, stop/1, start/1, loop/1, call/2, fuzz/1, fuzz/2]).
+-export([main/0, main/1, start/2, stop/1, start/1, loop/1, call/2, fuzz/1, fuzz/2]).
 
 %% ===================================================================
 %% Application callbacks
 %% ===================================================================
+
+-spec main() -> no_return().
+main() ->
+    Dict = erlamsa_cmdparse:parse(init:get_plain_arguments()),
+	erlamsa_app:start(escript, Dict).
+
+-spec main(list(string())) -> no_return().
+main(Args) ->
+    Dict = erlamsa_cmdparse:parse(Args),
+	erlamsa_app:start(escript, Dict).
 
 -spec get_supervisor_opts(options()) -> supervisor:child_spec().
 get_supervisor_opts(Opts) ->

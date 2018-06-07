@@ -42,10 +42,13 @@
         flush_bvecs/2, applynth/3, sort_by_priority/1,
         check_empty/1, stderr_probe/2, halve/1, error/1,
         resolve_addr/1, make_post/1, make_fuzzer/1, make_mutas/1,
-        load_deps/1, get_direct_fuzzing_opts/2]).
+        load_deps/1, get_direct_fuzzing_opts/2, get_deps_dirs/1]).
 
 load_deps(RuntimeDir) ->
     true and ?LOAD_PROCKET(RuntimeDir).
+
+get_deps_dirs(RuntimeDir) ->
+    [RuntimeDir ++ ?PROCKET_DIR].
 
 get_direct_fuzzing_opts(Data, Opts) ->
     maps:put(paths, [direct],

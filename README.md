@@ -87,6 +87,11 @@ Launch as a service:
 ./erlamsa -H 127.0.0.1:17771
 ```
 
+Or in detached mode (erlamsa will go background after launch):
+```
+./erlamsa -H 127.0.0.1:17771 -D
+```
+
 HTTP POST your data to `http://<Host:Port>/erlamsa/erlamsa_esi:fuzz` as `application/octet-stream`. See examples in `clients/` folder (provided for C#, node.js and python). 
 E.g. for Python 2.7:
 ```python

@@ -70,11 +70,12 @@ outputs() ->
 
 cmdline_optsspec() ->
 [
+    {ascent 	, $A,	"ascent",		{float, 1.0},			"<arg>, fuzzing proxy: use ascent/descent coefficient for fuzzing probability (TCP/HTTP only)"}, 
     {about		, $a, 	"about", 		undefined, 				"what is this thing"}, 
     {blockscale , $b, 	"blockscale", 	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize multiplier"}, 
     {bypass		, $B,	"bypass",		{integer, 0},			"<arg>, fuzzing proxy: bypass first <arg> packets before start fuzzing (TCP/HTTP only)"}, 
     {debug		, $d,	"debug",		undefined,				"run in debug/profiler mode, activates verbose"}, 
-    {descent	, $D,	"descent",		{float, 1.0},			"<arg>, fuzzing proxy: use ascent/descent coefficient for fuzzing probability (TCP/HTTP only)"}, 
+    {detach	    , $D,	"detach",		undefined,			    "detach from console after start (service mode)"}, 
     {external	, $e,   "external", 	string,					"external pre/post/generation/mutation module"}, 
     {generators , $g,	"generators",	{string,
                          erlamsa_gen:tostring(		erlamsa_gen:generators())},		"<arg>, which data generators to use"}, 
@@ -337,7 +338,7 @@ parse_opts([{monitor, MonitorSpec}|T], Dict) ->
     %%Syntax is monitor_name:params 
     %%TODO: temporary solution, only r2 monitor is supported now
     parse_opts(T, maps:put(monitor, {cdb,MonitorSpec}, Dict));	
-parse_opts([{descent, DC}|T], Dict) ->
+parse_opts([{ascent, DC}|T], Dict) ->
     parse_opts(T, maps:put(descent_coeff, DC, Dict));
 parse_opts([{bypass, DC}|T], Dict) ->
     parse_opts(T, maps:put(bypass, DC, Dict));
@@ -383,6 +384,8 @@ parse_opts([{output, OutputOpts}|T], Dict) ->
      parse_opts(T, maps:put(output, parse_output(OutputOpts), Dict));
 parse_opts([{seed, SeedOpts}|T], Dict) ->
     parse_opts(T, parse_seed_opt(SeedOpts, Dict));
+parse_opts([detach|T], Dict) ->
+    parse_opts(T, Dict);
 parse_opts([_|T], Dict) ->
     parse_opts(T, Dict);
 parse_opts([], Dict) ->

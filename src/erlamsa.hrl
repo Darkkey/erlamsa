@@ -26,9 +26,10 @@
 -define(MAX_LOG_DATA, 10000000).
 -define(SIZER_MAX_FIRST_BYTES, 512).
 -define(START_MONITOR_ATTEMPTS, 5).
+-define(PROCKET_DIR, "/deps/procket/ebin").
 
 -ifdef(USE_PROCKET).
--define(LOAD_PROCKET(R), code:add_pathz(R ++ "/deps/procket/ebin")).
+-define(LOAD_PROCKET(R), code:add_pathz(R ++ ?PROCKET_DIR)).
 -else.
 -define(LOAD_PROCKET(R), true).
 -endif.
