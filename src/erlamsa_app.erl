@@ -52,8 +52,7 @@ main() ->
 	erlamsa_app:start(escript, Dict).
 
 -spec main(list(string())) -> no_return().
-main(Args) ->
-    Dict = erlamsa_cmdparse:parse(Args),
+main(Dict) ->
 	erlamsa_app:start(escript, Dict).
 
 -spec get_supervisor_opts(options()) -> supervisor:child_spec().

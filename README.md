@@ -6,7 +6,7 @@ Erlamsa -- "`<<smart>>` dumb fuzzer" aka erlang port of famous radamsa fuzzer.
 ```
 $ sudo apt-get install git gcc make erlang erlang-dev erlang-tools erlang-ssl erlang-eunit erlang-mnesia erlang-inets
 $ git clone https://github.com/Darkkey/erlamsa && cd erlamsa && make
-$ echo "Hello erlamsa!" | ./erlamsa
+$ echo 'Hello erlamsa!' | ./erlamsa
 ```
 
 ## Installation:
@@ -213,7 +213,7 @@ Adds post-processing procedure that will be applied to fuzzing result just befor
 
 ## Platform limitations
 
-* on unix platforms (Linux, OS X, ...) erlamsa could not be launch in background mode using standard '&' shell symbol due to erlang VM limitations; instead, use -D option. E.g., instead of `./erlamsa -H 127.0.0.1:17771 &` use `./erlamsa -H 127.0.0.1:17771 -D`
+* on unix platforms (Linux, OS X, ...) erlamsa could not be launched in background mode using standard `&` shell symbol due to erlang VM limitations; `-D` option is intended for it. E.g., instead of `./erlamsa -H 127.0.0.1:17771 &` use `./erlamsa -H 127.0.0.1:17771 -D`
 * `ip://` and `raw://` outputs are not working on Windows, `raw://` output is not working on OS X
 * minimum recommended RAM to run on Windows OS is 4Gb
 

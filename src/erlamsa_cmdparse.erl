@@ -51,18 +51,18 @@ Erlamsa is written by Alexander Bolshev (@dark_k3y).~n".
 
 inputs() ->
     [
-        {"filename1.txt filename2.txt ...", "data will be read from file(s) with specified name(s)"}, 
-        {"-i lport:rhost:rport", "erlamsa will work in fuzzing proxy mode (currently tcp only), listenting on lport and sending fuzzed data to rhost:port"}, 
+        {"filename1.txt filename2.txt ...", "data will be read from file(s) with specified name(s)"},
+        {"-i lport:rhost:rport", "erlamsa will work in fuzzing proxy mode (currently tcp only), listenting on lport and sending fuzzed data to rhost:port"},
         {"-H host:port", "erlamsa will listen on <host:port> for HTTP POST queries with data, sending fuzzing result in reply, fuzzing options are passed via HTTP headers"}
     ].
 
 outputs() ->
     [
-        {"filename_iter%n.txt", "data will be written to files with template filename_iter%n.txt, where %n will be replaced by current interation number"}, 
-        {"[tcp|udp]://ipaddr:port", "send fuzzed data to remote tcp or udp <port> located at <ipaddr>"}, 
-        {"[tcp|udp]://:port", "listens on tcp or udp <port> and send fuzzed data upon client connect/send message"}, 
-        {"http://addr[:port]/path?params,[GET|POST],header1,...", "send fuzzed date to remote http host located at addr"}, 
-        {"ip://ipaddr:proto", "send fuzzed data to remote host located at <ipaddr> using protocol no. <proto> on top of IP (Linux & OS X)"}, 
+        {"filename_iter%n.txt", "data will be written to files with template filename_iter%n.txt, where %n will be replaced by current interation number"},
+        {"[tcp|udp]://ipaddr:port", "send fuzzed data to remote tcp or udp <port> located at <ipaddr>"},
+        {"[tcp|udp]://:port", "listens on tcp or udp <port> and send fuzzed data upon client connect/send message"},
+        {"http://addr[:port]/path?params,[GET|POST],header1,...", "send fuzzed date to remote http host located at addr"},
+        {"ip://ipaddr:proto", "send fuzzed data to remote host located at <ipaddr> using protocol no. <proto> on top of IP (Linux & OS X)"},
         {"raw://ipaddr:iface", "send fuzzed data to remote host located at <ipaddr> raw protocol, outgoing interface is specified with <iface> (Linux only)"}
         ].
 
@@ -70,39 +70,39 @@ outputs() ->
 
 cmdline_optsspec() ->
 [
-    {ascent 	, $A,	"ascent",		{float, 1.0},			"<arg>, fuzzing proxy: use ascent/descent coefficient for fuzzing probability (TCP/HTTP only)"}, 
-    {about		, $a, 	"about", 		undefined, 				"what is this thing"}, 
-    {blockscale , $b, 	"blockscale", 	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize multiplier"}, 
-    {bypass		, $B,	"bypass",		{integer, 0},			"<arg>, fuzzing proxy: bypass first <arg> packets before start fuzzing (TCP/HTTP only)"}, 
-    {debug		, $d,	"debug",		undefined,				"run in debug/profiler mode, activates verbose"}, 
-    {detach	    , $D,	"detach",		undefined,			    "detach from console after start (service mode)"}, 
-    {external	, $e,   "external", 	string,					"external pre/post/generation/mutation module"}, 
+    {ascent 	, $A,	"ascent",		{float, 1.0},			"<arg>, fuzzing proxy: use ascent/descent coefficient for fuzzing probability (TCP/HTTP only)"},
+    {about		, $a, 	"about", 		undefined, 				"what is this thing"},
+    {blockscale , $b, 	"blockscale", 	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize multiplier"},
+    {bypass		, $B,	"bypass",		{integer, 0},			"<arg>, fuzzing proxy: bypass first <arg> packets before start fuzzing (TCP/HTTP only)"},
+    {debug		, $d,	"debug",		undefined,				"run in debug/profiler mode, activates verbose"},
+    {detach	    , $D,	"detach",		undefined,			    "detach from console after start (service mode)"},
+    {external	, $e,   "external", 	string,					"external pre/post/generation/mutation module"},
     {generators , $g,	"generators",	{string,
-                         erlamsa_gen:tostring(		erlamsa_gen:generators())},		"<arg>, which data generators to use"}, 
-    {genfuzz	, $G,	"genfuzz",		float,					"<arg>, activate generation-based fuzzer, arg is base probablity"}, 
-     {help		, $h, 	"help", 		undefined, 				"show this thing"}, 
-    {httpsvc    , $H,   "httpservice",  string,				    "<arg>, run as HTTP service on <host:port>, e.g.: 127.0.0.1:17771"}, 
-    {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or proto://:port, proto://host:port for data endpoint (generation mode/FAAS)"}, 
-     {list		, $l,	"list",			undefined,				"list i/o options, mutations, patterns and generators"}, 
-    {logger		, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename, csv=filename.csv, mnesia=dir or stdout (-) or stderr (-err)"}, 
-    {meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"}, 
+                         erlamsa_gen:tostring(		erlamsa_gen:generators())},		"<arg>, which data generators to use"},
+    {genfuzz	, $G,	"genfuzz",		float,					"<arg>, activate generation-based fuzzer, arg is base probablity"},
+    {help		, $h, 	"help", 		undefined, 				"show this thing"},
+    {httpsvc    , $H,   "httpservice",  string,				    "<arg>, run as HTTP service on <host:port>, e.g.: 127.0.0.1:17771"},
+    {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or proto://:port, proto://host:port for data endpoint (generation mode/FAAS)"},
+    {list		, $l,	"list",			undefined,				"list i/o options, mutations, patterns and generators"},
+    {logger		, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename, csv=filename.csv, mnesia=dir or stdout (-) or stderr (-err)"},
+    {meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"},
     {mutations  , $m,   "mutations",	{string,
-                      erlamsa_mutations:tostring(	erlamsa_mutations:mutations())}, 	"<arg>, which mutations to use"}, 
-    {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"}, 
-    {noiolog   	, $N,   "no-io-logging",undefined,				"disable logging of incoming and outgoing data"}, 
-    {monitor	, $O,   "monitor",      string,					"<arg>, monitor specification"}, 
-    {output		, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or ip://172.16.0.1:47 or http://example.com or tcp://:80 or udp://:123 [-]"}, 
+                      erlamsa_mutations:tostring(	erlamsa_mutations:mutations())}, 	"<arg>, which mutations to use"},
+    {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
+    {noiolog   	, $N,   "no-io-logging",undefined,				"disable logging of incoming and outgoing data"},
+    {monitor	, $O,   "monitor",      string,					"<arg>, monitor specification"},
+    {output		, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or ip://172.16.0.1:47 or http://example.com or tcp://:80 or udp://:123 [-]"},
     {patterns	, $p,	"patterns",		{string,
-                    erlamsa_patterns:tostring(	erlamsa_patterns:patterns())},	"<arg>, which mutation patterns to use"}, 
-    {proxyprob	, $P,	"proxy",		string,					"<arg>, activate fuzzing proxy mode, param is fuzzing probability in form of s->c,c->s e.g.: 0.5,0.5"}, 
-%	 {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},	 
-    {seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int"}, 
-    {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"}, 
+                    erlamsa_patterns:tostring(	erlamsa_patterns:patterns())},	"<arg>, which mutation patterns to use"},
+    {proxyprob	, $P,	"proxy",		string,					"<arg>, activate fuzzing proxy mode, param is fuzzing probability in form of s->c,c->s e.g.: 0.5,0.5"},
+%	 {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},
+    {seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int"},
+    {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},
     {maxrunningtime
-                 , $t, 	"maxrunningtime", 
-                                         {integer, 30}, 			"<arg>, maximum running time for fuzzing instance (service/proxy modes only)"}, 
-    {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose, show some progress during generation"}, 
-    {version	, $V, 	"version",		undefined, 				"show program version"}, 
+                 , $t, 	"maxrunningtime",
+                                         {integer, 30}, 			"<arg>, maximum running time for fuzzing instance (service/proxy modes only)"},
+    {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose, show some progress during generation"},
+    {version	, $V, 	"version",		undefined, 				"show program version"},
     {workers	, $w, 	"workers",		integer, 				"<arg>, number of working threads"}
 ].
 
@@ -123,15 +123,45 @@ parse_actions(List, OptionName, Default, Dict) ->
     end.
 
 set_defaults(Dict) ->
-    Workers = 
+    Workers =
         case maps:get(mode, Dict, stdio) of
             genfuzz ->   3;
-            proxy   -> 	10;    	
+            proxy   -> 	10;
             stdio   ->   1;
-            faas 	->	10;	
+            faas 	->	10;
             _Else   ->	 1
         end,
     maps:put(workers, maps:get(workers, Dict, Workers), Dict).
+
+-spec resolve_host(string()) -> inet:ip_address().
+resolve_host(Host) ->
+    case inet:getaddr(Host, inet) of
+        {ok, Ip} -> 
+            Ip;
+        {error, Reason} -> 
+            throw(Reason)
+    end.
+
+-spec port_check(tcp, integer(), string()) -> free | busy.
+port_check(tcp, PortNum, Host) ->
+    try gen_tcp:listen(list_to_integer(PortNum), [{ip, resolve_host(Host)}]) of
+        {ok, LSocket} ->
+            gen_tcp:close(LSocket),
+            ok;
+        {error, eaddrinuse} ->
+            io:format("Could not listen on port ~s: alreasy in use. ~n", [PortNum]),
+            halt(1);
+        {error, Reason} ->
+            io:format("Invalid host/port: ~s:~s, error: ~p~n", [Host, PortNum, Reason]),
+            halt(1)
+    catch 
+        error:badarg ->
+            io:format("Invalid port specifiction: '~s'~n", [PortNum]),
+            halt(1);
+        nxdomain ->
+            io:format("Invalid hort specifiction or unexisting domain: '~s'~n", [Host]),
+            halt(1)
+    end.
 
 -spec string_to_actions(string(), string(), [tuple()]) -> {ok, [tuple()]} | {fail, string()}.
 string_to_actions(Lst, What, DefaultLst) ->
@@ -161,7 +191,7 @@ process_action(Name, _, DefaultPri) ->
     {Name, DefaultPri}.
 
 
-parse_logger_opts(LogOpts, Dict) -> 
+parse_logger_opts(LogOpts, Dict) ->
     parse_logger_opt(string:tokens(LogOpts, ","), Dict).
 
 parse_logger_opt(["-"|T], Dict) ->
@@ -200,21 +230,21 @@ parse_input_opts(InputOpts, Dict) ->
             maps:put(input_endpoint, {Proto,
                 list_to_integer(hd(string:tokens(ListenPort, "/")))}, Dict);
         [Proto, LPortD, RHost, RPort] ->
-            maps:put(proxy_address, 
+            maps:put(proxy_address,
                 [{Proto,
                 list_to_integer(hd(string:tokens(LPortD, "/"))),
                 ?DEFAULT_UDPPROXY_CLIENTPORT,
                 erlamsa_utils:resolve_addr(RHost),
-                list_to_integer(RPort)} 
+                list_to_integer(RPort)}
                 | maps:get(proxy_address, Dict, [])],
             maps:put(mode, proxy, Dict));
         ["udp", LPortD, UDPClientPort, RHost, RPort] ->
-                maps:put(proxy_address, 
+                maps:put(proxy_address,
                 [{"udp",
                 list_to_integer(hd(string:tokens(LPortD, "/"))),
                 UDPClientPort,
-                erlamsa_utils:resolve_addr(RHost), 
-                list_to_integer(RPort)} 
+                erlamsa_utils:resolve_addr(RHost),
+                list_to_integer(RPort)}
                 | maps:get(proxy_address, Dict, [])],
                 maps:put(mode, proxy, Dict));
         _Else -> fail(io_lib:format("invalid input specification: '~s'", [InputOpts]))
@@ -241,9 +271,9 @@ parse_http_addr(URL) ->
 parse_url([<<"udp">>|T], _URL) ->
     parse_sock_addr(udp, binary_to_list(hd(T)));
 parse_url([<<"ip">>|T], _URL) ->
-    parse_sock_addr(ip, binary_to_list(hd(T)));	
+    parse_sock_addr(ip, binary_to_list(hd(T)));
 parse_url([<<"raw">>|T], _URL) ->
-    parse_sock_addr(raw, binary_to_list(hd(T)));		
+    parse_sock_addr(raw, binary_to_list(hd(T)));
 parse_url([<<"tcp">>|T], _URL) ->
     parse_sock_addr(tcp, binary_to_list(hd(T)));
 parse_url([<<"http">>|_T], URL) ->
@@ -294,9 +324,10 @@ parse_tokens(Opts, Paths) ->
 parse_opts([help|_T], _Dict) ->
     usage(),
     halt(0);
-parse_opts([{httpsvc, HostPort}|T], Dict) ->	
+parse_opts([{httpsvc, HostPort}|T], Dict) ->
     case string:tokens(HostPort, ":") of
-        [Host, Port] -> 
+        [Host, Port] ->
+            port_check(tcp, Port, Host),
             parse_opts(T, maps:put(svchost, Host,
                     maps:put(svcport, list_to_integer(Port),
                         maps:put(mode, httpsvc, Dict))));
@@ -309,7 +340,7 @@ parse_opts([about|_T], _Dict) ->
     io:format(about(), []),
     halt(0);
 parse_opts([list|_T], _Dict) ->
-    IOToStr = 
+    IOToStr =
             fun({N, D}, Acc) ->
                 [io_lib:format("    ~s: ~s~n",[N,D])|Acc]
             end,
@@ -324,20 +355,20 @@ parse_opts([list|_T], _Dict) ->
             erlamsa_gen:generators())),
     Ms = lists:foldl(fun({_,_,_,N,D}, Acc) ->
                         [io_lib:format("    ~-3s: ~s~n",[atom_to_list(N),D])|Acc]
-                     end, [], 
+                     end, [],
                      lists:sort(fun ({_,_,_,N1,_}, {_,_,_,N2,_}) -> N1 >= N2 end,
                      erlamsa_mutations:mutations())),
     Ps = lists:foldr(fun({_,_,N,D}, Acc) ->
                         [io_lib:format("    ~-3s: ~s~n",[atom_to_list(N),D])|Acc]
-                     end, [], 
+                     end, [],
                      erlamsa_patterns:patterns()),
     io:format("Inputs ~n~s~nOutputs (-o)~n~s~nGenerators (-g)~n~s~nMutations (-m)~n~s~nPatterns (-p)~n~s",
         [Is, Os, Gs, Ms, Ps]),
     halt(0);
 parse_opts([{monitor, MonitorSpec}|T], Dict) ->
-    %%Syntax is monitor_name:params 
+    %%Syntax is monitor_name:params
     %%TODO: temporary solution, only r2 monitor is supported now
-    parse_opts(T, maps:put(monitor, {cdb,MonitorSpec}, Dict));	
+    parse_opts(T, maps:put(monitor, {cdb,MonitorSpec}, Dict));
 parse_opts([{ascent, DC}|T], Dict) ->
     parse_opts(T, maps:put(descent_coeff, DC, Dict));
 parse_opts([{bypass, DC}|T], Dict) ->
@@ -347,17 +378,17 @@ parse_opts([{verbose, Lvl}|T], Dict) ->
 parse_opts([debug|T], Dict) ->
     parse_opts(T, maps:put(debug, debug, maps:put(verbose, 10, Dict)));
 parse_opts([{meta, Path}|T], Dict) ->
-    parse_opts(T, maps:put(metadata, convert_metapath(Path), Dict));	
+    parse_opts(T, maps:put(metadata, convert_metapath(Path), Dict));
 parse_opts([recursive|T], Dict) ->
     parse_opts(T, maps:put(recursive, 1, Dict));
 parse_opts([{count, N}|T], Dict) ->
     parse_opts(T, maps:put(n, N, Dict));
 parse_opts([{maxrunningtime, MT}|T], Dict) ->
-    parse_opts(T, maps:put(maxrunningtime, MT, Dict));	
+    parse_opts(T, maps:put(maxrunningtime, MT, Dict));
 parse_opts([{blockscale, B}|T], Dict) ->
     parse_opts(T, maps:put(blockscale, B, Dict));
 parse_opts([{genfuzz, BP}|T], Dict) ->
-    parse_opts(T, maps:put(mode, genfuzz, maps:put(genfuzz, BP, Dict)));		
+    parse_opts(T, maps:put(mode, genfuzz, maps:put(genfuzz, BP, Dict)));
 parse_opts([{workers, W}|T], Dict) ->
     parse_opts(T, maps:put(workers, W, Dict));
 parse_opts([{sleep, Sleep}|T], Dict) ->
@@ -367,7 +398,7 @@ parse_opts([{logger, LogOpts}|T], Dict) ->
 parse_opts([noiolog|T], Dict) ->
     parse_opts(T, maps:put(noiolog, true, Dict));
 parse_opts([{external, ModuleName}|T], Dict) ->
-    parse_opts(T, maps:put(external, ModuleName, Dict));	
+    parse_opts(T, maps:put(external, ModuleName, Dict));
 parse_opts([{proxyprob, ProxyProbOpts}|T], Dict) ->
     parse_opts(T, parse_proxyprob_opts(ProxyProbOpts, Dict));
 parse_opts([{input, InputOpts}|T], Dict) ->
