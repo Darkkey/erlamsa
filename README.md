@@ -213,6 +213,7 @@ Adds post-processing procedure that will be applied to fuzzing result just befor
 
 ## Platform limitations
 
+* on unix platforms (Linux, OS X, ...) erlamsa could not be launch in background mode using standard '&' shell symbol due to erlang VM limitations; instead, use -D option. E.g., instead of `./erlamsa -H 127.0.0.1:17771 &` use `./erlamsa -H 127.0.0.1:17771 -D`
 * `ip://` and `raw://` outputs are not working on Windows, `raw://` output is not working on OS X
 * minimum recommended RAM to run on Windows OS is 4Gb
 
