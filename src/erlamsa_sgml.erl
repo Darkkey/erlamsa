@@ -578,7 +578,7 @@ try_mutate_innertext(El, _Muta, _NT) -> El.
 
 sgml_mutation(Ast, {N, NT}) ->
     % io:format("~n~n~w~n~n", [Ast]),
-    sgml_mutation(Ast, {N, NT}, erlamsa_rnd:rand(16)).
+    sgml_mutation(Ast, {N, NT}, erlamsa_rnd:rand(12)).
 
 sgml_mutation(Ast, {N, _NT}, 0) ->
     {Res, _, _} = sgml_swap(Ast, N),
@@ -604,7 +604,7 @@ sgml_mutation(Ast, {_N, NT}, 6) ->
 sgml_mutation(Ast, {N, _NT}, 7) ->
     {Res, _, _} = sgml_insert(Ast, N),
     {sgml_insert, Res, 1};
-sgml_mutation(Ast, {_N, NT}, _R) ->   
+sgml_mutation(Ast, {_N, NT}, _R) ->  %% Prob = 25% for inner mutation 
     %%TODO: here we're guessing that mutation was successfull
     %%FIXME: may be count text elements before going to mutate?
     Muta = erlamsa_mutations:mutators_mutator(erlamsa_mutations:inner_mutations()),
