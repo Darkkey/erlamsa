@@ -367,8 +367,9 @@ parse_opts([list|_T], _Dict) ->
     halt(0);
 parse_opts([{monitor, MonitorSpec}|T], Dict) ->
     %%Syntax is monitor_name:params
-    %%TODO: temporary solution, only r2 monitor is supported now
-    parse_opts(T, maps:put(monitor, {cdb,MonitorSpec}, Dict));
+    %%TODO: temporary solution, check whether monitor is actually supported
+    Monitor = string:split(MonitorSpec, ":", all),
+    parse_opts(T, maps:put(monitor, {list_to_atom(hd(Monitor)), hd(tl(Monitor))}, Dict));
 parse_opts([{ascent, DC}|T], Dict) ->
     parse_opts(T, maps:put(descent_coeff, DC, Dict));
 parse_opts([{bypass, DC}|T], Dict) ->
