@@ -54,7 +54,7 @@ do_after(exec, Opts) ->
 do_after(nil, _Opts) -> ok.
 
 start(Params) ->
-    Pid = spawn(?MODULE, start, [Params]),
+    Pid = spawn(?MODULE, init, [Params]),
     {ok, Pid}.
 
 init(Params) ->
