@@ -555,9 +555,30 @@ sgml_breaktag(Ast, T) ->
                 [Elem | Tree]
         end, []).
 
+
+mutate_innertext(Binary, _Muta, Prob, Rnd) when Rnd > Prob ->
+    %%io:format("no mutate: ~p~n", [Binary]),
+	Binary; %% No mutations
+mutate_innertext(Binary, Muta, _Prob, _Rnd) ->
+    %%io:format("try mutate: ~p~n", [{Binary, _Prob, _Rnd}]),
+    {NewMuta, NewLstBin, Meta} = Muta([Binary], []),
+    %%io:format("res: ~p~n", [{NewLstBin, Meta}]),
+    hd(NewLstBin).
+
+try_mutate_innertext(El = {text, Binary}, Muta, NT) when is_binary(Binary) ->
+    case length([X || X <- binary_to_list(Binary), X =/= 0, X =/= 10, X =/=13, X =/= 32]) of
+        NW when NW > 0 ->
+            %% Probability of text mutation is 3/tags, we're thinking that each 3rd tag has inner text
+            {text, mutate_innertext(Binary, Muta, 3/NT, erlamsa_rnd:rand_float())};
+        _Else ->
+            El
+    end;
+try_mutate_innertext(El, _Muta, _NT) -> El.
+
+
 sgml_mutation(Ast, {N, NT}) ->
     % io:format("~n~n~w~n~n", [Ast]),
-    sgml_mutation(Ast, {N, NT}, erlamsa_rnd:rand(8)).
+    sgml_mutation(Ast, {N, NT}, erlamsa_rnd:rand(16)).
 
 sgml_mutation(Ast, {N, _NT}, 0) ->
     {Res, _, _} = sgml_swap(Ast, N),
@@ -580,16 +601,27 @@ sgml_mutation(Ast, {_N, NT}, 5) ->
 sgml_mutation(Ast, {_N, NT}, 6) ->
     {Res, _, _} = sgml_breaktag(Ast, NT),
     {sgml_breaktag, Res, 1};
-sgml_mutation(Ast, {N, _NT}, _R) ->
+sgml_mutation(Ast, {N, _NT}, 7) ->
     {Res, _, _} = sgml_insert(Ast, N),
-    {sgml_insert, Res, 1}.
+    {sgml_insert, Res, 1};
+sgml_mutation(Ast, {_N, NT}, _R) ->   
+    %%TODO: here we're guessing that mutation was successfull
+    %%FIXME: may be count text elements before going to mutate?
+    Muta = erlamsa_mutations:mutators_mutator(erlamsa_mutations:inner_mutations()),
+    %%TODO: walk is not the best here, need walk + meta, with additional Acc, TBD
+    {Res, _, _} = walk(Ast,
+                    fun
+                        (Elem, Tree, _, _I) ->
+                            [try_mutate_innertext(Elem, Muta, NT) | Tree]
+                    end, []),
+    {sgml_innertext, Res, 1}.
 
 sgml_mutate(Ll = [H|T], Meta) ->
     %io:format("Trying to parse... ~n~n"),
     %file:write_file("./last_sgml.txt", H),
     try parse(H) of
         {ok, ParsedStr, _, Cnts} ->
-            %io:format("Ast ready~n~n"),
+            %io:format("Ast ready ~p~n~n", [Str]),
             {Name, Res, D} = sgml_mutation(ParsedStr, Cnts),
             %io:format("Mutated ~w~n~n", [Name]),
             NewBinStr = fold_ast(Res, []),

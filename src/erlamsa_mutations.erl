@@ -36,7 +36,8 @@
 -include("erlamsa.hrl").
 
 %% API
--export([make_mutator/2, mutations/0, mutations/1, default/1, tostring/1, get_max_score/0]).
+-export([make_mutator/2, mutators_mutator/1, mutations/0, mutations/1, default/1, tostring/1, 
+         get_max_score/0, inner_mutations/0]).
  
 
 -define(MIN_SCORE, 2.0).
@@ -1039,7 +1040,7 @@ mutations(CustomMutas) ->
                         {?MAX_SCORE, 1, construct_sed_byte_inc(), bei, "increment a byte by one"},
                         {?MAX_SCORE, 1, construct_sed_byte_dec(), bed, "decrement a byte by one"},
                         {?MAX_SCORE, 1, construct_sed_byte_flip(), bf, "flip one bit"},
-                        {?MAX_SCORE, 1, construct_sed_byte_insert(), bi, "insert a random byte"},
+                        {?MAX_SCORE, 1, construct_sed_byte_insert(), bi, "insert a byte"},
                         {?MAX_SCORE, 1, construct_sed_byte_random(), ber, "insert a random byte"},
                         {?MAX_SCORE, 1, construct_sed_byte_repeat(), br, "repeat a byte"},
                         {?MAX_SCORE, 1, construct_sed_bytes_perm(), sp, "permute a sequence of bytes"},
@@ -1062,6 +1063,25 @@ mutations(CustomMutas) ->
                         {?MAX_SCORE, 2, fun length_predict/2, len, "predicted length mutation"},
                         {?MAX_SCORE, 0, fun nomutation/2, nil, "no mutation will occur (debugging purposes)"}
                         |CustomMutas].
+
+
+-spec inner_mutations() -> [mutation()].
+%% JSON/XML inner mutations
+inner_mutations() ->         
+                       [
+                        {?MAX_SCORE, 1, construct_ascii_bad_mutator(), ab},
+                        {?MAX_SCORE, 1, construct_ascii_delimeter_mutator(), ad},
+                        {?MAX_SCORE, 2, fun sed_num/2, num},                        
+                        {?MAX_SCORE, 1, construct_sed_byte_random(), ber},
+                        {?MAX_SCORE, 1, construct_sed_bytes_drop(), sd},
+                        {?MAX_SCORE, 1, construct_sed_bytes_randmask(fun mask_xor/1), sxor},
+                        {?MAX_SCORE, 1, construct_sed_bytes_randmask(fun mask_replace/1), srnd},                        
+                        {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_del/2, line_del), ld},
+                        {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_clone/2, line_clone), lri},
+                        {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_repeat/2, line_repeat), lr},
+                        {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_perm/2, line_perm), lp}
+                        ].
+                        
 
 -spec default(list()) -> [{atom(), non_neg_integer()}].
 default(CustomMutas) -> [{Name, Pri} || {_, Pri, _, Name, _Desc} <- mutations(CustomMutas)].
