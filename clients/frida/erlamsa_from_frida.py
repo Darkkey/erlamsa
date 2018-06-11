@@ -4,8 +4,7 @@ import sys
 import base64
 import http.client
 
-erlamsa_url = '127.0.0.1:17771'
-strncpy_address = '0xdf0'
+erlamsa_url = '127.0.0.1:17771' 
 
 def call_erlamsa(data):
 
@@ -20,13 +19,13 @@ def call_erlamsa(data):
 
     return fuzzed_string
 
-def main(target_process, strncpy_address):
+def main(target_process):
     pid = frida.spawn([target_process])
     session = frida.attach(pid)
 
     script_file = open("example.js", "r") 
 
-    script = session.create_script(script_file.read() % int(strncpy_address, 16))
+    script = session.create_script(script_file.read())
 
     def on_message(message, data):
         new_data = call_erlamsa(data)[:11]
@@ -45,12 +44,10 @@ def main(target_process, strncpy_address):
     session.detach()
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print("Usage: %s <executable file> [strncpy function address]" % __file__)
+    if len(sys.argv) != 2:
+        print("Usage: %s <executable file>" % __file__)
         sys.exit(1)
 
     target_process = sys.argv[1]
-    if len(sys.argv) == 3:
-        strncpy_address = sys.argv[2]
 
-    main(target_process, strncpy_address)
+    main(target_process)
