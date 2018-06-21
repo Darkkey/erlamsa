@@ -32,7 +32,8 @@ get_supervisor_opts(Opts) ->
 
 monitors() ->
     [{r2, erlamsa_mon_r2},
-     {cdb, erlamsa_mon_cdb}].
+     {cdb, erlamsa_mon_cdb},
+     {lc, erlamsa_mon_logcat}].
 
 get_monitors(nil) ->
     [];
