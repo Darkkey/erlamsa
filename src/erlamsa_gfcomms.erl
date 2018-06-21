@@ -11,7 +11,7 @@
 start(Opts) when is_list(Opts) ->
     start(maps:from_list(Opts));
 start(Opts) ->
-    random:seed(now()),
+    erlamsa_rnd:seed(now()),
     Log = erlamsa_logger:build_logger(Opts),
     %% Workers = maps:get(workers, Opts, 10), %% TODO: workers count
     Generate = erlamsa_utils:make_fuzzer(maps:get(external, Opts, nil)),

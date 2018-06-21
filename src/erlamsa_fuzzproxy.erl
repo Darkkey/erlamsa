@@ -104,7 +104,7 @@ server_tcp(ListenSock, Endpoint, Opts, Verbose) ->
     DescentCoeff = maps:get(descent_coeff, Opts, 1),
     erlamsa_logger:log(info, "tcp proxy worker process started, listening on ~p (port :~p)",
                         [ListenSock, LPort]),
-    random:seed(now()),
+    erlamsa_rnd:seed(now()),
     case gen_tcp:accept(ListenSock) of
         {ok, ClientSocket} ->
             erlamsa_logger:log(info,
@@ -140,7 +140,7 @@ raise_prob(Prob, DC) ->
 %%TODO: check for memory consumption and tail recursion correctness
 %%FIXME: fuzzing for multiple endpoints?
 loop_udp(SrvSocket, Endpoint, init_clientsocket, ClientHost, ClientPort, Opts, Verbose) ->
-    random:seed(now()),
+    erlamsa_rnd:seed(now()),
     {"udp", _LPort, ClSocketPort, _, _} = Endpoint,
     {ok, ClSocket} = listen(udp, ClSocketPort),
     gen_udp:controlling_process(ClSocket, self()),

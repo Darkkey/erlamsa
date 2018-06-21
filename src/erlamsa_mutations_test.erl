@@ -14,9 +14,9 @@
 %% Tests helper functions
 %%
 
-init_randr() -> random:seed(now()).
+init_randr() -> erlamsa_rnd:seed(now()).
 
-init_randr(Seed) -> random:seed(Seed).
+init_randr(Seed) -> erlamsa_rnd:seed(Seed).
 
 sprintf(Format, Vars) -> 
 	lists:flatten(io_lib:format(Format, Vars)).

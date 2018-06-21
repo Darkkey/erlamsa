@@ -34,7 +34,7 @@
 -endif.
 
 %% API
--export([rand/1, erand/1, rand_float/0, rand_bit/0, rand_occurs/1, rand_occurs_fixed/2,
+-export([seed/1, rand/1, erand/1, rand_float/0, rand_bit/0, rand_occurs/1, rand_occurs_fixed/2,
         rand_nbit/1, rand_log/1, rand_elem/1, random_block/1,
         random_numbers/2, random_permutation/1, rand_range/2,
         reservoir_sample/2, rand_delta/0, rand_delta_up/0, random_bitstring/1]).
@@ -47,6 +47,9 @@
 -spec gcd(non_neg_integer(), non_neg_integer()) -> non_neg_integer().
 gcd(A, 0) -> A;
 gcd(A, B) -> gcd(B, A rem B).
+
+seed(Seed) ->
+    random:seed(Seed).
 
 %% generate random in range [0, N)
 -spec rand(non_neg_integer()) -> non_neg_integer().
