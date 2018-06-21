@@ -6,6 +6,7 @@ test:
 compile:
 	./rebar get-deps
 	./rebar compile
+	./rebar escriptize
 
 
 
