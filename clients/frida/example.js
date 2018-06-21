@@ -3,7 +3,7 @@
 var baseAddr = Module.findBaseAddress('example');
 console.log('software main executable baseAddr: ' + baseAddr);
 
-var strncpy = resolveAddress('%s'); // my_strncpy function address
+var strncpy = resolveAddress('0xdf0'); 
 
 var fuzzed_data;
 var dst_addr;
