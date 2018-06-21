@@ -9,7 +9,7 @@ $ cd erlamsa
 $ ./erlamsa -H 127.0.0.1:17771 -D
 $ cd clients/frida
 $ make
-$ python3 erlamsa_from_frida.py ./example 0xdf0
+$ python3 erlamsa_from_frida.py ./example
 software main executable baseAddr: 0x10a570000
 [+] New addr=0x10a570df0
 [!] Ctrl+D on UNIX, Ctrl+Z on Windows/cmd.exe to detach from instrumented program.
@@ -32,13 +32,12 @@ Data dump Input after fuzzing :
 ```
 
 ## Note
-You may need to update the address of `my_strncpy` in argument for `erlamsa_from_frida.py` script as it may change depending on your platform/compiler version. This address could be extracted using e.g. radare2:
+You may need to update the address of `my_strncpy` in `var strncpy = resolveAddress('0xdf0');` as it may change depending on your platform/compiler version. This address could be extracted using e.g. radare2:
 ```
 $ r2 example
 [0x100000e30]> aa
 [x] Analyze all flags starting with sym. and entry0 (aa)
 [0x100000e30]> afl | grep my_strncpy
 0x100000df0    1 49           sym._my_strncpy
-[0x100000e30]> q
-$ python3 erlamsa_from_frida.py ./example 0xdf0
+[0x100000e30]>
 ```
