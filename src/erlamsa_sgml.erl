@@ -567,7 +567,7 @@ mutate_innertext(Binary, Muta, _Prob, _Rnd) ->
 
 try_mutate_innertext(El = {text, Binary}, Muta, NT) when is_binary(Binary) ->
     case length([X || X <- binary_to_list(Binary), X =/= 0, X =/= 10, X =/=13, X =/= 32]) of
-        NW when NW > 0 ->
+        NW when NW > 0, NT > 0 ->
             %% Probability of text mutation is 3/tags, we're thinking that each 3rd tag has inner text
             {text, mutate_innertext(Binary, Muta, 3/NT, erlamsa_rnd:rand_float())};
         _Else ->
