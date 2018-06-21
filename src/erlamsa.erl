@@ -1,10 +1,13 @@
 -module(erlamsa).
 
--export([main/1]).
+-export([main/1, main/2]).
 
 main(Args) ->
     RuntimeDir = filename:dirname(escript:script_name()),
     true = code:add_pathz(RuntimeDir ++ "/ebin"),
+    main(Args, RuntimeDir).
+    
+main(Args, RuntimeDir) ->    
     {Osfamily, _} = os:type(),
     ServiceMode = length([Z || Z <- Args, Z =:= "-D"]),
     Dict = erlamsa_cmdparse:parse(Args), %% check correctness of input args before proceed

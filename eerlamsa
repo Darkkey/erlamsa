@@ -1,0 +1,10 @@
+#!/usr/bin/env escript
+%% -*- erlang -*-
+%%! -smp enable
+
+-mode(compile).
+
+main(Args) ->
+    RuntimeDir = filename:dirname(escript:script_name()),
+    true = code:add_pathz(RuntimeDir ++ "/ebin"),
+    erlamsa:main(Args, RuntimeDir).
