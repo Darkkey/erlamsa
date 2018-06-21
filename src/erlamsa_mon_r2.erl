@@ -68,18 +68,18 @@ start(Params) ->
 
 init(Params) ->
     MonOpts = parse_params(string:split(Params,",",all), maps:new()),
-    r2_launch(MonOpts, 0).
+    r2_start(MonOpts, 0).
 
-r2_launch(_MonOpts, N = ?START_MONITOR_ATTEMPTS) ->
+r2_start(_MonOpts, N = ?START_MONITOR_ATTEMPTS) ->
     erlamsa_logger:log(info, "r2_monitor: too many failures (~p), giving up", [N]);
-r2_launch(MonOpts, N) ->
+r2_start(MonOpts, N) ->
     %%TODO:handle wrong params
     R2Cmd = io_lib:format("~s -q0 -d ~s", [maps:get(r2path, MonOpts, "r2"), maps:get(app, MonOpts, "")]),
     case handle_r2_session(start, nil, R2Cmd) of %% TODO: do after only if res is ok
         ok ->
             do_after(maps:get(do_after_type, MonOpts, nil), MonOpts),
-            r2_launch(MonOpts, 0);
+            r2_start(MonOpts, 0);
         error ->
-            r2_launch(MonOpts, N+1)
+            r2_start(MonOpts, N+1)
     end. %% TODO:ugly, rewrite
 
