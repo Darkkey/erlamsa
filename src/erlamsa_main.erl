@@ -118,7 +118,7 @@ fuzzer(Dict) ->
         true ->
             Verbose = erlamsa_utils:verb(stderr, maps:get(verbose, Dict, 0)),
             Seed = maps:get(seed, Dict),
-            random:seed(Seed),
+            erlamsa_rnd:seed(Seed),
             file:write_file("./last_seed.txt", io_lib:format("~p", [Seed])),
             Verbose(io_lib:format("Random seed: ~p~n", [Seed])),
             erlamsa_logger:log(info, "starting fuzzer main (parent = ~p), random seed is: ~p",
@@ -165,9 +165,11 @@ fuzzer_loop(Muta, Gen, Pat, Out, RecordMetaFun, Verbose, {I, Fails}, N, Sleep, P
             {CandidateMuta, Meta, Written, CandidateData} = erlamsa_out:output(Tmp, Fd, Post),
             RecordMetaFun(lists:reverse([{written, Written}| Meta])),
             Verbose(io_lib:format("output: ~p~n", [Written])),
+            erlamsa_logger:log(info, "fuzzing cycle ~p/~p finished, written ~p bytes", [I, N, Written]),
             {CandidateOut, CandidateMuta, CandidateData, 0}
         catch
             {cantconnect, _Err} ->
+                timer:sleep(10*Fails),
                 {Out, Muta, <<>>, Fails + 1};
             {fderror, _Err} ->
                 {Out, Muta, <<>>, Fails + 1}
