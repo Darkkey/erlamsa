@@ -1,9 +1,6 @@
-#!/usr/bin/env escript
-%% -*- erlang -*-
-%%! -smp enable
+-module(erlamsa).
 
-%% -sname erlamsa_cmd
--mode(compile).
+-export([main/1]).
 
 main(Args) ->
     RuntimeDir = filename:dirname(escript:script_name()),
