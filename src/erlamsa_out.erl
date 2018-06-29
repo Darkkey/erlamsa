@@ -174,18 +174,18 @@ udplisten_writer(LocalPort) ->
         end
     end.
 
--spec udpsock_writer(inet:ip_address(), inet:port_number()) -> fun().
-udpsock_writer(Addr, Port) ->
+-spec udpsock_writer(inet:ip_address(), inet:port_number(), inet:port_number(), list()) -> fun().
+udpsock_writer(Addr, PortFrom, PortTo, Options) ->
     fun F(_N, Meta) ->
-        {Res, Sock} = gen_udp:open(Port, [binary, {active, true}, {reuseaddr, true}]),
+        {Res, Sock} = gen_udp:open(PortFrom, [binary, {active, true}, {reuseaddr, true} | Options]),
         case Res of
             ok -> {F, {net,
-                fun (Data) -> gen_udp:send(Sock, Addr, Port, Data) end,
+                fun (Data) -> gen_udp:send(Sock, Addr, PortTo, Data) end,
                 fun () -> gen_udp:close(Sock) end
                 }, [{output, udpsock} | Meta]};
             _Else ->
                 Err = lists:flatten(io_lib:format("Error opening udp port ~p: '~s'",
-                                                  [Port, Sock])),
+                                                  [PortFrom, Sock])),
                 erlamsa_utils:error(Err)
         end
     end.
@@ -260,7 +260,14 @@ string_outputs(Str) ->
         {tcp, {Port}} -> tcplisten_writer(list_to_integer(Port));
         {udp, {Port}} -> udplisten_writer(list_to_integer(Port));
         {tcp, {Addr, Port}} -> tcpsock_writer(Addr, list_to_integer(Port));
-        {udp, {Addr, Port}} -> udpsock_writer(Addr, list_to_integer(Port));
+        {udp, {StrIfAddr, PortFrom, Addr = "255.255.255.255", PortTo}} -> 
+		{ok, IfAddr} = inet:getaddr(StrIfAddr, inet), %%TODO: ugly, refactor in distinc function
+		udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), [{broadcast, true}, {ip, IfAddr}]);
+        {udp, {StrIfAddr, PortFrom, Addr, PortTo}} -> 
+		{ok, IfAddr} = inet:getaddr(StrIfAddr, inet),
+		udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), [{ip, IfAddr}]);
+        {udp, {PortFrom, Addr, PortTo}} -> udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), []);
+        {udp, {Addr, Port}} -> udpsock_writer(Addr, list_to_integer(Port), list_to_integer(Port), []);
         {ip, {Addr, Proto}} -> rawsock_writer(Addr,
                                               [{protocol, list_to_integer(Proto)},
                                                {type, raw}, {family, inet}]

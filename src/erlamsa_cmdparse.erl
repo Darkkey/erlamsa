@@ -254,10 +254,8 @@ parse_input_opts(InputOpts, Dict) ->
 parse_sock_addr(SockType, Addr) ->
     Tokens = string:tokens(Addr, ":"),
     case length(Tokens) of
-        2 ->
-            {SockType, {hd(Tokens), hd(tl(Tokens))}};
-        1 ->
-            {SockType, {hd(Tokens)}};
+        N when N > 0, N < 5 ->
+            {SockType, list_to_tuple(Tokens)};
         _Else ->
             fail(io_lib:format("invalid socket address specification: '~s'", [Addr]))
     end.
