@@ -12,7 +12,7 @@ namespace erlamsa_csharp_client
         {
             HttpClient httpclient = new HttpClient();
 
-            string erlamsaURL = "http://192.168.0.7:17771";
+            string erlamsaURL = "http://127.0.0.1:17771";
             string originalString = "Hello erlamsa!";
 
             UTF8Encoding encoding = new UTF8Encoding();

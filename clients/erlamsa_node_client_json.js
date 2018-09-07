@@ -5,6 +5,7 @@ var original_string = "Hello erlamsa!";
 var json_object = 
     JSON.stringify(
         {"data": Buffer.from(original_string).toString("base64"),
+	 "seed": "123,123,123",
          "pattern": "od"}
         );
 

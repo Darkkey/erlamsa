@@ -156,9 +156,9 @@ There are two possible ways to call erlamsa from your code: static (same host, l
 
 1) Static direct usage: see `erlamsa_app:fuzz/1` and `erlamsa_app:fuzz/2`, e.g.:
 ```
-$ ./rebar shell
-==> erlamsa (shell)
+$ erl -pa ebin -pa deps/*/ebin
 ...
+Eshell V10.0.3  (abort with ^G)
 
 1> erlamsa_app:fuzz(<<"123">>).
 <<243,160,128,169,49,50,51>>
