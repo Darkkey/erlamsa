@@ -37,7 +37,7 @@ handle_r2_session(started, R2Pid, StartRes = ["= attach" ++ _Pids| _T]) ->
     RunRes = r2pipe:call(R2Pid, "dc\n"), 
     handle_r2_session(continue, R2Pid, RunRes);
 handle_r2_session(started, R2Pid, StartRes) ->
-    erlamsa_logger:log(error, "Error while starting application: ~p ~n", [lists:flatten(StartRes)]),
+    erlamsa_logger:log(error, "Error while starting application: ~s ~n", [lists:flatten(StartRes)]),
     r2pipe:stop(R2Pid),
     error;
 handle_r2_session(continue, R2Pid, [10] ++ "==> Process finished" ++ [10,10]) ->
@@ -45,7 +45,7 @@ handle_r2_session(continue, R2Pid, [10] ++ "==> Process finished" ++ [10,10]) ->
     erlamsa_logger:log(info, "r2monitor ==> Process finished without error code, is it ok or crash?", []),
     ok;
 handle_r2_session(continue, R2Pid, CrashMsg) ->
-    erlamsa_logger:log(info, "r2monitor [-->!!!<--] detected event (CRASH?!): ~sp", [CrashMsg]),
+    erlamsa_logger:log(info, "r2monitor [-->!!!<--] detected event (CRASH?!): ~s", [CrashMsg]),
     RegInfoMsg = r2pipe:call(R2Pid, "drj\n"),
     erlamsa_logger:log(info, "r2monitor registers info ~s", [RegInfoMsg]),
     Info = r2pipe:call(R2Pid, "ij\n"),

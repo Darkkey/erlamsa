@@ -44,7 +44,7 @@ a general purpose fuzzer. It modifies given sample data in ways,
 which might expose errors in programs intended to process the data.
 Erlamsa use same fuzzing engine as Radamsa, however extends functionality
 with additional features like proxy, JSON fuzzing service, generational
-fuzzing, SGML fuzzer and more.
+fuzzing, SGML fuzzer, structure/format detectors and more.
 
 Radamsa was written by Aki Helin at OUSPG.
 Erlamsa is written by Alexander Bolshev (@dark_k3y).~n".
@@ -59,7 +59,8 @@ inputs() ->
 outputs() ->
     [
         {"filename_iter%n.txt", "data will be written to files with template filename_iter%n.txt, where %n will be replaced by current interation number"},
-        {"[tcp|udp]://ipaddr:port", "send fuzzed data to remote tcp or udp <port> located at <ipaddr>"},
+        {"tcp://ipaddr:port", "send fuzzed data to remote tcp <port> located at <ipaddr>"},
+        {"udp://[[ifaceip:]srcport:]ipaddr:port", "send fuzzed data to remote udp <port> located at <ipaddr> (listening on <ifaceip>:<srcport>)"},
         {"[tcp|udp]://:port", "listens on tcp or udp <port> and send fuzzed data upon client connect/send message"},
         {"http://addr[:port]/path?params,[GET|POST],header1,...", "send fuzzed date to remote http host located at addr"},
         {"ip://ipaddr:proto", "send fuzzed data to remote host located at <ipaddr> using protocol no. <proto> on top of IP (Linux & OS X)"},
@@ -82,7 +83,7 @@ cmdline_optsspec() ->
     {genfuzz	, $G,	"genfuzz",		float,					"<arg>, activate generation-based fuzzer, arg is base probablity"},
     {help		, $h, 	"help", 		undefined, 				"show this thing"},
     {httpsvc    , $H,   "httpservice",  string,				    "<arg>, run as HTTP service on <host:port>, e.g.: 127.0.0.1:17771"},
-    {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or proto://:port, proto://host:port for data endpoint (generation mode/FAAS)"},
+    {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or proto://:port, proto://host:port for data endpoint (generation mode)"},
     {list		, $l,	"list",			undefined,				"list i/o options, mutations, patterns and generators"},
     {logger		, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename, csv=filename.csv, mnesia=dir or stdout (-) or stderr (-err)"},
     {meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"},
@@ -91,7 +92,7 @@ cmdline_optsspec() ->
     {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
     {noiolog   	, $N,   "no-io-logging",undefined,				"disable logging of incoming and outgoing data"},
     {monitor	, $O,   "monitor",      string,					"<arg>, monitor specification"},
-    {output		, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, tcp://192.168.0.1:80 or udp://127.0.0.1:53 or ip://172.16.0.1:47 or http://example.com or tcp://:80 or udp://:123 [-]"},
+    {output		, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, [proto]://192.168.0.1:80 or [proto]://:80 [-]"},
     {patterns	, $p,	"patterns",		{string,
                     erlamsa_patterns:tostring(	erlamsa_patterns:patterns())},	"<arg>, which mutation patterns to use"},
     {proxyprob	, $P,	"proxy",		string,					"<arg>, activate fuzzing proxy mode, param is fuzzing probability in form of s->c,c->s e.g.: 0.5,0.5"},
