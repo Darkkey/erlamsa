@@ -92,7 +92,7 @@ spawn_tcp_worker(ListenSock, Endpoint, Opts, Verbose) ->
 start_servers(tcp, Workers, ListenSock, Endpoint, Opts, Verbose) ->
     length([spawn_tcp_worker(ListenSock, Endpoint, Opts, Verbose) || _N <- lists:seq(1, Workers)]);
 start_servers(udp, _Workers, ListenSock, Endpoint, Opts, Verbose) ->
-    erlamsa_logger:log(info, "udp proxy worker process started, socket id ~p, bind to ~s:~d",
+    erlamsa_logger:log(info, "udp proxy worker process started, socket id ~p",
                         [ListenSock]),
     Pid = spawn(?MODULE, loop_udp, [ListenSock, Endpoint, init_clientsocket, [], 0, Opts, Verbose]),
     gen_udp:controlling_process(ListenSock, Pid).
@@ -146,7 +146,7 @@ loop_udp(SrvSocket, Endpoint, init_clientsocket, ClientHost, ClientPort, Opts, V
     gen_udp:controlling_process(ClSocket, self()),
     loop_udp(SrvSocket, ClSocket, Endpoint, ClientHost, ClientPort, Opts, Verbose);
 loop_udp(SrvSocket, ClSocket, Endpoint, ClientHost, ClientPort, Opts, Verbose) ->
-    {"udp", _, _, ServerHost, ServerPort} = maps:get(proxy_address, Opts),
+    {"udp", _, _, ServerHost, ServerPort} = Endpoint,
     {ProbToClient, ProbToServer} = get_proxy_probs(Opts),
     {NewHost, NewPort} =
         receive
