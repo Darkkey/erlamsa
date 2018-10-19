@@ -112,8 +112,9 @@ tz({tag,_}, <<>>)                     	  -> throw(incorrect_sgml);
 
 tz({'!',DT},?m(">",Str))                  -> {text,Str,{'!',DT}};
 tz({'!',DT},?d(X,Str))                    -> {{'!',DT++[X]},Str};
+tz({'!',_}, <<>>)                         -> throw(incorrect_sgml);
 
-tz({que,DT},?m("?>",Str))                  -> {text,Str,{que,DT}};
+tz({que,DT},?m("?>",Str))                 -> {text,Str,{que,DT}};
 tz({que,DT},?d(X,Str))                    -> {{que,DT++[X]},Str};
 
 tz({etag,Tag,Attrs},?m("/>",Str))         -> {text,Str,{sc,Tag,Attrs}};
