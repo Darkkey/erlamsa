@@ -152,6 +152,7 @@ tz({dqval,_,_},_)						  -> throw(incorrect_sgml); % if ' unclose
 tz({uqval,V,{A,T,As}},?D(X,S))when ?ev(X) -> {{attr,"",{T,As++[{A,V,[]}]}},ws(S)};
 tz({uqval,V,{A,T,As}},?M("/>",S))         -> {{attr,"",{T,As++[{A,V,[]}]}},ws(S)};
 tz({uqval,V,ATAs},?d(X,Str))              -> {{uqval,V++[X],ATAs},Str};
+tz({uqval,_,_},<<>>)                      -> throw(incorrect_sgml);
 
 tz(text,Str)                              -> ff(text,Str);
 
@@ -558,12 +559,11 @@ sgml_breaktag(Ast, T) ->
 
 
 mutate_innertext(Binary, _Muta, Prob, Rnd) when Rnd > Prob ->
-    %%io:format("no mutate: ~p~n", [Binary]),
-	Binary; %% No mutations
+    Binary; %% No mutations
 mutate_innertext(Binary, Muta, _Prob, _Rnd) ->
-    %%io:format("try mutate: ~p~n", [{Binary, _Prob, _Rnd}]),
-    {NewMuta, NewLstBin, Meta} = Muta([Binary], []),
+    {_NewMuta, NewLstBin, Meta} = Muta([Binary], []),
     %%io:format("res: ~p~n", [{NewLstBin, Meta}]),
+    %%TODO: return Meta
     hd(NewLstBin).
 
 try_mutate_innertext(El = {text, Binary}, Muta, NT) when is_binary(Binary) ->
