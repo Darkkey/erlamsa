@@ -610,6 +610,46 @@ construct_ascii_delimeter_mutator() ->
         ascii_delimeter).
 
 
+%% 
+%% Base64 Mutator
+%%
+
+-spec base64_mutator(list_of_bins(), meta_list()) -> mutation_res().
+base64_mutator([H|T], Meta) ->
+    Data = binary_to_list(H),
+    Cs = erlamsa_strlex:lex(Data),
+    MutasList = mutas_list(erlamsa_mutations:mutations([])),
+    %io:format("~p ~n", [Cs]),
+
+    {Ms, {NewD, NewMeta}} = lists:mapfoldl( 
+        fun 
+            ({text, A}, Acc = {DAcc, MAcc}) when length(A) > 3 ->
+                %io:format("To decode: !~p! ~n", [A]),
+                try base64:decode(A) of
+                    Bin -> 
+                        D = erlamsa_rnd:rand_delta(),
+                        Muta = mutators_mutator(MutasList, []),
+                        {_, NewLl, AddedMeta} = Muta([Bin], []),
+                        NewBin = binary:list_to_bin(NewLl),
+                        %io:format("!~p!~n", [NewBin]),
+                        {
+                            {text, base64:encode_to_string(NewBin)}, 
+                            {DAcc + D, AddedMeta ++ [{base64_mutator, D} | MAcc]}
+                        }
+                catch 
+                    error:badarg ->
+                        {{text, A}, Acc};
+                    error:function_clause ->
+                        {{text, A}, Acc}
+                end;
+            (Lex, Acc) -> {Lex, Acc}
+        end, 
+        {-1, Meta}, Cs),
+    %io:format("~p~n", [Ms]),
+    BinData = list_to_binary(erlamsa_strlex:unlex(Ms)),
+    {fun base64_mutator/2, [BinData | T], NewMeta, NewD}.
+
+
 %%
 %% Guessed Parse-tree Mutations
 %%
@@ -1061,9 +1101,15 @@ mutations(CustomMutas) ->
                         {?MAX_SCORE, 1, fun sed_fuse_next/2, fn, "likely clone data between similar positions"},
                         {?MAX_SCORE, 2, fun sed_fuse_old/2, fo, "fuse previously seen data elsewhere"},
                         {?MAX_SCORE, 2, fun length_predict/2, len, "predicted length mutation"},
+                        {?MAX_SCORE, 2, fun base64_mutator/2, b64, "try mutate base64-encoded block"},
                         {?MAX_SCORE, 0, fun nomutation/2, nil, "no mutation will occur (debugging purposes)"}
                         |CustomMutas].
 
+%% convert mutas list to standalone format     
+%% {Max_Score, Pri, F, Name, Desc} -> {Score, Val, F, Name}                    
+-spec mutas_list(list()) -> [mutation()].
+mutas_list(Lst) ->
+    lists:map(fun({Score, Pri, F, Name, _Desc}) -> {Score, Pri, F, Name} end, Lst).
 
 -spec inner_mutations() -> [mutation()].
 %% JSON/XML inner mutations
@@ -1081,7 +1127,6 @@ inner_mutations() ->
                         {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_repeat/2, line_repeat), lr},
                         {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_perm/2, line_perm), lp}
                         ].
-                        
 
 -spec default(list()) -> [{atom(), non_neg_integer()}].
 default(CustomMutas) -> [{Name, Pri} || {_, Pri, _, Name, _Desc} <- mutations(CustomMutas)].
