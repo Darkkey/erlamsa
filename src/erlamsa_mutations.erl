@@ -630,7 +630,7 @@ base64_mutator([H|T], Meta) ->
                         D = erlamsa_rnd:rand_delta(),
                         Muta = mutators_mutator(MutasList, []),
                         {_, NewLl, AddedMeta} = Muta([Bin], []),
-                        NewBin = binary:list_to_bin(NewLl),
+                        NewBin = erlang:iolist_to_binary(NewLl),
                         %io:format("!~p!~n", [NewBin]),
                         {
                             {text, base64:encode_to_string(NewBin)}, 
@@ -646,6 +646,46 @@ base64_mutator([H|T], Meta) ->
         end, 
         {-1, Meta}, Cs),
     %io:format("~p~n", [Ms]),
+    BinData = list_to_binary(erlamsa_strlex:unlex(Ms)),
+    {fun base64_mutator/2, [BinData | T], NewMeta, NewD}.
+
+
+%% 
+%% URI SSRF Mutator
+%%
+
+-spec get_ssrf_uri() -> list().
+get_ssrf_uri() -> 
+    io_lib:format("://localhost:~p/", [51234]).
+
+%% replace file with http
+-spec change_scheme(list()) -> list().
+change_scheme([$e, $l, $i, $f | T]) -> lists:reverse([$p, $t, $t, $h | T]);
+change_scheme(Lst) -> lists:reverse(Lst).
+
+-spec try_uri_mutate(list()) -> {list(), integer(), list()}.
+try_uri_mutate(Lst) -> try_uri_mutate(Lst, []).
+
+-spec try_uri_mutate(list(), list()) -> {list(), integer(), list()}.
+try_uri_mutate([ $:, $/, $/ | T], Acc) ->
+    {change_scheme(Acc) ++ get_ssrf_uri() ++ T, 1, [uri, success]};
+try_uri_mutate([], Acc) -> {lists:reverse(Acc), 0, []};
+try_uri_mutate([H|T], Acc) -> 
+    try_uri_mutate(T, [H|Acc]).
+
+-spec uri_mutator(list_of_bins(), meta_list()) -> mutation_res().
+uri_mutator([H|T], Meta) ->
+    Cs = erlamsa_strlex:lex(binary_to_list(H)),
+    
+    {Ms, {NewD, NewMeta}} = lists:mapfoldl( 
+        fun 
+            ({text, A}, {DAcc, MAcc}) when length(A) > 5 ->
+                {NewA, NewD, NewMeta} = try_uri_mutate(A),
+                {{text, NewA}, {DAcc + NewD, NewMeta ++ MAcc}};
+            (Lex, Acc) -> {Lex, Acc}
+        end, 
+        {-1, Meta}, Cs),
+
     BinData = list_to_binary(erlamsa_strlex:unlex(Ms)),
     {fun base64_mutator/2, [BinData | T], NewMeta, NewD}.
 
@@ -770,13 +810,13 @@ partial_parse([H|T], Rout) ->
             end
     end.
 
--spec flatten(list(), list()) -> list().
-flatten([], Tl) -> 
-    Tl;
-flatten([H|T], Tl) ->
-    flatten(H, flatten(T, Tl));
-flatten(Node, Tl) ->
-    [Node | Tl].
+% -spec flatten(list(), list()) -> list().
+% flatten([], Tl) -> 
+%     Tl;
+% flatten([H|T], Tl) ->
+%     flatten(H, flatten(T, Tl));
+% flatten(Node, Tl) ->
+%     [Node | Tl].
 
 %% TODO: type for fun().
 -spec sed_tree_op(fun(), atom()) -> mutation_fun().
@@ -789,7 +829,7 @@ sed_tree_op(Op, Name) ->
                 Lst = partial_parse(binary_to_list(H)),
                 Sub = pick_sublist(Lst), %% choose partially parsed node to mutate ;; fixme: not checked for F
                 NewLst = edit_sublist(Lst, Sub, Op),
-                {F, [list_to_binary(flatten(NewLst, [])) | T], NewMeta, 1}
+                {F, [erlang:iolist_to_binary(NewLst) | T], NewMeta, 1}
         end    
     end.
 
@@ -831,7 +871,7 @@ construct_sed_tree_swap(Op, Name) ->
                     true -> {F, Ll, Meta, -1};
                     false ->
                         NewLst = Op(Lst, Subs),
-                        {F, [list_to_binary(flatten(NewLst, [])) | T], [{Name, 1} | Meta], 1}
+                        {F, [erlang:iolist_to_binary(NewLst) | T], [{Name, 1} | Meta], 1}
                 end
         end
     end.
@@ -883,7 +923,7 @@ sed_tree_stutter(Ll = [H|T], Meta) ->
                     NewLst = edit_sublist(Lst, Child, 
                             fun ([_H|Tl]) -> [repeat_path(Parent, Child, N_reps)|Tl] end),
                     {fun sed_tree_stutter/2, 
-                        [list_to_binary(flatten(NewLst, [])) | T], 
+                        [erlang:iolist_to_binary(NewLst) | T], 
                         [{tree_stutter, 1} | Meta], 1}
             end
     end.
@@ -1101,7 +1141,8 @@ mutations(CustomMutas) ->
                         {?MAX_SCORE, 1, fun sed_fuse_next/2, fn, "likely clone data between similar positions"},
                         {?MAX_SCORE, 2, fun sed_fuse_old/2, fo, "fuse previously seen data elsewhere"},
                         {?MAX_SCORE, 2, fun length_predict/2, len, "predicted length mutation"},
-                        {?MAX_SCORE, 2, fun base64_mutator/2, b64, "try mutate base64-encoded block"},
+                        {?MAX_SCORE, 1, fun base64_mutator/2, b64, "try mutate base64-encoded block"},
+                        {?MAX_SCORE, 1, fun uri_mutator/2, uri, "try mutate URI to cause SSRF"},
                         {?MAX_SCORE, 0, fun nomutation/2, nil, "no mutation will occur (debugging purposes)"}
                         |CustomMutas].
 
