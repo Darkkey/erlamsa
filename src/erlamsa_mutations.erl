@@ -1042,7 +1042,7 @@ mutate_length(Binary, _Elem = {ok, Size, Len, A, _B}) ->
 
 -spec length_predict(list_of_bins(), meta_list()) -> mutation_res().
 length_predict([H|T], Meta) ->
-    Elem = erlamsa_rnd:rand_elem(erlamsa_len_predict:get_possible_simple_lens(H)),
+    Elem = erlamsa_rnd:rand_elem(erlamsa_field_predict:get_possible_simple_lens(H)),
     {D, Bin} = mutate_length(H, Elem),  
     {fun length_predict/2, [Bin|T], [{muta_len, D}|Meta], D}.
 

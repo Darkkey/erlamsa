@@ -25,6 +25,7 @@
 -define(TOO_MANY_FAILED_ATTEMPTS, 10).
 -define(MAX_LOG_DATA, 10000000).
 -define(SIZER_MAX_FIRST_BYTES, 512).
+-define(PREAMBLE_MAX_BYTES, 32).
 -define(START_MONITOR_ATTEMPTS, 5).
 -define(PROCKET_DIR, "/deps/procket/ebin").
 

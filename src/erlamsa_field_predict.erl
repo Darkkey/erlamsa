@@ -24,7 +24,7 @@
 %%% Length field predictors.
 %%% @end
 %%%-------------------------------------------------------------------
--module(erlamsa_len_predict).
+-module(erlamsa_field_predict).
 -author("dark_k3y").
 
 -include("erlamsa.hrl").
@@ -35,10 +35,12 @@
 -endif.
 
 %% API
--export([get_possible_simple_lens/1]).
+-export([get_possible_simple_lens/1, get_possible_csum_locations/1, recalc_csum/2]).
 
 -type lenfield_range() :: {integer(), integer()}.
 -type sizer_location() :: {ok, integer(), integer(), integer(), integer()}.
+-type csum_type() :: xor8 | crc32.
+-type csum_location() :: {csum_type(), integer(), integer(), integer()}.
 
 -spec basic_u8len(lenfield_range(), binary()) -> [] | sizer_location().
 basic_u8len({A, B}, Binary) when A < B, B > 0, A < size(Binary) ->
@@ -93,3 +95,43 @@ get_possible_simple_lens(Binary) ->
     lists:flatten([
         [simple_len({X, size(Binary)}, Binary), simple_u8len(X, Binary)]
             || X <- lists:seq(0, 3)]).
+
+-spec calc_xor8(binary()) -> integer().
+calc_xor8(B) ->
+    lists:foldl(fun(A, Acc) -> A bxor Acc end, 0, binary_to_list(B)).
+
+-spec has_xor8_checksum(binary(), integer(), integer()) -> csum_location().
+has_xor8_checksum(Binary, Len, PreambleStart) -> 
+    PreambleStart8 = PreambleStart*8,
+    BodyLen8 = (Len - PreambleStart - 1)*8,
+    <<_P:PreambleStart8, B:BodyLen8, C:8>> = Binary,
+    case calc_xor8(<<B:BodyLen8>>) of 
+        C -> {xor8, 8, PreambleStart, Len - PreambleStart - 1};
+        _Else -> []
+    end. 
+
+-spec has_crc32_checksum(binary(), integer(), integer()) -> csum_location().
+has_crc32_checksum(Binary, Len, PreambleStart) when Len - PreambleStart >= 4  -> 
+    PreambleStart8 = PreambleStart*8,
+    BodyLen8 = (Len - PreambleStart - 4)*8,
+    <<_P:PreambleStart8, B:BodyLen8, C:32/integer>> = Binary,
+    case erlang:crc32(<<B:BodyLen8>>) of 
+        C -> {crc32, 32, PreambleStart, Len - PreambleStart - 4};
+        _Else -> []
+    end;
+has_crc32_checksum(_Binary, _Len, _PreambleStart) -> [].
+
+-spec get_possible_csum_locations(binary()) -> list(csum_location()).
+get_possible_csum_locations(<<>>) ->
+    [];
+get_possible_csum_locations(Binary) ->
+    Len = size(Binary),
+    PreambleSeq = lists:seq(0, min(trunc(2*Len/3), lists:seq(0, ?PREAMBLE_MAX_BYTES))),
+    lists:flatten([[has_xor8_checksum(Binary, Len, A) || A <- PreambleSeq], 
+                   [has_crc32_checksum(Binary, Len, A) || A <- PreambleSeq]]).
+    
+-spec recalc_csum(csum_type(), binary()) -> integer().
+recalc_csum(crc32, Binary) ->
+    erlang:crc32(Binary);
+recalc_csum(xor8, Binary) ->
+    calc_xor8(Binary).

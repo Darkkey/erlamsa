@@ -106,9 +106,42 @@ mutate_once_sizer(Binary, Elem = {ok, Size, Len, A, _B}, Rest, Ip, Mutator, Meta
 mutate_once_sizer(Ll, Mutator, Meta, NextPat) -> 
     Ip = erlamsa_rnd:rand(?INITIAL_IP),
     {Bin, Rest} = erlamsa_utils:uncons(Ll, false),
-    Elem = erlamsa_rnd:rand_elem(erlamsa_len_predict:get_possible_simple_lens(Bin)),
+    Elem = erlamsa_rnd:rand_elem(erlamsa_field_predict:get_possible_simple_lens(Bin)),
     %io:format("Elem = ~p ~p ~p~n", [Elem, size(Bin), NextPat]),
     mutate_once_sizer(Bin, Elem, Rest, Ip, Mutator, Meta, NextPat).
+
+
+%%TODO: fix spec
+-spec mutate_once_csum(binary(), any(), any(), integer(), mutator(), 
+                        meta_list(), mutator_cont_fun()) -> list().
+mutate_once_csum(Binary, [], Rest, Ip, Mutator, Meta, NextPat) ->
+    %% do nothing, go for next pattern
+    SizerMeta = [{sizer, failed} | Meta],
+    {This, LlN} = split({Binary, Rest}),
+    if
+        This /= false ->
+            mutate_once_loop(Mutator, SizerMeta, NextPat, Ip, This, LlN);
+        true ->
+            NextPat([], Mutator, SizerMeta)
+    end;
+mutate_once_csum(Binary, Elem = {Type, Size, PLen, BLen}, Rest, Ip, Mutator, Meta, NextPat) ->
+    P8 = PLen * 8, Len8 = BLen * 8,
+    <<P:P8, Blob:Len8, _C:Size>> = Binary,
+    {This, LlN} = split({<<Blob:Len8>>, Rest}),
+    CSumMeta = [{csum, Elem} | Meta],
+    {NewBlob, RestLst} = prepare4sizer(mutate_once_loop(Mutator, CSumMeta, NextPat, Ip, This, LlN)),
+    NewLen = size(NewBlob),
+    NewC = erlamsa_field_predict:recalc_csum(Type, NewBlob),
+    NewBin = <<P:P8, NewBlob:NewLen/binary, NewC:Size>>,
+    [NewBin | RestLst].
+
+%% mutate_once for csum pattern
+-spec mutate_once_csum(any(), mutator(), meta_list(), mutator_cont_fun()) -> list().
+mutate_once_csum(Ll, Mutator, Meta, NextPat) -> 
+    Ip = erlamsa_rnd:rand(?INITIAL_IP),
+    {Bin, Rest} = erlamsa_utils:uncons(Ll, false),
+    Elem = erlamsa_rnd:rand_elem(erlamsa_field_predict:get_possible_csum_locations(Bin)),
+    mutate_once_csum(Bin, Elem, Rest, Ip, Mutator, Meta, NextPat).
 
 %% mutate_once for skipper pattern
 -spec mutate_once_skipper(any(), mutator(), meta_list(), mutator_cont_fun()) -> list().
@@ -232,6 +265,9 @@ make_pat_skip() ->
 make_pat_sizer() ->
     make_complex_pat(fun mutate_once_sizer/4, sizer).
 
+-spec make_pat_csum() -> fun().
+make_pat_csum() ->
+    make_complex_pat(fun mutate_once_csum/4, csum).
 
 %% TODO: temporary contract, fix it.
 -spec pat_nomuta(any(), mutator(), meta_list()) -> list().
@@ -247,6 +283,7 @@ patterns() -> [{1, fun pat_once_dec/3, od, "Mutate once pattern"},
                {1, fun pat_burst/3, bu, "Make several mutations closeby once"},
                {1, make_pat_skip(), sk, "Skip random sized block and mutate rest"},
                {1, make_pat_sizer(), sz, "Try to find sizer and mutate enclosed data"},
+               {1, make_pat_csum(), cs, "Try to find control sum field and mutate enclosed data"},
                {0, fun pat_nomuta/3, nu, "Pattern that calls no mutations"}
               ].
 

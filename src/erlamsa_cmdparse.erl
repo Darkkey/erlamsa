@@ -104,7 +104,7 @@ cmdline_optsspec() ->
                                          {integer, 30}, 			"<arg>, maximum running time for fuzzing instance (service/proxy modes only)"},
     {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose, show some progress during generation"},
     {version	, $V, 	"version",		undefined, 				"show program version"},
-    {workers	, $w, 	"workers",		integer, 				"<arg>, number of working threads"}
+    {workers	, $w, 	"workers",		{integer, 10}, 				"<arg>, number of working threads"}
 ].
 
 usage() ->
