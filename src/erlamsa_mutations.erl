@@ -1047,6 +1047,26 @@ length_predict([H|T], Meta) ->
     {fun length_predict/2, [Bin|T], [{muta_len, D}|Meta], D}.
 
 %%
+%% ZIP Path traversal
+%%
+
+mutate_zip_path(FileName, I, B, Acc) -> 
+    R = erlamsa_rnd:rand(20),
+    NewFileName = lists:flatten([ "../" || _A <- lists:seq(1,R)] ++ FileName),
+    [{NewFileName, B(), I()} | Acc].
+
+-spec zip_path_traversal(list_of_bins(), meta_list()) -> mutation_res().
+zip_path_traversal([H|T], Meta) ->
+    Name = "inmemory.zip",
+    case zip:foldl(fun mutate_zip_path/4, [], {Name, H}) of
+        {ok, FileSpec} -> 
+            {ok, {Name, Bin}} = zip:create(Name, lists:reverse(FileSpec), [memory]),
+            {fun zip_path_traversal/2, [Bin|T], [{muta_zippath, +1}|Meta], +1};
+        _Else -> 
+            {fun zip_path_traversal/2, [H|T], [{muta_zippath, -1}|Meta], -1}
+    end.
+
+%%
 %%  Main Mutation Functions
 %%
 
@@ -1143,6 +1163,7 @@ mutations(CustomMutas) ->
                         {?MAX_SCORE, 2, fun length_predict/2, len, "predicted length mutation"},
                         {?MAX_SCORE, 1, fun base64_mutator/2, b64, "try mutate base64-encoded block"},
                         {?MAX_SCORE, 1, fun uri_mutator/2, uri, "try mutate URI to cause SSRF"},
+                        {?MAX_SCORE, 1, fun zip_path_traversal/2, zip, "ZIP path traversal"},
                         {?MAX_SCORE, 0, fun nomutation/2, nil, "no mutation will occur (debugging purposes)"}
                         |CustomMutas].
 
