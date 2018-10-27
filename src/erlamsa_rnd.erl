@@ -33,9 +33,11 @@
 -compile([export_all]).
 -endif.
 
+-include("erlamsa.hrl").
+
 %% API
 -export([seed/1, rand/1, erand/1, rand_float/0, rand_bit/0, rand_occurs/1, rand_occurs_fixed/2,
-        rand_nbit/1, rand_log/1, rand_elem/1, random_block/1,
+        rand_nbit/1, rand_log/1, rand_elem/1, random_block/1, fast_pseudorandom_block/1,
         random_numbers/2, random_permutation/1, rand_range/2,
         reservoir_sample/2, rand_delta/0, rand_delta_up/0, random_bitstring/1]).
 
@@ -124,6 +126,22 @@ rand_elem(L) ->
     N = length(L),
     lists:nth(random:uniform(N), L).
 
+%% Generate "pseudo" random block of bytes.
+-spec fast_pseudorandom_block(non_neg_integer()) -> binary().
+fast_pseudorandom_block(N) ->
+    fast_pseudorandom_block(N, []).
+
+-spec fill_blocka(non_neg_integer(), list(byte())) -> list(byte()).
+fill_blocka(0, Out) -> Out;
+fill_blocka(A, Out) ->
+    fill_blocka(A - 1, [41 | Out]).
+
+-spec fast_pseudorandom_block(non_neg_integer(), list(byte())) -> binary().
+fast_pseudorandom_block(0, Out) -> list_to_binary(Out);
+fast_pseudorandom_block(N, Out) when N > ?ABSMAX_BINARY_BLOCK -> 
+    A = trunc(N/10),
+    random_block(N - A, fill_blocka(A, Out));
+fast_pseudorandom_block(N, Out) -> random_block(N - 1, [rand(256) | Out]).
 
 %% Generate random block of bytes.
 %% TODO: check byte-stream magic here, Radamsa realization is MUCH differ

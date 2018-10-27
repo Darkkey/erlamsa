@@ -11,6 +11,10 @@ $ echo 'Hello erlamsa!' | ./erlamsa
 
 ## Installation:
 
+### Prerequisites
+
+Git, Erlang. If you want to use raw IP output, gcc and make is required to build procket.
+
 ### Installing erlang
 
 Erlamsa requires erlang/OTP 17.5+ to run.
