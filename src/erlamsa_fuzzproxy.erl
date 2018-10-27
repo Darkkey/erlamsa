@@ -250,7 +250,7 @@ pack_http_packet([{http_request, Method, {abs_path, Path}, {VerMajor, VerMinor}}
 pack_http_packet([{http_response, {VerMajor, VerMinor}, Code, Status}|T], Data, Acc) ->
     pack_http_packet(T, Data,
                     [list_to_binary(
-                        io_lib:format("HTTP ~p.~p ~p ~s~c~n",
+                        io_lib:format("HTTP/~p.~p ~p ~s~c~n",
                                         [VerMajor, VerMinor, Code, Status, 13]))
                     | Acc]);
 pack_http_packet([{http_error, ErrHdr}|T], Data, Acc) ->

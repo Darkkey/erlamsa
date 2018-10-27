@@ -52,7 +52,7 @@ Erlamsa is written by Alexander Bolshev (@dark_k3y).~n".
 inputs() ->
     [
         {"filename1.txt filename2.txt ...", "data will be read from file(s) with specified name(s)"},
-        {"-i lport:rhost:rport", "erlamsa will work in fuzzing proxy mode (currently tcp only), listenting on lport and sending fuzzed data to rhost:port"},
+        {"-i proto://lport:rhost:rport", "erlamsa will work in fuzzing proxy mode, listenting on lport and sending fuzzed data to rhost:port"},
         {"-H host:port", "erlamsa will listen on <host:port> for HTTP POST queries with data, sending fuzzing result in reply, fuzzing options are passed via HTTP headers"}
     ].
 

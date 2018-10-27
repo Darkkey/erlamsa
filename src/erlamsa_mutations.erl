@@ -1020,8 +1020,8 @@ mutate_length(Binary, []) -> {-2, Binary};
 mutate_length(Binary, _Elem = {ok, Size, Len, A, _B}) ->
     Am8 = A * 8, Len8 = Len * 8,
     <<H:Am8, Len:Size, Blob:Len8, Rest/binary>> = Binary,
-    NewLenBin = erlamsa_rnd:random_block(trunc(Size/8)),
-    <<NewLen:Size>> = NewLenBin,
+    <<TmpNewLen:Size>> = erlamsa_rnd:random_block(trunc(Size/8)),
+    NewLen = min(?ABSMAX_BINARY_BLOCK, TmpNewLen*2),
     Result = 
         case erlamsa_rnd:rand(7) of
             %% set len field = 0
@@ -1029,8 +1029,8 @@ mutate_length(Binary, _Elem = {ok, Size, Len, A, _B}) ->
             %% set len field = 0xFF..FF
             1 -> <<H:Am8, -1:Size, Blob:Len8, Rest/binary>>;
             %% expand blob field with random data 
-            2 -> %%TODO: limit block if too big
-                RndBlock = erlamsa_rnd:random_block(NewLen*2),
+            2 -> 
+                RndBlock = erlamsa_rnd:fast_pseudorandom_block(NewLen),
                 TmpBin = <<H:Am8, Len:Size, Blob:Len8, RndBlock/binary>>,
                 <<TmpBin/binary, Rest/binary>>;
             %% drop blob field
@@ -1187,7 +1187,9 @@ inner_mutations() ->
                         {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_del/2, line_del), ld},
                         {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_clone/2, line_clone), lri},
                         {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_repeat/2, line_repeat), lr},
-                        {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_perm/2, line_perm), lp}
+                        {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_perm/2, line_perm), lp},
+                        {?MAX_SCORE, 2, fun base64_mutator/2, b64},
+                        {?MAX_SCORE, 2, fun uri_mutator/2, uri}
                         ].
 
 -spec default(list()) -> [{atom(), non_neg_integer()}].
