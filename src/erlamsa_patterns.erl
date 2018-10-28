@@ -178,7 +178,7 @@ mutate_once_archiver(Binary, {ok, FileSpec}, Rest, Ip, Mutator, Meta, NextPat) -
     %FSpecSize = length(FileSpec),
     {NewFileSpec, NewMeta} = lists:mapfoldl(
         fun ({N, B, I}, Acc) -> 
-            io:format("Mutating file ~p", [N]),
+            %io:format("Mutating file ~p", [N]),
             R = erlamsa_rnd:rand(1000),
             if %% 25%- of mutating the file
                 R > 750 ->
@@ -190,7 +190,7 @@ mutate_once_archiver(Binary, {ok, FileSpec}, Rest, Ip, Mutator, Meta, NextPat) -
             end
         end, [], FileSpec),
     Name = "inmemory.zip",
-    io:format("Rebuilding ZIP..."),
+    %io:format("Rebuilding ZIP..."),
     case zip:create(Name, lists:reverse(NewFileSpec), [memory]) of
         {ok, {Name, NewBin}} ->  %% FIXME: ++ Rest?
             [NewBin | {fun () -> [] end, [{archiver, ok} |lists:flatten(NewMeta)] ++ Meta}];
@@ -202,7 +202,7 @@ mutate_once_archiver(Binary, {ok, FileSpec}, Rest, Ip, Mutator, Meta, NextPat) -
 -spec mutate_once_archiver(any(), mutator(), meta_list(), mutator_cont_fun()) -> list().
 mutate_once_archiver(Ll, Mutator, Meta, NextPat) -> 
     Ip = erlamsa_rnd:rand(?INITIAL_IP),
-    io:format("in archiver, next pattern is ~p", [NextPat]),
+    %io:format("in archiver, next pattern is ~p", [NextPat]),
     {Bin, Rest} = erlamsa_utils:uncons(Ll, false),
     Name = "inmemory.zip",
     {ArchiveBin, NewRest} = try list_to_binary([Bin|Rest]) of
