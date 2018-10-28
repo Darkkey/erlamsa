@@ -625,7 +625,7 @@ sgml_mutation(Ast, {_N, NT}, _R) ->  %% Prob = 25% for inner mutation
     {sgml_innertext, Res, 1}.
 
 sgml_mutate(Ll = [H|T], Meta) ->
-    io:format("Trying to parse... ~p~n", [size(H)]),
+    %io:format("Trying to parse... ~p~n", [size(H)]),
     %file:write_file("./last_sgml.txt", H),
     try parse(H) of
         {ok, ParsedStr, _, Cnts} ->
