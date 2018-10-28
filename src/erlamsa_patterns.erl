@@ -160,6 +160,59 @@ mutate_once_skipper(Ll, Mutator, Meta, NextPat) ->
             end,
     [<<HeadBin:Len>>| Res].
 
+
+%%TODO: fix spec
+-spec mutate_once_archiver(binary(), any(), any(), integer(), mutator(), 
+                        meta_list(), mutator_cont_fun()) -> list().
+mutate_once_archiver(Binary, {error, _}, Rest, Ip, Mutator, Meta, NextPat) ->
+    %% do nothing, go for next pattern
+    SizerMeta = [{archiver, failed} | Meta],
+    {This, LlN} = split({Binary, Rest}),
+    if
+        This /= false ->
+            mutate_once_loop(Mutator, SizerMeta, NextPat, Ip, This, LlN);
+        true ->
+            NextPat([], Mutator, SizerMeta)
+    end;
+mutate_once_archiver(Binary, {ok, FileSpec}, Rest, Ip, Mutator, Meta, NextPat) ->
+    %FSpecSize = length(FileSpec),
+    {NewFileSpec, NewMeta} = lists:mapfoldl(
+        fun ({N, B, I}, Acc) -> 
+            io:format("Mutating file ~p", [N]),
+            R = erlamsa_rnd:rand(1000),
+            if %% 25%- of mutating the file
+                R > 750 ->
+                    {NB, RM} = prepare4sizer(mutate_once_loop(Mutator, [], NextPat, Ip, B, [])),
+                    true = is_binary(NB),
+                    {_, NM} = erlamsa_utils:safe_hd(RM),
+                    {{N, NB, I}, [NM, {archiver, N} | Acc]};
+                true -> {{N, B, I}, Acc}
+            end
+        end, [], FileSpec),
+    Name = "inmemory.zip",
+    io:format("Rebuilding ZIP..."),
+    case zip:create(Name, lists:reverse(NewFileSpec), [memory]) of
+        {ok, {Name, NewBin}} ->  %% FIXME: ++ Rest?
+            [NewBin | {fun () -> [] end, [{archiver, ok} |lists:flatten(NewMeta)] ++ Meta}];
+        {error, Err} ->
+            mutate_once_archiver(Binary, {error, Err}, Rest, Ip, Mutator, Meta, NextPat)
+    end.
+
+%% mutate_once for csum pattern
+-spec mutate_once_archiver(any(), mutator(), meta_list(), mutator_cont_fun()) -> list().
+mutate_once_archiver(Ll, Mutator, Meta, NextPat) -> 
+    Ip = erlamsa_rnd:rand(?INITIAL_IP),
+    io:format("in archiver, next pattern is ~p", [NextPat]),
+    {Bin, Rest} = erlamsa_utils:uncons(Ll, false),
+    Name = "inmemory.zip",
+    {ArchiveBin, NewRest} = try list_to_binary([Bin|Rest]) of
+                    PlainBinary -> {PlainBinary, []}
+                 catch 
+                    error:badarg -> {Bin, Rest}
+                 end,
+    UnZip = zip:foldl(fun(N, I, B, Acc) -> [{N, B(), I()} | Acc] end, [], {Name, ArchiveBin}),
+    mutate_once_archiver(ArchiveBin, UnZip, NewRest, Ip, Mutator, Meta, NextPat).
+
 %% Ll -- list of smth
 %% TODO: WARNING: Ll could be a function in Radamsa terms
 %% TODO: WARNING: check this code!
@@ -253,7 +306,7 @@ pat_burst(Ll, Mutator, Meta) ->
 -spec make_complex_pat(fun(), atom()) -> fun().
 make_complex_pat(MutatorFun, Type) ->
     fun (Ll, Mutator, Meta) ->
-        {_, ContPatF, _, _} = erlamsa_rnd:rand_elem(patterns()),
+        {_, ContPatF, _Name, _} = erlamsa_rnd:rand_elem(patterns()),
         MutatorFun(Ll, Mutator, [{pattern, Type} | Meta], ContPatF)
     end.
 
@@ -269,6 +322,10 @@ make_pat_sizer() ->
 make_pat_csum() ->
     make_complex_pat(fun mutate_once_csum/4, csum).
 
+-spec make_pat_zip() -> fun().
+make_pat_zip() ->
+    make_complex_pat(fun mutate_once_archiver/4, archiver).
+
 %% TODO: temporary contract, fix it.
 -spec pat_nomuta(any(), mutator(), meta_list()) -> list().
 pat_nomuta(Ll, Mutator, Meta) ->
@@ -283,7 +340,8 @@ patterns() -> [{1, fun pat_once_dec/3, od, "Mutate once pattern"},
                {1, fun pat_burst/3, bu, "Make several mutations closeby once"},
                {1, make_pat_skip(), sk, "Skip random sized block and mutate rest"},
                {1, make_pat_sizer(), sz, "Try to find sizer and mutate enclosed data"},
-               {1, make_pat_csum(), cs, "Try to find control sum field and mutate enclosed data"},
+               {1, make_pat_csum(), cs, "Try to find control sum field and mutate enclosed data"},               
+               {1, make_pat_zip(), ar, "Check whether data is an archive (ZIP) and mutate enclosed files"},               
                {0, fun pat_nomuta/3, nu, "Pattern that calls no mutations"}
               ].
 

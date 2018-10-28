@@ -52,18 +52,6 @@
 get_max_score() ->
     ?MAX_SCORE.
 
-%% quick peek if the data looks possibly binary
-%% quick stupid version: ignore UTF-8, look for high bits
--spec binarish(binary()) -> boolean().
-binarish(Lst) -> binarish(Lst, 0).
-
--spec binarish(binary(), non_neg_integer()) -> boolean().
-binarish(_, P) when P =:= 8 -> false;
-binarish(<<>>, _) -> false;
-binarish(<<H:8,_/binary>>, _) when H =:= 0 -> true;
-binarish(<<H:8,_/binary>>, _) when H band 128 =/= 0 -> true;
-binarish(<<_:8,T/binary>>, P) -> binarish(T, P+1).
-
 -spec edit_byte_vector(binary(), non_neg_integer(), byte_edit_fun()) -> binary().
 %% clone a byte vector and edit at given position
 edit_byte_vector(BVec = <<>>, _, _) -> BVec;
@@ -154,7 +142,7 @@ mutate_a_num(Lst = <<H:8, T/binary>>, NFound) ->
 -spec sed_num(list_of_bins(), meta_list()) -> mutation_res().
 sed_num([H|T], Meta) ->
     {N, Lst} = mutate_a_num(H, 0),  
-    IsBin = binarish(Lst),
+    IsBin = erlamsa_utils:binarish(Lst),
     FlushedLst = erlamsa_utils:flush_bvecs(Lst, T),
     if
         N =:= 0 ->
@@ -341,7 +329,7 @@ unlines(Lst) ->
 %% TODO: ugly code, need a bit refactor
 try_lines(Bvec) ->
     Ls = lines(Bvec),
-    IsBin = binarish(Bvec),
+    IsBin = erlamsa_utils:binarish(Bvec),
     if
         Ls =:= [] -> false;
         IsBin =:= true -> false;
@@ -668,7 +656,7 @@ try_uri_mutate(Lst) -> try_uri_mutate(Lst, []).
 
 -spec try_uri_mutate(list(), list()) -> {list(), integer(), list()}.
 try_uri_mutate([ $:, $/, $/ | T], Acc) ->
-    {change_scheme(Acc) ++ get_ssrf_uri() ++ T, 1, [uri, success]};
+    {change_scheme(Acc) ++ get_ssrf_uri() ++ T, 1, {uri, success}};
 try_uri_mutate([], Acc) -> {lists:reverse(Acc), 0, []};
 try_uri_mutate([H|T], Acc) -> 
     try_uri_mutate(T, [H|Acc]).
@@ -822,7 +810,7 @@ partial_parse([H|T], Rout) ->
 -spec sed_tree_op(fun(), atom()) -> mutation_fun().
 sed_tree_op(Op, Name) ->
     fun F (Ll = [H|T], Meta) ->
-        case binarish(H) of
+        case erlamsa_utils:binarish(H) of
             true -> {F, Ll, Meta, -1};
             false -> 
                 NewMeta = [{Name, 1} | Meta],
@@ -861,7 +849,7 @@ sed_tree_swap_two(Lst, Subs) ->
 -spec construct_sed_tree_swap(fun(), atom()) -> mutation_fun().
 construct_sed_tree_swap(Op, Name) ->
     fun F (Ll = [H|T], Meta) ->
-        case binarish(H) of
+        case erlamsa_utils:binarish(H) of
             true -> {F, Ll, Meta, -1};
             false -> 
                 Lst = partial_parse(binary_to_list(H)),
@@ -909,7 +897,7 @@ choose_stutr_nodes([H|T]) ->
 
 -spec sed_tree_stutter(list_of_bins(), meta_list()) -> mutation_res().
 sed_tree_stutter(Ll = [H|T], Meta) ->
-    case binarish(H) of
+    case erlamsa_utils:binarish(H) of
         true -> {fun sed_tree_stutter/2, Ll, Meta, -1};
         false -> 
             Lst = partial_parse(binary_to_list(H)), %% (byte|node ...)
@@ -1161,9 +1149,9 @@ mutations(CustomMutas) ->
                         {?MAX_SCORE, 1, fun sed_fuse_next/2, fn, "likely clone data between similar positions"},
                         {?MAX_SCORE, 2, fun sed_fuse_old/2, fo, "fuse previously seen data elsewhere"},
                         {?MAX_SCORE, 2, fun length_predict/2, len, "predicted length mutation"},
-                        {?MAX_SCORE, 1, fun base64_mutator/2, b64, "try mutate base64-encoded block"},
+                        {?MAX_SCORE, 2, fun base64_mutator/2, b64, "try mutate base64-encoded block"},
                         {?MAX_SCORE, 1, fun uri_mutator/2, uri, "try mutate URI to cause SSRF"},
-                        {?MAX_SCORE, 1, fun zip_path_traversal/2, zip, "ZIP path traversal"},
+                        {?MAX_SCORE, 2, fun zip_path_traversal/2, zip, "ZIP path traversal"},
                         {?MAX_SCORE, 0, fun nomutation/2, nil, "no mutation will occur (debugging purposes)"}
                         |CustomMutas].
 
@@ -1189,6 +1177,7 @@ inner_mutations() ->
                         {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_repeat/2, line_repeat), lr},
                         {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_perm/2, line_perm), lp},
                         {?MAX_SCORE, 2, fun base64_mutator/2, b64},
+                        {?MAX_SCORE, 2, fun zip_path_traversal/2, zip, "ZIP path traversal"},
                         {?MAX_SCORE, 2, fun uri_mutator/2, uri}
                         ].
 
