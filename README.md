@@ -13,7 +13,7 @@ $ echo 'Hello erlamsa!' | ./erlamsa
 
 ### Prerequisites
 
-Git, Erlang. If you want to use raw IP output, gcc and make is required to build procket.
+Git, Erlang. If you want to use raw IP output, gcc and make are required to build procket.
 
 ### Installing erlang
 
@@ -88,10 +88,10 @@ escript erlamsa --help
 
 Launch as a service:
 ```
-./erlamsa -H 127.0.0.1:17771
+./erlamsa -H 127.0.0.1:17771 -L -
 ```
 
-Or in detached mode (erlamsa will go background after launch):
+Or, in detached mode (erlamsa will go background after launch):
 ```
 ./erlamsa -H 127.0.0.1:17771 -D
 ```
@@ -150,9 +150,9 @@ where `probsc` and `probcs` are floats in range of 0.0 to 1.0, that represents p
 
 E.g. erlamsa, that is started as
 ```
-./erlamsa -i tcp://7777:192.168.0.1:7777 -P 0.1,0.9 -L -
+./erlamsa -i tcp://7777:192.168.0.1:7777 -P 0.1,0.7 -L -
 ```
-will accept packets on port `7777` (on all network interfaces, basically on 0.0.0.0 interface) and send them to host's `192.168.0.1` port `7777`. All packets coming from server to client will be fuzzed with probability of `0.1`(10%), from client to server -- with probability of `0.9`(90%). In this case, to start fuzzing just point your client application to erlamsa's host and port `7777`. `-L -` options means that all logging will be output to stdout.
+will accept packets on port `7777` (on all network interfaces, basically on 0.0.0.0 interface) and send them to host's `192.168.0.1` port `7777`. All packets coming from server to client will be fuzzed with probability of `0.1`(10%), from client to server -- with probability of `0.7`(70%). In this case, to start fuzzing just point your client application to erlamsa's host and port `7777`. `-L -` options means that all logging will be output to stdout.
 
 ## Example usage from erlang code
 
