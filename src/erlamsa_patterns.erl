@@ -193,7 +193,7 @@ mutate_once_archiver(Binary, {ok, FileSpec}, Rest, Ip, Mutator, Meta, NextPat) -
     %io:format("Rebuilding ZIP..."),
     case zip:create(Name, lists:reverse(NewFileSpec), [memory]) of
         {ok, {Name, NewBin}} ->  %% FIXME: ++ Rest?
-            [NewBin | {fun () -> [] end, [{archiver, ok} |lists:flatten(NewMeta)] ++ Meta}];
+            [NewBin | {fun () -> [] end, [{archiver, ok}, lists:flatten(NewMeta) | Meta]}];
         {error, Err} ->
             mutate_once_archiver(Binary, {error, Err}, Rest, Ip, Mutator, Meta, NextPat)
     end.
