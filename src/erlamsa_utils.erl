@@ -38,8 +38,8 @@
 
 %% API
 -export([cons_revlst/2, uncons/2, extract_function/1, verb/2, forcell/1, last/1, get/3,
-        merge/2, hd_bin/1, tl_bin/1, choose_pri/2, is_pair/1,
-        flush_bvecs/2, applynth/3, sort_by_priority/1,
+        merge/2, hd_bin/1, tl_bin/1, choose_pri/2, is_pair/1, safe_hd/1,
+        flush_bvecs/2, applynth/3, sort_by_priority/1, binarish/1,
         check_empty/1, stderr_probe/2, halve/1, error/1,
         resolve_addr/1, make_post/1, make_fuzzer/1, make_mutas/1,
         load_deps/1, get_direct_fuzzing_opts/2, get_deps_dirs/1]).
@@ -59,6 +59,10 @@ cons_revlst([H|T], L) ->
     cons_revlst(T, [H|L]);
 cons_revlst([], L) ->
     L.
+
+-spec safe_hd(list()) -> any().
+safe_hd([H]) -> H;
+safe_hd(H) -> H.
 
 %% l -> hd l' | error
 -spec uncons(list() | binary() | fun(), any()) -> any().
@@ -219,3 +223,16 @@ make_mutas(nil) ->
 make_mutas(ModuleName) ->
     erlang:apply(list_to_atom(ModuleName), mutations, []).
 
+%% quick peek if the data looks possibly binary
+%% quick stupid version: ignore UTF-8, look for high bits
+-spec binarish(binary()) -> boolean().
+binarish(Lst) -> binarish(Lst, 0).
+
+-spec binarish(binary(), non_neg_integer()) -> boolean().
+binarish(<<16#EF, 16#BB, 16#BF, _/binary>>, _) -> false; %% UTF-8 BOM
+binarish(<<16#FE, 16#F, _/binary>>, _) -> false; %% UTF-16 BOM
+binarish(_, P) when P =:= 8 -> false;
+binarish(<<>>, _) -> false;
+binarish(<<H:8,_/binary>>, _) when H =:= 0 -> true;
+binarish(<<H:8,_/binary>>, _) when H band 128 =/= 0 -> true;
+binarish(<<_:8,T/binary>>, P) -> binarish(T, P+1).
