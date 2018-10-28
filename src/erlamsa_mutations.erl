@@ -1121,8 +1121,6 @@ mutations(CustomMutas) ->
                         {?MAX_SCORE, 1, sed_tree_del(), td, "delete a node"},
                         {?MAX_SCORE, 2, fun sed_num/2, num, "try to modify a textual number"},                        
                         {?MAX_SCORE, 1, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1, "swap one node with another one"},
-                        {?MAX_SCORE, 1, construct_st_line_muta(fun erlamsa_generic:st_list_ins/2, list_ins, [0]), lis, "insert a line from elsewhere"},
-                        {?MAX_SCORE, 1, construct_st_line_muta(fun erlamsa_generic:st_list_replace/2, list_replace, [0]), lrs, "replace a line with one from elsewhere"},
                         {?MAX_SCORE, 1, fun sed_tree_stutter/2, tr, "repeat a path of the parse tree"},
                         {?MAX_SCORE, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2, "swap two nodes pairwise"},
                         {?MAX_SCORE, 1, construct_sed_byte_drop(), bd, "drop a byte"},
@@ -1130,7 +1128,7 @@ mutations(CustomMutas) ->
                         {?MAX_SCORE, 1, construct_sed_byte_dec(), bed, "decrement a byte by one"},
                         {?MAX_SCORE, 1, construct_sed_byte_flip(), bf, "flip one bit"},
                         {?MAX_SCORE, 1, construct_sed_byte_insert(), bi, "insert a byte"},
-                        {?MAX_SCORE, 1, construct_sed_byte_random(), ber, "insert a random byte"},
+                        {?MAX_SCORE, 1, construct_sed_byte_random(), ber, "swap a byte with random one"},
                         {?MAX_SCORE, 1, construct_sed_byte_repeat(), br, "repeat a byte"},
                         {?MAX_SCORE, 1, construct_sed_bytes_perm(), sp, "permute a sequence of bytes"},
                         {?MAX_SCORE, 1, construct_sed_bytes_repeat(), sr, "repeat a sequence of bytes"},                        
@@ -1144,6 +1142,8 @@ mutations(CustomMutas) ->
                         {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_repeat/2, line_repeat), lr, "repeat a line"},
                         {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_swap/2, line_swap), ls, "swap two lines"},
                         {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_perm/2, line_perm), lp, "swap order of lines"},
+                        {?MAX_SCORE, 1, construct_st_line_muta(fun erlamsa_generic:st_list_ins/2, list_ins, [0]), lis, "insert a line from elsewhere"},
+                        {?MAX_SCORE, 1, construct_st_line_muta(fun erlamsa_generic:st_list_replace/2, list_replace, [0]), lrs, "replace a line with one from elsewhere"},
                         {?MAX_SCORE, 2, fun sed_fuse_this/2, ft, "jump to a similar position in block"},
                         {?MAX_SCORE, 1, fun sed_fuse_next/2, fn, "likely clone data between similar positions"},
                         {?MAX_SCORE, 2, fun sed_fuse_old/2, fo, "fuse previously seen data elsewhere"},
@@ -1160,25 +1160,21 @@ mutations(CustomMutas) ->
 mutas_list(Lst) ->
     lists:map(fun({Score, Pri, F, Name, _Desc}) -> {Score, Pri, F, Name} end, Lst).
 
--spec inner_mutations() -> [mutation()].
 %% JSON/XML inner mutations
-inner_mutations() ->         
-                       [
-                        {?MAX_SCORE, 1, construct_ascii_bad_mutator(), ab},
-                        {?MAX_SCORE, 1, construct_ascii_delimeter_mutator(), ad},
-                        {?MAX_SCORE, 2, fun sed_num/2, num},                        
-                        {?MAX_SCORE, 1, construct_sed_byte_random(), ber},
-                        {?MAX_SCORE, 1, construct_sed_bytes_drop(), sd},
-                        {?MAX_SCORE, 1, construct_sed_bytes_randmask(fun mask_xor/1), sxor},
-                        {?MAX_SCORE, 1, construct_sed_bytes_randmask(fun mask_replace/1), srnd},                        
-                        {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_del/2, line_del), ld},
-                        {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_clone/2, line_clone), lri},
-                        {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_repeat/2, line_repeat), lr},
-                        {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_perm/2, line_perm), lp},
-                        {?MAX_SCORE, 2, fun base64_mutator/2, b64},
-                        {?MAX_SCORE, 2, fun zip_path_traversal/2, zip, "ZIP path traversal"},
-                        {?MAX_SCORE, 2, fun uri_mutator/2, uri}
-                        ].
+-spec inner_mutations_list() -> [atom()].
+inner_mutations_list() -> [ab, ad, ber, b64, ld, lp, lri, lr, num, sd, srnd, sxor, uri, zip].
+
+-spec inner_mutations() -> [mutation()].
+inner_mutations() ->        
+                    InnerMutationsMap = maps:from_list(lists:map(fun (A) -> {A, ok} end, inner_mutations_list())),
+                    lists:foldl(
+                        fun({Sc, Pri, Fun, Name, _Desc}, Acc) ->
+                            case maps:get(Name, InnerMutationsMap, no) of
+                                ok -> [{Sc, Pri, Fun, Name}|Acc];
+                                no -> Acc
+                            end
+                        end,
+                    [], mutations([])).
 
 -spec default(list()) -> [{atom(), non_neg_integer()}].
 default(CustomMutas) -> [{Name, Pri} || {_, Pri, _, Name, _Desc} <- mutations(CustomMutas)].

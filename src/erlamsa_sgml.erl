@@ -351,6 +351,24 @@ walk(Ast, Fun, InitAcc) ->
         {InitAcc, 0, 0}, Ast),
     {walk_reverse(Res), ResT, ResN}.
 
+walk2acc(Ast, Fun, InitAcc) ->
+    {Res, Res2} = lists:foldl(
+        fun
+            Walker({tag, OpenName, CloseName, Params, Internals} = _Elem, {Acc, Acc2}) ->
+                %io:format("Elem = ~p, Acc = ~p, Acc2 = ~p~n", [_Elem, Acc, Acc2]),
+                {ChildAcc, ChildAcc2} = lists:foldl(Walker, InitAcc, Internals),                                            
+                %io:format("!CAcc = ~p, CAcc2 = ~p : ~p~n", [ChildAcc, ChildAcc2, Res1]),
+                {UAcc, UAcc2} = Fun({tag, OpenName, CloseName, Params, walk_reverse(ChildAcc)}, 
+                                    Acc, Acc2),
+                %io:format("&UAcc = ~p, UAcc2 = ~p~n", [UAcc, UAcc2]),
+                {UAcc, [ChildAcc2|UAcc2]};
+            Walker(Elem, {Acc, Acc2}) ->
+                %io:format("@Elem = ~p, CAcc = ~p, CAcc2 = ~p~n", [Elem, Acc, Acc2]),
+                Fun(Elem, Acc, Acc2)                
+        end,
+        InitAcc, Ast),
+    {walk_reverse(Res), lists:reverse(lists:flatten(Res2))}.
+
 select(Ast, Selector) ->
     lists:foldl(
         fun
@@ -565,84 +583,93 @@ sgml_breaktag(Ast, T) ->
         end, []).
 
 
-mutate_innertext(Binary, _Muta, Prob, Rnd) when Rnd > Prob ->
-    Binary; %% No mutations
-mutate_innertext(Binary, Muta, _Prob, _Rnd) ->
+mutate_innertext_prob(Binary, _Muta, Prob, Rnd) when Rnd > Prob ->
+    {[], Binary}; %% No mutations
+mutate_innertext_prob(Binary, Muta, _Prob, _Rnd) ->
     {_NewMuta, NewLstBin, Meta} = Muta([Binary], []),
     %%io:format("res: ~p~n", [{NewLstBin, Meta}]),
-    %%TODO: return Meta
-    hd(NewLstBin).
+    {Meta, hd(NewLstBin)}.
 
-try_mutate_innertext(El = {text, Binary}, Muta, NT) when is_binary(Binary) ->
+mutate_innertext(Binary, Muta, NT) ->
     case length([X || X <- binary_to_list(Binary), X =/= 0, X =/= 10, X =/=13, X =/= 32]) of
         NW when NW > 0, NT > 0 ->
             %% Probability of text mutation is 3/tags, we're thinking that each 3rd tag has inner text
-            {text, mutate_innertext(Binary, Muta, 3/NT, erlamsa_rnd:rand_float())};
+            mutate_innertext_prob(Binary, Muta, 3/NT, erlamsa_rnd:rand_float());
         _Else ->
-            El
-    end;
-try_mutate_innertext(El, _Muta, _NT) -> El.
+            {[], Binary}
+    end.
+
+try_mutate_innertext({tag, OpenName, CloseName, Params, Spec}, Muta, NT) ->
+    NP = length(Params),
+    {NewParams, Meta} = lists:mapfoldl(
+        fun ({Name, Value, Delim}, Acc) ->
+            {Meta, NewVal} = mutate_innertext(list_to_binary(Value), Muta, NT + NP), 
+            {{Name, binary_to_list(NewVal), Delim}, [Meta|Acc]}
+        end, [], Params),
+    {Meta, {tag, OpenName, CloseName, NewParams, Spec}};
+try_mutate_innertext({text, Binary}, Muta, NT) when is_binary(Binary) ->
+    {Meta, NewEl} = mutate_innertext(Binary, Muta, NT), {Meta, {text, NewEl}};
+try_mutate_innertext(El, _Muta, _NT) -> {[], El}.
 
 
 sgml_mutation(Ast, {N, NT}) ->
     % io:format("~n~n~w~n~n", [Ast]),
-    sgml_mutation(Ast, {N, NT}, erlamsa_rnd:rand(12)).
+    sgml_mutation(Ast, {N, NT}, erlamsa_rnd:rand(12)). %%12
 
 sgml_mutation(Ast, {N, _NT}, 0) ->
     {Res, _, _} = sgml_swap(Ast, N),
-    {sgml_swap, Res, 1};
+    {[{sgml_swap, 1}], Res, 1};
 sgml_mutation(Ast, {N, _NT}, 1) ->
     {Res, _, _} = sgml_dup(Ast, N),
-    {sgml_dup, Res, 1};
+    {[{sgml_dup, 1}], Res, 1};
 sgml_mutation(Ast, {_N, NT}, 2) ->
     {Res, _, _} = sgml_pump(Ast, NT),
-    {sgml_pump, Res, -2}; %% don't allow too much pumps...
+    {[{sgml_pump, 1}], Res, -2}; %% don't allow too much pumps...
 sgml_mutation(Ast, {N, _NT}, 3) ->
     {Res, _, _} = sgml_repeat(Ast, N),
-    {sgml_repeat, Res, 1};
+    {[{sgml_repeat, 1}], Res, 1};
 sgml_mutation(Ast, {N, _NT}, 4) ->
     {Res, _, _} = sgml_insert2(Ast, N),
-    {sgml_insert2, Res, 1};
+    {[{sgml_insert2, 1}], Res, 1};
 sgml_mutation(Ast, {_N, NT}, 5) ->
     {Res, _, _} = sgml_permparams(Ast, NT),
-    {sgml_permparams, Res, 1};
+    {[{sgml_permparams, 1}], Res, 1};
 sgml_mutation(Ast, {_N, NT}, 6) ->
     {Res, _, _} = sgml_breaktag(Ast, NT),
-    {sgml_breaktag, Res, 1};
+    {[{sgml_breaktag, 1}], Res, 1};
 sgml_mutation(Ast, {N, _NT}, 7) ->
     {Res, _, _} = sgml_insert(Ast, N),
-    {sgml_insert, Res, 1};
+    {[{sgml_insert, 1}], Res, 1};
 sgml_mutation(Ast, {_N, NT}, _R) ->  %% Prob = 25% for inner mutation 
     %%TODO: here we're guessing that mutation was successfull
     %%FIXME: may be count text elements before going to mutate?
     Muta = erlamsa_mutations:mutators_mutator(erlamsa_mutations:inner_mutations()),
-    %%TODO: walk is not the best here, need walk + meta, with additional Acc, TBD
-    {Res, _, _} = walk(Ast,
+    {Res, Meta} = walk2acc(Ast,
                     fun
-                        (Elem, Tree, _, _I) ->
-                            [try_mutate_innertext(Elem, Muta, NT) | Tree]
-                    end, []),
-    {sgml_innertext, Res, 1}.
+                        (Elem, Tree, InnerMeta) ->
+                            {NewMeta, NewEl} = try_mutate_innertext(Elem, Muta, NT),
+                            {[NewEl | Tree], [NewMeta | InnerMeta]} 
+                    end, {[], []}),
+    {[Meta, {sgml_innertext,1}], Res, 1}.
 
 sgml_mutate(Ll = [H|T], Meta) ->
     %io:format("Trying to parse... ~p~n", [size(H)]),
     %file:write_file("./last_sgml.txt", H),
     try parse(H) of
         {ok, ParsedStr, _, Cnts} ->
-            %io:format("Ast ready ~p~n~n", [Str]),
-            {Name, Res, D} = sgml_mutation(ParsedStr, Cnts),
-            %io:format("Mutated ~w~n~n", [Name]),
+            %io:format("Ast ready ~p~n~n", [ParsedStr]),
+            {NewMeta, Res, D} = sgml_mutation(ParsedStr, Cnts),
             NewBinStr = fold_ast(Res, []),
-            %io:format("Folded~n~n"),
             if
                 NewBinStr =:= H ->
-                {fun sgml_mutate/2, Ll, Meta, -1};
-            true ->
-                {fun sgml_mutate/2, [NewBinStr | T], [{Name, 1} | Meta], 
-                 D + trunc(size(NewBinStr)/(?AVG_BLOCK_SIZE*10))} %% limiting next rounds based on a size
+                    {fun sgml_mutate/2, Ll, NewMeta, -1};
+                true ->
+                    {fun sgml_mutate/2, [NewBinStr | T],  [NewMeta|Meta], 
+                    D + trunc(size(NewBinStr)/(?AVG_BLOCK_SIZE*10))} %% limiting next rounds based on a size
             end
     catch
         incorrect_sgml ->
+            io:format("3"),
             {fun sgml_mutate/2, Ll, Meta, -1}
     end.
 

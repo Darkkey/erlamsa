@@ -163,7 +163,7 @@ fuzzer_loop(Muta, Gen, Pat, Out, RecordMetaFun, Verbose, {I, Fails}, N, Sleep, P
             {CandidateOut, Fd, OutMeta} = Out(I, [{nth, I}, GenMeta]),
             Tmp = Pat(Ll, Muta, OutMeta),
             {CandidateMuta, Meta, Written, CandidateData} = erlamsa_out:output(Tmp, Fd, Post),
-            RecordMetaFun(lists:reverse([{written, Written}| Meta])),
+            RecordMetaFun(lists:reverse(lists:flatten([{written, Written}| Meta]))),
             Verbose(io_lib:format("output: ~p~n", [Written])),
             erlamsa_logger:log(info, "fuzzing cycle ~p/~p finished, written ~p bytes", [I, N, Written]),
             {CandidateOut, CandidateMuta, CandidateData, 0}
