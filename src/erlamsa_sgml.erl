@@ -678,7 +678,6 @@ sgml_mutate(Ll = [H|T], Meta) ->
             end
     catch
         incorrect_sgml ->
-            io:format("3"),
             {fun sgml_mutate/2, Ll, Meta, -1}
     end.
 
