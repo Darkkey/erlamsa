@@ -101,7 +101,7 @@ tz(nil,?m("<",Str))                       -> {{tag,""},ws(Str)};
 tz(nil,?d(_,Str))                         -> {nil,Str};
 tz(nil, <<>>)                         	  -> throw(incorrect_sgml);
 
-tz({tag,""},?m("!--",Str))                -> {{comm,""},Str};
+tz({tag,""},?m("!--",Str))                -> {{'!--',""},Str};
 tz({tag,""},?m("!",Str))                  -> {{'!',""},ws(Str)};
 tz({tag,""},?m("?",Str))                  -> {{que,""},ws(Str)};
 tz({tag,""},?m("/",Str))                  -> {{end_tag,""},ws(Str)};
@@ -113,6 +113,9 @@ tz({tag,_}, <<>>)                     	  -> throw(incorrect_sgml);
 tz({'!',DT},?m(">",Str))                  -> {text,Str,{'!',DT}};
 tz({'!',DT},?d(X,Str))                    -> {{'!',DT++[X]},Str};
 tz({'!',_}, <<>>)                         -> throw(incorrect_sgml);
+
+tz({'!--',DT},?m("-->", Str))              -> {text,Str,{'!--',DT}};
+tz({'!--',DT},?d(X,Str))                   -> {{'!--',DT++[X]},Str};
 
 tz({que,DT},?m("?>",Str))                 -> {text,Str,{que,DT}};
 tz({que,DT},?d(X,Str))                    -> {{que,DT++[X]},Str};
@@ -256,6 +259,9 @@ build_ast2([{text, Text}|T], Ast, Tags, {N, NT}) ->
 build_ast2([{'!', Params}|T], Ast, Tags, {N, NT}) ->
     %io:format("! ~w, ~w, ~w, +1~n", [Params, Ast, Tags]),
     build_ast2(T, [{'!', Params}|Ast], Tags, {N + 1, NT});
+build_ast2([{'!--', Params}|T], Ast, Tags, {N, NT}) ->
+    %io:format("! ~w, ~w, ~w, +1~n", [Params, Ast, Tags]),
+    build_ast2(T, [{'!--', Params}|Ast], Tags, {N + 1, NT});
 build_ast2([{que, Params}|T], Ast, Tags, {N, NT}) ->
     %io:format("! ~w, ~w, ~w, +1~n", [Params, Ast, Tags]),
     build_ast2(T, [{que, Params}|Ast], Tags, {N + 1, NT});
@@ -309,6 +315,9 @@ fold_ast([{que, Params}| T], Acc) ->
      | Acc]);
 fold_ast([{'!', Params}| T], Acc) ->
     fold_ast(T, [list_to_binary([<<"<">>, <<"!">>, Params, <<">">>])
+     | Acc]);
+fold_ast([{'!--', Params}| T], Acc) ->
+    fold_ast(T, [list_to_binary([<<"<">>, <<"!--">>, Params, <<"-->">>])
      | Acc]);
 fold_ast([{open, Tag, Params} | T], Acc) ->
     fold_ast(T, [list_to_binary([<<"<">>, Tag, fold_params(Params, []), <<">">>]) | Acc]);
