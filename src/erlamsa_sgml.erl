@@ -116,6 +116,7 @@ tz({'!',_}, <<>>)                         -> throw(incorrect_sgml);
 
 tz({que,DT},?m("?>",Str))                 -> {text,Str,{que,DT}};
 tz({que,DT},?d(X,Str))                    -> {{que,DT++[X]},Str};
+tz({que,_}, <<>>)                         -> throw(incorrect_sgml);
 
 tz({etag,Tag,Attrs},?m("/>",Str))         -> {text,Str,{sc,Tag,Attrs}};
 tz({etag,Tag,Attrs},?m(">",Str))          -> {text,Str,{open,Tag,Attrs}};
@@ -124,6 +125,7 @@ tz({etag,_Tag,_Attrs}, _)          		  -> throw(incorrect_sgml);
 tz({end_tag,Tag},?D(X,S)) when ?ev(X)     -> {{end_tag,Tag,'>'},ws(S)};
 tz({end_tag,Tag,'>'},?m(">",Str))         -> {text,Str,{close,Tag,string:to_lower(Tag)}};
 tz({end_tag,Tag},?d(X,Str))               -> {{end_tag,Tag++[X]},Str};
+tz({end_tag,_,_},_)              	      -> throw(incorrect_sgml);
 tz({end_tag,_},_)              			  -> throw(incorrect_sgml);
 
 tz({attr,"",{Tag,As}},?D(X,S))when ?ev(X) -> {{etag,Tag,As},S};
@@ -184,9 +186,14 @@ push_till([_|T], H) -> push_till(T, H);
 push_till([], _) -> [].
 
 parse(Str) ->
+    parse(Str, erlamsa_utils:binarish(Str)).
+
+parse(Str, false) ->
     Tokens = tokenize(Str),
     %io:format("~w~n", [Tokens]),
-    build_ast2(Tokens, [], [], {0, 0}).
+    build_ast2(Tokens, [], [], {0, 0});
+parse(_Str, true) ->
+    throw(incorrect_sgml).
 
 % list(token()), list(ast_elem()), list(strings) -> atom(), list(ast_elem()), list(ast_elem(),
 %		{non_neg_int(), non_neg_int()})
@@ -618,7 +625,7 @@ sgml_mutation(Ast, {_N, NT}, _R) ->  %% Prob = 25% for inner mutation
     {sgml_innertext, Res, 1}.
 
 sgml_mutate(Ll = [H|T], Meta) ->
-    %io:format("Trying to parse... ~n~n"),
+    io:format("Trying to parse... ~p~n", [size(H)]),
     %file:write_file("./last_sgml.txt", H),
     try parse(H) of
         {ok, ParsedStr, _, Cnts} ->
@@ -631,7 +638,8 @@ sgml_mutate(Ll = [H|T], Meta) ->
                 NewBinStr =:= H ->
                 {fun sgml_mutate/2, Ll, Meta, -1};
             true ->
-                {fun sgml_mutate/2, [NewBinStr | T], [{Name, 1} | Meta], D}
+                {fun sgml_mutate/2, [NewBinStr | T], [{Name, 1} | Meta], 
+                 D + trunc(size(NewBinStr)/(?AVG_BLOCK_SIZE*10))} %% limiting next rounds based on a size
             end
     catch
         incorrect_sgml ->
