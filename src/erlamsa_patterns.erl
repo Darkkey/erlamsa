@@ -116,7 +116,7 @@ mutate_once_sizer(Ll, Mutator, Meta, NextPat) ->
                         meta_list(), mutator_cont_fun()) -> list().
 mutate_once_csum(Binary, [], Rest, Ip, Mutator, Meta, NextPat) ->
     %% do nothing, go for next pattern
-    SizerMeta = [{sizer, failed} | Meta],
+    SizerMeta = [{csum, failed} | Meta],
     {This, LlN} = split({Binary, Rest}),
     if
         This /= false ->
