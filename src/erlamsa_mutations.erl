@@ -296,9 +296,10 @@ mask_xor(B) ->
 mask_replace(_) ->
     erlamsa_rnd:rand(256).
 
--spec construct_sed_bytes_randmask(fun()) -> mutation_fun().
+-spec construct_sed_bytes_randmask(list(fun())) -> mutation_fun().
 %% WARNING: in radamsa max permutation block could not exceed length 20, here could be any length
-construct_sed_bytes_randmask(MaskFun) -> %% permute a few bytes
+construct_sed_bytes_randmask(MaskFunList) -> %% permute a few bytes
+    MaskFun = erlamsa_rnd:rand_elem(MaskFunList),
     construct_sed_bytes_muta(
         fun (H, Bs, T, BTail) -> 
             C = list_to_binary(
@@ -1134,10 +1135,8 @@ mutations(CustomMutas) ->
                         {?MAX_SCORE, 1, construct_sed_bytes_perm(), sp, "permute a sequence of bytes"},
                         {?MAX_SCORE, 1, construct_sed_bytes_repeat(), sr, "repeat a sequence of bytes"},                        
                         {?MAX_SCORE, 1, construct_sed_bytes_drop(), sd, "delete a sequence of bytes"},
-                        {?MAX_SCORE, 1, construct_sed_bytes_randmask(fun mask_nand/1), snand, "NAND random bytes from block with 2^random values"},
-                        {?MAX_SCORE, 1, construct_sed_bytes_randmask(fun mask_or/1), sor, "OR random bytes from block with 2^random values"},
-                        {?MAX_SCORE, 1, construct_sed_bytes_randmask(fun mask_xor/1), sxor, "XOR random bytes from block with 2^random values"},
-                        {?MAX_SCORE, 1, construct_sed_bytes_randmask(fun mask_replace/1), srnd, "replace random bytes from block with random values"},                        
+                        {?MAX_SCORE, 1, construct_sed_bytes_randmask([fun mask_nand/1, fun mask_or/1, fun mask_xor/1]), snand, "NAND/OR/XOR random bytes from block with 2^random values"},
+                        {?MAX_SCORE, 1, construct_sed_bytes_randmask([fun mask_replace/1]), srnd, "replace random bytes from block with random values"},                        
                         {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_del/2, line_del), ld, "delete a line"},
                         {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_del_seq/2, line_del_seq), lds, "delete many lines"},
                         {?MAX_SCORE, 1, construct_line_muta(fun erlamsa_generic:list_dup/2, line_dup), lr2, "duplicate a line"},
