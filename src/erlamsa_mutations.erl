@@ -623,7 +623,7 @@ base64_mutator([H|T], Meta) ->
                         %io:format("!~p!~n", [NewBin]),
                         {
                             {text, base64:encode_to_string(NewBin)}, 
-                            {DAcc + D, AddedMeta ++ [{base64_mutator, D} | MAcc]}
+                            {DAcc + D, [AddedMeta, {base64_mutator, D} | MAcc]}
                         }
                 catch 
                     error:badarg ->
@@ -670,7 +670,7 @@ uri_mutator([H|T], Meta) ->
         fun 
             ({text, A}, {DAcc, MAcc}) when length(A) > 5 ->
                 {NewA, NewD, NewMeta} = try_uri_mutate(A),
-                {{text, NewA}, {DAcc + NewD, NewMeta ++ MAcc}};
+                {{text, NewA}, {DAcc + NewD, [NewMeta | MAcc]}};
             (Lex, Acc) -> {Lex, Acc}
         end, 
         {-1, Meta}, Cs),
