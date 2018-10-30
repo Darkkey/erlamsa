@@ -129,19 +129,12 @@ rand_elem(L) ->
 %% Generate "pseudo" random block of bytes.
 -spec fast_pseudorandom_block(non_neg_integer()) -> binary().
 fast_pseudorandom_block(N) ->
-    fast_pseudorandom_block(N, []).
+    random_block(?ABSMAX_BINARY_BLOCK, fill_blocka(N - ?ABSMAX_BINARY_BLOCK, [])).
 
 -spec fill_blocka(non_neg_integer(), list(byte())) -> list(byte()).
 fill_blocka(0, Out) -> Out;
 fill_blocka(A, Out) ->
     fill_blocka(A - 1, [41 | Out]).
-
--spec fast_pseudorandom_block(non_neg_integer(), list(byte())) -> binary().
-fast_pseudorandom_block(0, Out) -> list_to_binary(Out);
-fast_pseudorandom_block(N, Out) when N > ?ABSMAX_BINARY_BLOCK -> 
-    A = trunc(N/10),
-    random_block(N - A, fill_blocka(A, Out));
-fast_pseudorandom_block(N, Out) -> random_block(N - 1, [rand(256) | Out]).
 
 %% Generate random block of bytes.
 %% TODO: check byte-stream magic here, Radamsa realization is MUCH differ
