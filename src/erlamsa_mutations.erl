@@ -612,15 +612,13 @@ base64_mutator([H|T], Meta) ->
 
     {Ms, {NewD, NewMeta}} = lists:mapfoldl( 
         fun 
-            ({text, A}, Acc = {DAcc, MAcc}) when length(A) > 3 ->
-                %io:format("To decode: !~p! ~n", [A]),
+            ({text, A}, Acc = {DAcc, MAcc}) when length(A) > 6 ->
                 try base64:decode(A) of
                     Bin -> 
                         D = erlamsa_rnd:rand_delta(),
                         Muta = mutators_mutator(MutasList, []),
                         {_, NewLl, AddedMeta} = Muta([Bin], []),
                         NewBin = erlang:iolist_to_binary(NewLl),
-                        %io:format("!~p!~n", [NewBin]),
                         {
                             {text, base64:encode_to_string(NewBin)}, 
                             {DAcc + D, [AddedMeta, {base64_mutator, D} | MAcc]}

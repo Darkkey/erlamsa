@@ -178,6 +178,8 @@ udplisten_writer(LocalPort) ->
     end.
 
 -spec udpsock_writer(inet:ip_address(), inet:port_number(), inet:port_number(), list()) -> fun().
+udpsock_writer(Addr, PortFrom, PortTo, Options) when PortFrom =:= PortTo ->
+    udpsock_writer(Addr, 0, PortTo, Options);
 udpsock_writer(Addr, PortFrom, PortTo, Options) ->
     fun F(_N, Meta) ->
         {Res, Sock} = gen_udp:open(PortFrom, [binary, {active, true}, {reuseaddr, true} | Options]),
