@@ -215,6 +215,37 @@ Adds custom mutation to the list of erlamsa mutators. See `external_muta.erl` fo
 
 Adds post-processing procedure that will be applied to fuzzing result just before output. Useful for fixing checksum or form of data to avoid unnessesary noise. See `external_nhrp.erl` for example.
 
+## Monitors
+
+Erlamsa is using monitors, special modules that are intended to detect various events, like application crashes, freezes, SSRFs, backconnects, e.t.c. Monitor is waiting for some event,
+and, upon receiving it, reports to the logs and execute specified after actions. Each monitor is a separate process, that could be initiated via passing `-O name:params` in the command line. By default, `cm` (connect monitor) is run. To disable monitors that are run by default, one could pass `-O -monitor_name:` in the command line. E.g., to disable connection monitor, pass `-O -cm:` as an command line option to erlamsa.
+
+### Monitor parameters
+
+Parameters are passed to monitors in a form of comma-delimeted list, e.g.: `-O monitor_name:param1=value1,param2=value2,...`. Parameters are split to the generic ones and monitor-specific ones. Generic ones include:
+
+* `after=` -- specifies the type of after-action that will be performed after monitor event is triggered. After-action options are specified in the `after_params=` monitor parameter. Below, there is a list of currently supported after actions:
+ - `exec` -- executes specific process or shell script right after the monitor event is triggered. E.g., the following command line forces to restart run script `hello.sh` after connection event was triggered: `-O cm:after=exec,after_params=hello.sh`.
+
+### Monitors list
+
+Below, it could be found all currently supported by erlamsa monitors and corresponding parameters:
+
+* `cm` -- connection event monitor. Run by default when eramsa is started. Listen on the port specificed by `port=` option (default is `51234`). Upon recieving the connection, reports incoming data to the logs, and wait for connection is being closed by client or a certaing timeout (specified by `timeout=` option, default is 5000 (5 seconds)). This event monitor is intended to catch SSRFs, XXEs or backconnect events that could be generated during the fuzzing.
+
+* `cdb` -- monitor for CDB Windows debugger. This monitor is attaching to / running fuzzed process and catches potential crashes. Upon catching a crash, it reports it to the logs and writes minidump file. Only for Windows platform. Supported options includes:
+ - `app=` -- runs executable file to be monitored; application will be automatically restarted after crash;
+ - `pid=` or `attach=` -- attaches to the process by pid or its name.
+
+* `lc` -- monitor for adb/logcat crash detection for Android applications. This monitor is runs and monitors fuzzed process and catches potential crashes. Upon catching a crash, it reports data that appeared in the Android log. Supported options includes:
+ - `app=` -- application name to be run and monitored;
+ - `activity=` -- application activity to be invoked upon application run;
+ - `adbpath=` -- path to adb executable.
+
+* `r2` -- monitor for Radare2 debugger. This monitor is running fuzzed process and catches potential crashes. Upon catching a crash, it reports backtrace and registers to the logs. Only for Linux/OS X platforms. Supported options includes:
+ - `app=` -- runs executable file to be monitored; application will be automatically restarted after crash;
+ - `r2path=` -- path to r2 executable.
+
 ## Platform limitations
 
 * on unix platforms (Linux, OS X, ...) erlamsa could not be launched in background mode using standard `&` shell symbol due to erlang VM limitations; `-D` option is intended for it. E.g., instead of `./erlamsa -H 127.0.0.1:17771 &` use `./erlamsa -H 127.0.0.1:17771 -D`

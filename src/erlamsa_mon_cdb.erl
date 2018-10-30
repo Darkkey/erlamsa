@@ -30,10 +30,6 @@
 
 -export([init/1, start/1, init_port/3]).
 
-parse_params(["after_params=" ++ AfterParam|T], Acc) ->
-    parse_params(T, maps:put(do_after_params, AfterParam, Acc));
-parse_params(["after=" ++ AfterType|T], Acc) ->
-    parse_params(T, maps:put(do_after_type, list_to_atom(AfterType), Acc));
 %%TODO:add launch in addition to attach
 parse_params(["pid=" ++ App|T], Acc) ->
     parse_params(T, maps:put(run, io_lib:format("-p ~s", [App]), Acc));
@@ -48,17 +44,13 @@ parse_params([_H|T], Acc) ->
 parse_params([], Acc) ->
     Acc.
 
-do_after(exec, Opts) ->
-    ExecPath = maps:get(do_after_params, Opts, ""),
-    os:cmd(ExecPath); %%TODO: add result to logs
-do_after(nil, _Opts) -> ok.
-
 start(Params) ->
     Pid = spawn(?MODULE, init, [Params]),
     {ok, Pid}.
 
 init(Params) ->
-    MonOpts = parse_params(string:split(Params, ",", all), maps:new()),
+    {GenericMonOpts, LeftParams} = erlamsa_monitor:parse_after(string:split(Params, ",", all)),
+    MonOpts = parse_params(LeftParams, GenericMonOpts),
     cdb_start(MonOpts, ?START_MONITOR_ATTEMPTS).
 
 cdb_start(_MonOpts, 0) ->
@@ -92,7 +84,7 @@ cdb_cmdline(MonOpts, Pid, StartResult, _N) ->
     stop_port(Pid),
     erlamsa_logger:log(info, "cdb_monitor cdb finished.", []),
     erlamsa_logger:log(info, "cdb_monitor executing after actions", []),
-    do_after(maps:get(do_after_type, MonOpts, nil), MonOpts),
+    erlamsa_monitor:do_after(MonOpts),
     cdb_start(MonOpts, ?START_MONITOR_ATTEMPTS).
 
 

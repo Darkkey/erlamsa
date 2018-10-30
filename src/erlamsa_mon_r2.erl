@@ -4,10 +4,6 @@
 
 -export([start/1, init/1]).
 
-parse_params(["after_params=" ++ AfterParam|T], Acc) ->
-    parse_params(T, maps:put(do_after_params, AfterParam, Acc));
-parse_params(["after=" ++ AfterType|T], Acc) ->
-    parse_params(T, maps:put(do_after_type, list_to_atom(AfterType), Acc));
 parse_params(["app=" ++ App|T], Acc) ->
     parse_params(T, maps:put(app, App, Acc));
 parse_params(["r2path=" ++ R2Path|T], Acc) ->
@@ -18,11 +14,6 @@ parse_params([_H|T], Acc) ->
     parse_params(T, Acc);
 parse_params([], Acc) ->
     Acc.
-
-do_after(exec, Opts) ->
-    ExecPath = maps:get(do_after_params, Opts, ""),
-    os:cmd(ExecPath); %%TODO: add result to logs
-do_after(nil, _Opts) -> ok.
 
 handle_r2_session(start, nil, R2Cmd) ->
     erlamsa_logger:log(info, "r2monitor attempting to run: '~s'", [R2Cmd]),
@@ -67,7 +58,8 @@ start(Params) ->
    {ok, Pid}.
 
 init(Params) ->
-    MonOpts = parse_params(string:split(Params,",",all), maps:new()),
+    {GenericMonOpts, LeftParams} = erlamsa_monitor:parse_after(string:split(Params, ",", all)),
+    MonOpts = parse_params(LeftParams, GenericMonOpts),
     r2_start(MonOpts, 0).
 
 r2_start(_MonOpts, N = ?START_MONITOR_ATTEMPTS) ->
@@ -77,7 +69,7 @@ r2_start(MonOpts, N) ->
     R2Cmd = io_lib:format("~s -q0 -d ~s", [maps:get(r2path, MonOpts, "r2"), maps:get(app, MonOpts, "")]),
     case handle_r2_session(start, nil, R2Cmd) of %% TODO: do after only if res is ok
         ok ->
-            do_after(maps:get(do_after_type, MonOpts, nil), MonOpts),
+            erlamsa_monitor:do_after(MonOpts),
             r2_start(MonOpts, 0);
         error ->
             r2_start(MonOpts, N+1)
