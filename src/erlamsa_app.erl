@@ -95,8 +95,10 @@ start_behaviour(Dict) ->
             exit(normal)
     end.
 
+%TODO: refactor a little, to avoid duplicating code
 -spec start(start_type(), options()) -> ok.
 start(escript, Dict) ->
+    ets:new(global_config, [public, named_table, bag]),
     AuxProcesses = prepare_auxproc(Dict),
     {MainProcess, StartFunc} = start_behaviour(Dict),
     erlamsa_sup:start_link(lists:flatten([AuxProcesses | MainProcess])),
@@ -104,6 +106,7 @@ start(escript, Dict) ->
     erlamsa_profiler:start(maps:get(debug, Dict, nil), [erlamsa_logger:get_pid()]),
     StartFunc();
 start(direct, Dict) ->
+    ets:new(global_config, [named_table, bag]),
     AuxProcesses = prepare_auxproc(Dict),
     MainProcess = get_supervisor_opts(Dict),
     erlamsa_sup:start_link(lists:flatten([AuxProcesses | MainProcess])),

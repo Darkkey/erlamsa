@@ -37,7 +37,7 @@
 
 %% API
 -export([make_mutator/2, mutators_mutator/1, mutations/0, mutations/1, default/1, tostring/1, 
-         get_max_score/0, inner_mutations/0]).
+         get_max_score/0, inner_mutations/0, get_ssrf_uri/0]).
  
 
 -define(MIN_SCORE, 2.0).
@@ -645,7 +645,25 @@ base64_mutator([H|T], Meta) ->
 
 -spec get_ssrf_uri() -> list().
 get_ssrf_uri() -> 
-    io_lib:format("://localhost:~p/", [51234]).
+    SSRFPort = case ets:match(global_config, {cm_port, '$1'}) of
+        [[Port]] -> Port;
+        _ -> 51234
+    end,
+    SSRFSystemHost = case ets:match(global_config, {cm_host, '$1'}) of
+        [[SHost]] -> SHost;
+        _ -> {}
+    end,
+    SSRFUserHost = case ets:match(global_config, {cm_host_user, '$1'}) of
+        [[UHost]] -> UHost;
+        _ -> {}
+    end,
+    SSRFHost = case {SSRFSystemHost, SSRFUserHost} of
+        {{}, {}} -> "localhost";
+        {SSRFSystemHost, {}} -> inet:ntoa(SSRFSystemHost);
+        {_, SSRFUserHost} -> SSRFUserHost;
+        _ -> "localhost"
+    end,
+    io_lib:format("://~s:~p/", [SSRFHost, SSRFPort]).
 
 %% replace file with http
 -spec change_scheme(list()) -> list().
