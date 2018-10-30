@@ -20,4 +20,5 @@ tmp
 clients/frida/example
 .vscode
 *.pid
+*.bak
 erlamsa
