@@ -222,7 +222,7 @@ and, upon receiving it, reports to the logs and execute specified after actions.
 
 ### Monitor parameters
 
-Parameters are passed to monitors in a form of comma-delimeted list, e.g.: `-O monitor_name:param1=value1,param2=value2,...`. Parameters are split to the generic ones and monitor-specific ones. Generic ones include:
+Parameters are passed to monitors in a form of comma-delimeted list, e.g.: `-O monitor_name:param1=value1,...`. Parameters are split to the generic ones and monitor-specific ones. Generic ones include:
 
 * `after=` -- specifies the type of after-action that will be performed after monitor event is triggered. After-action options are specified in the `after_params=` monitor parameter. Below, there is a list of currently supported after actions:
     - `exec` -- executes specific process or shell script right after the monitor event is triggered. E.g., the following command line forces to restart run script `hello.sh` after connection event was triggered: `-O cm:after=exec,after_params=hello.sh`.
@@ -251,6 +251,7 @@ Below, it could be found all currently supported by erlamsa monitors and corresp
 * on unix platforms (Linux, OS X, ...) erlamsa could not be launched in background mode using standard `&` shell symbol due to erlang VM limitations; `-D` option is intended for it. E.g., instead of `./erlamsa -H 127.0.0.1:17771 &` use `./erlamsa -H 127.0.0.1:17771 -D`
 * `ip://` and `raw://` outputs are not working on Windows, `raw://` output is not working on OS X
 * minimum recommended RAM to run on Windows OS is 4Gb
+* erlamsa spawns separate process upon startup, to avoid this behaviour (and save some performance) you could use `eerlamsa`/`eerlamsa.bat` scripts.
 
 ## Code Status
 
