@@ -339,8 +339,8 @@ patterns() -> [{1, fun pat_once_dec/3, od, "Mutate once pattern"},
                {2, fun pat_many_dec/3, nd, "Mutate possibly many times"},
                {1, fun pat_burst/3, bu, "Make several mutations closeby once"},
                {1, make_pat_skip(), sk, "Skip random sized block and mutate rest"},
-               {1, make_pat_sizer(), sz, "Try to find sizer and mutate enclosed data"},
-               {1, make_pat_csum(), cs, "Try to find control sum field and mutate enclosed data"},               
+               {2, make_pat_sizer(), sz, "Try to find sizer and mutate enclosed data"},
+               {2, make_pat_csum(), cs, "Try to find control sum field and mutate enclosed data"},               
                {1, make_pat_zip(), ar, "Check whether data is an archive (ZIP) and mutate enclosed files"},               
                {0, fun pat_nomuta/3, nu, "Pattern that calls no mutations"}
               ].
@@ -354,10 +354,6 @@ tostring(Lst) ->
         atom_to_list(Name) ++ "," ++ Acc
     end, [], Lst).
 
-%% TODO: rewrite?
-%-spec string_patterns([pattern()]) -> fun((any(), mutator(), meta_list()) -> list()).
-%string_patterns(PatDefaultList) -> mux_patterns(lists:map(fun ({Pri, F, _, _})
-%% -> {Pri, F} end, PatDefaultList)).
 -spec make_pattern([{atom(), non_neg_integer()}]) -> fun().
 make_pattern(Lst) ->
     SelectedPats = maps:from_list(Lst),

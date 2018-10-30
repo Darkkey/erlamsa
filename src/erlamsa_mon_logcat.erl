@@ -4,10 +4,6 @@
 
 -export([start/1, init/1]).
 
-parse_params(["after_params=" ++ AfterParam|T], Acc) ->
-    parse_params(T, maps:put(do_after_params, AfterParam, Acc));
-parse_params(["after=" ++ AfterType|T], Acc) ->
-    parse_params(T, maps:put(do_after_type, list_to_atom(AfterType), Acc));
 parse_params(["app=" ++ App|T], Acc) ->
     parse_params(T, maps:put(app, App, Acc));
 parse_params(["activity=" ++ App|T], Acc) ->
@@ -21,17 +17,15 @@ parse_params([_H|T], Acc) ->
 parse_params([], Acc) ->
     Acc.
 
-do_after(exec, Opts) ->
-    ExecPath = maps:get(do_after_params, Opts, ""),
-    os:cmd(ExecPath); %%TODO: add result to logs
-do_after(nil, _Opts) -> ok.
+
 
 start(Params) -> 
    Pid = spawn(?MODULE, init, [Params]),
    {ok, Pid}.
 
 init(Params) ->
-    MonOpts = parse_params(string:split(Params,",",all), maps:new()),
+    {GenericMonOpts, LeftParams} = erlamsa_monitor:parse_after(string:split(Params, ",", all)),
+    MonOpts = parse_params(LeftParams, GenericMonOpts),
     logcat_start(MonOpts, 0).
 
 parse_crash_data_line(State, Data, AppPid, Acc) ->
@@ -104,7 +98,7 @@ logcat_start(MonOpts, N) ->
     %% TODO: handle exceptions
     case handle_lc_session(start, nil, maps:get(app, MonOpts), maps:get(activity, MonOpts), 0) of 
         ok ->
-            do_after(maps:get(do_after_type, MonOpts, nil), MonOpts),
+            erlamsa_monitor:do_after(MonOpts),
             logcat_start(MonOpts, 0);
         error ->
             logcat_start(MonOpts, N+1)

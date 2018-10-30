@@ -78,33 +78,33 @@ cmdline_optsspec() ->
     {debug		, $d,	"debug",		undefined,				"run in debug/profiler mode, activates verbose"},
     {detach	    , $D,	"detach",		undefined,			    "detach from console after start (service mode)"},
     {external	, $e,   "external", 	string,					"external pre/post/generation/mutation module"},
-    {generators , $g,	"generators",	{string,
-                         erlamsa_gen:tostring(		erlamsa_gen:generators())},		"<arg>, which data generators to use"},
+    {generators , $g,	"generators",	{string, erlamsa_gen:tostring(erlamsa_gen:generators())}, 
+                                                                "<arg>, which data generators to use"},
     {genfuzz	, $G,	"genfuzz",		float,					"<arg>, activate generation-based fuzzer, arg is base probablity"},
     {help		, $h, 	"help", 		undefined, 				"show this thing"},
     {httpsvc    , $H,   "httpservice",  string,				    "<arg>, run as HTTP service on <host:port>, e.g.: 127.0.0.1:17771"},
     {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or proto://:port, proto://host:port for data endpoint (generation mode)"},
-    {list		, $l,	"list",			undefined,				"list i/o options, mutations, patterns and generators"},
+    {list		, $l,	"list",			undefined,				"list i/o options, monitors, mutations, patterns and generators"},
     {logger		, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename, csv=filename.csv, mnesia=dir or stdout (-) or stderr (-err)"},
     {meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"},
-    {mutations  , $m,   "mutations",	{string,
-                      erlamsa_mutations:tostring(	erlamsa_mutations:mutations())}, 	"<arg>, which mutations to use"},
+    {mutations  , $m,   "mutations",	{string, erlamsa_mutations:tostring(erlamsa_mutations:mutations())}, 
+                                                                "<arg>, which mutations to use"},
     {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
     {noiolog   	, $N,   "no-io-logging",undefined,				"disable logging of incoming and outgoing data"},
-    {monitor	, $O,   "monitor",      string,					"<arg>, monitor specification"},
+    {monitor	, $O,   "monitor",      string,					"+-<arg>, add/remove monitor (use additional -O for each monitor"},
     {output		, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, [proto]://192.168.0.1:80 or [proto]://:80 [-]"},
-    {patterns	, $p,	"patterns",		{string,
-                    erlamsa_patterns:tostring(	erlamsa_patterns:patterns())},	"<arg>, which mutation patterns to use"},
+    {patterns	, $p,	"patterns",		{string, erlamsa_patterns:tostring(erlamsa_patterns:patterns())},	
+                                                                "<arg>, which mutation patterns to use"},
     {proxyprob	, $P,	"proxy",		string,					"<arg>, activate fuzzing proxy mode, param is fuzzing probability in form of s->c,c->s e.g.: 0.5,0.5"},
 %	 {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},
     {seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int"},
     {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},
     {maxrunningtime
-                 , $t, 	"maxrunningtime",
-                                         {integer, 30}, 			"<arg>, maximum running time for fuzzing instance (service/proxy modes only)"},
+                , $t, 	"maxrunningtime",
+                                        {integer, 30}, 		    "<arg>, maximum running time for fuzzing instance (service/proxy modes only)"},
     {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose, show some progress during generation"},
     {version	, $V, 	"version",		undefined, 				"show program version"},
-    {workers	, $w, 	"workers",		{integer, 10}, 				"<arg>, number of working threads"}
+    {workers	, $w, 	"workers",		integer,    			"<arg>, number of working threads"}
 ].
 
 usage() ->
@@ -115,13 +115,37 @@ fail(Reason) ->
     usage(),
     halt(1).
 
-parse_actions(List, OptionName, Default, Dict) ->
-    case string_to_actions(List, atom_to_list(OptionName), Default) of
-        {ok, L} ->
-            maps:put(OptionName, L, Dict);
-        {fail, Reason} ->
-            fail(Reason)
-    end.
+show_list() ->
+    IOToStr =
+            fun({N, D}, Acc) ->
+                [io_lib:format("    ~s: ~s~n",[N,D])|Acc]
+            end,
+    Is = lists:foldl(IOToStr, [], inputs()),
+    Os = lists:foldl(IOToStr, [], outputs()),
+    Mons = lists:foldl(
+            fun({N, _M, D}, Acc) ->
+                [io_lib:format("    ~-6s: ~s~n",[atom_to_list(N),D])|Acc]
+            end
+        ,[], erlamsa_monitor:monitors()),
+    Gs = lists:foldl(
+            fun({N, _P, D}, Acc) ->
+                [io_lib:format("    ~-6s: ~s~n",[atom_to_list(N),D])|Acc]
+            end
+        ,[],
+        lists:sort(fun ({_,N1,_}, {_,N2,_}) -> N1 =< N2 end,
+            erlamsa_gen:generators())),
+    Ms = lists:foldl(fun({_,_,_,N,D}, Acc) ->
+                        [io_lib:format("    ~-3s: ~s~n",[atom_to_list(N),D])|Acc]
+                     end, [],
+                     lists:sort(fun ({_,_,_,N1,_}, {_,_,_,N2,_}) -> N1 >= N2 end,
+                     erlamsa_mutations:mutations())),
+    Ps = lists:foldr(fun({_,_,N,D}, Acc) ->
+                        [io_lib:format("    ~-3s: ~s~n",[atom_to_list(N),D])|Acc]
+                     end, [],
+                     erlamsa_patterns:patterns()),
+    io:format("Inputs ~n~s~nOutputs (-o)~n~s~n", [Is, Os]),
+    io:format("Monitors (-O, see README for info on parameters) ~n~s~n", [Mons]),
+    io:format("Generators (-g)~n~s~nMutations (-m)~n~s~nPatterns (-p)~n~s", [Gs, Ms, Ps]).
 
 set_defaults(Dict) ->
     Workers =
@@ -132,7 +156,18 @@ set_defaults(Dict) ->
             faas 	->	10;
             _Else   ->	 1
         end,
-    maps:put(workers, maps:get(workers, Dict, Workers), Dict).
+    
+    maps:put(workers, maps:get(workers, Dict, Workers), 
+        maps:put(monitor, maps:get(monitor, Dict, erlamsa_monitor:default()), 
+            Dict)).
+
+parse_actions(List, OptionName, Default, Dict) ->
+    case string_to_actions(List, atom_to_list(OptionName), Default) of
+        {ok, L} ->
+            maps:put(OptionName, L, Dict);
+        {fail, Reason} ->
+            fail(Reason)
+    end.
 
 -spec resolve_host(string()) -> inet:ip_address().
 resolve_host(Host) ->
@@ -190,7 +225,6 @@ process_action(Name, [_, Pri], _DefaultPri) ->
     {Name, list_to_integer(Pri)};
 process_action(Name, _, DefaultPri) ->
     {Name, DefaultPri}.
-
 
 parse_logger_opts(LogOpts, Dict) ->
     parse_logger_opt(string:tokens(LogOpts, ","), Dict).
@@ -251,7 +285,6 @@ parse_input_opts(InputOpts, Dict) ->
         _Else -> fail(io_lib:format("invalid input specification: '~s'", [InputOpts]))
     end.
 
-
 parse_sock_addr(SockType, Addr) ->
     Tokens = string:tokens(Addr, ":"),
     case length(Tokens) of
@@ -309,6 +342,21 @@ parse_seed_opt(Seed, Dict) ->
             fail("Invalid seed format! Usage: int,int,int")
     end.
 
+parse_monitor(Lst) when length(Lst) =/= 2 ->
+    fail("Incorrect monitor specification! Usage: +/-monitor:params");
+parse_monitor(Lst) ->
+    AddRemove = hd(hd(Lst)), MonitorName = tl(hd(Lst)), MonitorParams = hd(tl(Lst)),
+    {Action, Name, Params} = case AddRemove of
+        $+ -> {plus, list_to_atom(MonitorName), MonitorParams};
+        $- -> {minus, list_to_atom(MonitorName), ""};
+        C -> {plus, list_to_atom([C | MonitorName]), MonitorParams}
+    end,
+    case lists:foldl(fun ({N, _F}, Acc) when Name == N -> [Name | Acc]; (_, Acc) -> Acc end, 
+                erlamsa_monitor:monitors(), []) of
+        [] -> fail(io_lib:format("Unknown monitor name: ~p", [Name]));
+        _Else -> {Action, Name, Params}
+    end.
+
 parse(Args) ->
     case getopt:parse(cmdline_optsspec(), Args) of
         {ok, {Opts, Files}} -> parse_tokens(Opts, Files);
@@ -339,36 +387,15 @@ parse_opts([about|_T], _Dict) ->
     io:format(about(), []),
     halt(0);
 parse_opts([list|_T], _Dict) ->
-    IOToStr =
-            fun({N, D}, Acc) ->
-                [io_lib:format("    ~s: ~s~n",[N,D])|Acc]
-            end,
-    Is = lists:foldl(IOToStr, [], inputs()),
-    Os = lists:foldl(IOToStr, [], outputs()),
-    Gs = lists:foldl(
-            fun({N, _P, D}, Acc) ->
-                [io_lib:format("    ~-6s: ~s~n",[atom_to_list(N),D])|Acc]
-            end
-        ,[],
-        lists:sort(fun ({_,N1,_}, {_,N2,_}) -> N1 =< N2 end,
-            erlamsa_gen:generators())),
-    Ms = lists:foldl(fun({_,_,_,N,D}, Acc) ->
-                        [io_lib:format("    ~-3s: ~s~n",[atom_to_list(N),D])|Acc]
-                     end, [],
-                     lists:sort(fun ({_,_,_,N1,_}, {_,_,_,N2,_}) -> N1 >= N2 end,
-                     erlamsa_mutations:mutations())),
-    Ps = lists:foldr(fun({_,_,N,D}, Acc) ->
-                        [io_lib:format("    ~-3s: ~s~n",[atom_to_list(N),D])|Acc]
-                     end, [],
-                     erlamsa_patterns:patterns()),
-    io:format("Inputs ~n~s~nOutputs (-o)~n~s~nGenerators (-g)~n~s~nMutations (-m)~n~s~nPatterns (-p)~n~s",
-        [Is, Os, Gs, Ms, Ps]),
+    show_list(),
     halt(0);
 parse_opts([{monitor, MonitorSpec}|T], Dict) ->
     %%Syntax is monitor_name:params
     %%TODO: temporary solution, check whether monitor is actually supported
-    Monitor = string:split(MonitorSpec, ":", all),
-    parse_opts(T, maps:put(monitor, {list_to_atom(hd(Monitor)), hd(tl(Monitor))}, Dict));
+    Monitor = parse_monitor(string:split(MonitorSpec, ":", leading)),
+    parse_opts(T, maps:put(monitor, 
+                            [Monitor | maps:get(monitor, Dict, erlamsa_monitor:default())], 
+                            Dict));
 parse_opts([{ascent, DC}|T], Dict) ->
     parse_opts(T, maps:put(descent_coeff, DC, Dict));
 parse_opts([{bypass, DC}|T], Dict) ->
