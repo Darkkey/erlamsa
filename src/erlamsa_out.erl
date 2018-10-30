@@ -115,6 +115,8 @@ tcplisten_writer(LocalPort) ->
             ok -> {F, {net,
                 fun (Data) ->
                     {ok, ClientSock} = gen_tcp:accept(ListenSock),
+                    {ok, {Ip, _}} = inet:sockname(ClientSock),
+                    ets:insert(global_config, [{cm_host, Ip}]),
                     {ok, {Address, Port}} = inet:peername(ClientSock),
                     TmpRecv = gen_tcp:recv(ClientSock, 0, infinity),
                     erlamsa_logger:log(info, "tcp client connect from ~p:~p: ~p",
@@ -135,6 +137,7 @@ tcplisten_writer(LocalPort) ->
 
 -spec tcpsock_writer(inet:ip_address(), inet:port_number()) -> fun().
 tcpsock_writer(Addr, Port) ->
+    erlamsa_utils:set_routing_ip(tcp, Addr, Port),
     fun F(_N, Meta) ->
         {Res, Sock} = gen_tcp:connect(Addr, Port, [binary, {active, true}], ?TCP_TIMEOUT),
         case Res of

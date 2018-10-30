@@ -66,7 +66,8 @@ start_fuzzproxy(Opts) ->
     ProxyAddrList = maps:get(proxy_address, Opts),
     lists:map(
         fun(L) ->
-            {StrProto, LocalPort, _, _, _} = L,
+            {StrProto, LocalPort, _, DHost, DPort} = L,
+            erlamsa_utils:set_routing_ip(tcp, DHost, DPort),
             Proto = list_to_atom(StrProto),
             case listen(Proto, LocalPort) of
                 {ok, ListenSock} ->

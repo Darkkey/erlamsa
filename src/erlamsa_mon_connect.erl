@@ -8,10 +8,8 @@
 
 -export([start/1]).
 
-parse_params(["after_params=" ++ AfterParam|T], Acc) ->
-    parse_params(T, maps:put(do_after_params, AfterParam, Acc));
-parse_params(["after=" ++ AfterType|T], Acc) ->
-    parse_params(T, maps:put(do_after_type, list_to_atom(AfterType), Acc));
+parse_params(["host=" ++ Host|T], Acc) ->
+    parse_params(T, maps:put(host, Host, Acc));
 parse_params(["port=" ++ PortNum|T], Acc) ->
     parse_params(T, maps:put(port, list_to_integer(PortNum), Acc));
 parse_params(["timeout=" ++ PortNum|T], Acc) ->
@@ -27,6 +25,8 @@ start(Params) ->
     {GenericMonOpts, LeftParams} = erlamsa_monitor:parse_after(string:split(Params, ",", all)),
     MonOpts = parse_params(LeftParams, GenericMonOpts),
     Port = maps:get(port, MonOpts, 51234),
+    ets:insert(global_config, [{cm_port, Port}]),
+    ets:insert(global_config, [{cm_host_user, maps:get(host, MonOpts, {})}]),
     Pid = spawn_link(fun() ->
         {ok, Listen} = gen_tcp:listen(Port, [binary, {active, false}, {reuseaddr, true}, {packet, 0}]),
         erlamsa_logger:log(info, "connection monitor listening on port ~p", [Port]),
