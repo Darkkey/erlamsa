@@ -2,13 +2,9 @@
 
 %% Example custom fuzzer that drops 1st byte for every binary data which length is more than 5 bytes.
 
--export([capabilities/0, mutations/0, post/1, fuzzer/3]).
+-export([capabilities/0, fuzzer/3]).
 
-capabilities() -> {nomutations, fuzzer}.
-
-mutations() -> [].
-
-post(Bin) -> Bin.
+capabilities() -> {fuzzer, external}.
 
 fuzzer(_Proto, Data, _Opts) ->
 	{ok, fuzz(Data, erlamsa_rnd:rand_float())}.

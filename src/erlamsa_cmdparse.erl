@@ -85,7 +85,7 @@ cmdline_optsspec() ->
     {httpsvc    , $H,   "httpservice",  string,				    "<arg>, run as HTTP service on <host:port>, e.g.: 127.0.0.1:17771"},
     {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or proto://:port, proto://host:port for data endpoint (generation mode)"},
     {list		, $l,	"list",			undefined,				"list i/o options, monitors, mutations, patterns and generators"},
-    {logger		, $L,	"logger",		string,					"<arg>, which logger to use, e.g. file=filename, csv=filename.csv, mnesia=dir or stdout (-) or stderr (-err)"},
+    {logger		, $L,	"logger",		string,					"<arg>, logger options, e.g. level=critical..debug, file=filename, csv=filename.csv, mnesia=dir or stdout (-) or stderr (-err)"},
     {meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"},
     {mutations  , $m,   "mutations",	{string, erlamsa_mutations:tostring(erlamsa_mutations:mutations())}, 
                                                                 "<arg>, which mutations to use"},
@@ -115,7 +115,7 @@ fail(Reason) ->
     usage(),
     halt(1).
 
-show_list() ->
+show_list(Dict) ->
     IOToStr =
             fun({N, D}, Acc) ->
                 [io_lib:format("    ~s: ~s~n",[N,D])|Acc]
@@ -134,11 +134,12 @@ show_list() ->
         ,[],
         lists:sort(fun ({_,N1,_}, {_,N2,_}) -> N1 =< N2 end,
             erlamsa_gen:generators())),
+    CustomMutas = erlamsa_utils:make_mutas(maps:get(external_mutations, Dict, nil)),
     Ms = lists:foldl(fun({_,_,_,N,D}, Acc) ->
                         [io_lib:format("    ~-3s: ~s~n",[atom_to_list(N),D])|Acc]
                      end, [],
                      lists:sort(fun ({_,_,_,N1,_}, {_,_,_,N2,_}) -> N1 >= N2 end,
-                     erlamsa_mutations:mutations())),
+                     erlamsa_mutations:mutations(CustomMutas))),
     Ps = lists:foldr(fun({_,_,N,D}, Acc) ->
                         [io_lib:format("    ~-3s: ~s~n",[atom_to_list(N),D])|Acc]
                      end, [],
@@ -241,10 +242,18 @@ parse_logger_opt([], Dict) ->
     Dict;
 parse_logger_opt([LogOpt|T], Dict) ->
     case string:tokens(LogOpt, "=") of
+        ["level", Lvl] ->
+            parse_logger_opt(T, maps:put(logger_level, 
+                                         list_to_atom(string:to_lower(Lvl)), Dict));
         ["file", FName] ->
             parse_logger_opt(T, maps:put(logger_file, FName, Dict));
         ["csv", FName] ->
             parse_logger_opt(T, maps:put(logger_csv, FName, Dict));
+        ["syslog", Uri] ->
+            [Host, SPort] = string:split(Uri, ":"),
+            IP = inet:ntoa(Host),
+            Port = list_to_integer(SPort),
+            parse_logger_opt(T, maps:put(logger_syslog, {IP, Port}, Dict));
         ["mnesia", FName] ->
             parse_logger_opt(T, maps:put(logger_mnesia, FName, Dict));
         _Else -> fail(io_lib:format("invalid logger specification: '~s'", [LogOpt]))
@@ -357,6 +366,25 @@ parse_monitor(Lst) ->
         _Else -> {Action, Name, Params}
     end.
 
+addmodule2external(ListName, Module, Dict) ->
+    maps:put(ListName, lists:flatten([Module | maps:get(ListName, Dict, [])]), Dict).
+
+parse_external([], Dict) ->
+    Dict;
+parse_external([Module|T], Dict) ->
+    {Type, _} = erlang:apply(list_to_atom(Module), capabilities, []),
+    NewDict = case Type of
+        mutations -> addmodule2external(external_mutations, Module, Dict);
+        post -> maps:put(external_post, Module, Dict);
+        genfuzz -> maps:put(external_gen, Module, Dict);
+        fuzzer -> maps:put(external_fuzzer, Module, Dict);
+        monitor -> addmodule2external(external_monitors, Module, Dict);
+        logger -> addmodule2external(external_loggers, Module, Dict);
+        pattern -> addmodule2external(external_patterns, Module, Dict);
+        _Else -> fail(io_lib:format("Incorrect module capability: ~p", [Type]))
+    end,
+    parse_external(T, NewDict).
+
 parse(Args) ->
     case getopt:parse(cmdline_optsspec(), Args) of
         {ok, {Opts, Files}} -> parse_tokens(Opts, Files);
@@ -386,8 +414,8 @@ parse_opts([version|_T], _Dict) ->
 parse_opts([about|_T], _Dict) ->
     io:format(about(), []),
     halt(0);
-parse_opts([list|_T], _Dict) ->
-    show_list(),
+parse_opts([list|_T], Dict) ->
+    show_list(Dict),
     halt(0);
 parse_opts([{monitor, MonitorSpec}|T], Dict) ->
     %%Syntax is monitor_name:params
@@ -403,7 +431,7 @@ parse_opts([{bypass, DC}|T], Dict) ->
 parse_opts([{verbose, Lvl}|T], Dict) ->
     parse_opts(T, maps:put(verbose, Lvl, Dict));
 parse_opts([debug|T], Dict) ->
-    parse_opts(T, maps:put(debug, debug, maps:put(verbose, 10, Dict)));
+    parse_opts(T, maps:put(debug, debug, maps:put(verbose, 10, maps:put(logger_level, debug, Dict))));
 parse_opts([{meta, Path}|T], Dict) ->
     parse_opts(T, maps:put(metadata, convert_metapath(Path), Dict));
 parse_opts([recursive|T], Dict) ->
@@ -424,15 +452,15 @@ parse_opts([{logger, LogOpts}|T], Dict) ->
     parse_opts(T, parse_logger_opts(LogOpts, Dict));
 parse_opts([noiolog|T], Dict) ->
     parse_opts(T, maps:put(noiolog, true, Dict));
-parse_opts([{external, ModuleName}|T], Dict) ->
-    parse_opts(T, maps:put(external, ModuleName, Dict));
+parse_opts([{external, ModuleNames}|T], Dict) ->
+    parse_opts(T, parse_external(string:split(ModuleNames, ",", all), Dict));
 parse_opts([{proxyprob, ProxyProbOpts}|T], Dict) ->
     parse_opts(T, parse_proxyprob_opts(ProxyProbOpts, Dict));
 parse_opts([{input, InputOpts}|T], Dict) ->
     parse_opts(T, parse_input_opts(InputOpts, Dict));
 %% TODO: ugly solution, forces user to pass external module BEFORE list of priorities, fix in future when cmd interface will be rewritten
 parse_opts([{mutations, Mutators}|T], Dict) ->
-    CustomMutas = erlamsa_utils:make_mutas(maps:get(external, Dict, nil)),
+    CustomMutas = erlamsa_utils:make_mutas(maps:get(external_mutations, Dict, nil)),
     parse_opts(T, parse_actions(Mutators, mutations, erlamsa_mutations:default(CustomMutas), Dict));
 parse_opts([{patterns, Patterns}|T], Dict) ->
     parse_opts(T, parse_actions(Patterns, patterns, erlamsa_patterns:default(), Dict));

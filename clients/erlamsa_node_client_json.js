@@ -6,7 +6,7 @@ var json_object =
     JSON.stringify(
         {"data": Buffer.from(original_string).toString("base64"),
 	 "seed": "123,123,123",
-         "pattern": "od"}
+         "patterns": "od"}
         );
 
 var options = {

@@ -93,7 +93,7 @@ handle_lc_session(exec, AppPid, _App, _Activity, _N) ->
     ok.                    
 
 logcat_start(_MonOpts, N = ?START_MONITOR_ATTEMPTS) ->
-    erlamsa_logger:log(info, "logcat_monitor: too many failures (~p), giving up", [N]);
+    erlamsa_logger:log(error, "logcat_monitor: too many failures (~p), giving up", [N]);
 logcat_start(MonOpts, N) ->
     %% TODO: handle exceptions
     case handle_lc_session(start, nil, maps:get(app, MonOpts), maps:get(activity, MonOpts), 0) of 

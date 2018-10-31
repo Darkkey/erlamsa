@@ -14,7 +14,7 @@ start(Opts) ->
     erlamsa_rnd:seed(now()),
     Log = erlamsa_logger:build_logger(Opts),
     %% Workers = maps:get(workers, Opts, 10), %% TODO: workers count
-    Generate = erlamsa_utils:make_fuzzer(maps:get(external, Opts, nil)),
+    Generate = erlamsa_utils:make_fuzzer(maps:get(external_gen, Opts, nil)),
     {_Proto, Port} = maps:get(input_endpoint, Opts),
     Verbose = erlamsa_utils:verb(stdout, maps:get(verbose, Opts, 0)),
     start_server(Port, Opts, Generate, Verbose, Log).

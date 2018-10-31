@@ -36,18 +36,18 @@ handle_r2_session(continue, R2Pid, [10] ++ "==> Process finished" ++ [10,10]) ->
     erlamsa_logger:log(info, "r2monitor ==> Process finished without error code, is it ok or crash?", []),
     ok;
 handle_r2_session(continue, R2Pid, CrashMsg) ->
-    erlamsa_logger:log(info, "r2monitor [-->!!!<--] detected event (CRASH?!): ~s", [CrashMsg]),
+    erlamsa_logger:log(finding, "r2monitor [-->!!!<--] detected event (CRASH?!): ~s", [CrashMsg]),
     RegInfoMsg = r2pipe:call(R2Pid, "drj\n"),
-    erlamsa_logger:log(info, "r2monitor registers info ~s", [RegInfoMsg]),
+    erlamsa_logger:log(finding, "r2monitor registers info ~s", [RegInfoMsg]),
     Info = r2pipe:call(R2Pid, "ij\n"),
-    erlamsa_logger:log(info, "r2monitor executable info ~s", [Info]),
+    erlamsa_logger:log(finding, "r2monitor executable info ~s", [Info]),
     %%MemMaps = r2pipe:call(R2Pid, "dmj\n"),
     %% FIXME: should we record memory maps now or later? because they seems to be empty after crash...
     %erlamsa_logger:log_data(info, "r2monitor memory maps recorded", [], list_to_binary(MemMaps)),
     %BackTraceJson = r2pipe:call("dbtj\n"),
     %erlamsa_logger:log(info, "r2monitor json backtrace ~s", [BackTraceJson]),
     BackTrace = r2pipe:call(R2Pid, "dbt\n"),
-    erlamsa_logger:log(info, "r2monitor backtrace ~s", [BackTrace]),
+    erlamsa_logger:log(finding, "r2monitor backtrace ~s", [BackTrace]),
     r2pipe:stop(R2Pid),
     erlamsa_logger:log(info, "r2monitor debugging finished", []),
     ok.

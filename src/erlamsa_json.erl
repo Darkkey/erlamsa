@@ -81,7 +81,8 @@ ws(Bin, Context = [Term|RestContext], Acc) ->
         pair ->                 pair(Bin, RestContext, Acc);
         pair_delim ->           pair(Bin, Context, Acc);
         value ->                value(Bin, RestContext, Acc)
-    end.
+    end;
+ws(_, _, _) -> throw(incorrect_json).
 
 value(<<$[, Rest/binary>>, Context, Acc) ->
     ws(Rest, [array|Context], Acc);
@@ -156,7 +157,8 @@ string(<<>>, Context, RevStr, Acc) ->
     push(<<>>, Context, {junkstring, lists:reverse([$"|RevStr])}, Acc).
 
 number(<<C:8, Rest/binary>>, Context, Acc) when ?NOT_SEPARATOR(C) ->
-    number_rest(Rest, Context, [C], Acc).
+    number_rest(Rest, Context, [C], Acc);
+number(_, _, _) -> throw(incorrect_json).
 
 number_rest(<<C:8, Rest/binary>>, Context, N, Acc) when ?NOT_SEPARATOR(C) ->
     number_rest(Rest, Context, [C|N], Acc);
@@ -165,6 +167,10 @@ number_rest(Bin, Context, N, Acc) ->
 
 %%%
 %%% /JSON tokenizer
+%%%
+
+%%%
+%%% JSON AST -> Erlang dictionaries
 %%%
 
 tokens_to_erlang(Ast) when is_list(Ast) ->
@@ -193,3 +199,71 @@ tokens_to_erlang({number, Value}) ->
 tokens_to_erlang(Token) ->
     Token.
 
+%%%
+%%% /JSON AST -> Erlang dictionaries
+%%%
+
+%%%
+%%% JSON AST Folder
+%%%
+
+%% TODO: beautify parameter to insert ' ' and '\n'
+
+fold_list(F, [H], Acc) ->
+    R = F(H),
+    fold_list(F, [], [R | Acc]);
+fold_list(F, [H|T], Acc) ->
+    R = F(H),
+    fold_list(F, T, [[R, $,] | Acc]);
+fold_list(_F, [], Acc) ->
+    lists:reverse(Acc).
+
+fold_ast([H], Acc) ->
+    fold_ast(H, Acc);
+fold_ast({pair, P1, P2}, Acc) -> 
+    P1Json = fold_ast(P1, []),
+    P2Json = fold_ast(P2, []),
+    [P1Json, ":", P2Json | Acc];
+fold_ast({string, Value}, Acc) -> 
+    [$", Value, $" | Acc];
+fold_ast({number, Value}, Acc) ->
+    [Value | Acc];
+fold_ast({object, Els}, Acc) -> 
+    ["{", fold_ast(Els, []), "}" | Acc];
+fold_ast([], Acc) -> 
+    lists:flatten(Acc);
+fold_ast(H, Acc) when is_list(H) ->
+    M = fold_list(fun (A) -> fold_ast(A, []) end, H, []),
+    fold_ast([], [M | Acc]).
+
+fold_ast(Ast) ->
+    list_to_binary(fold_ast(Ast, [])).
+
+%%%
+%%% /JSON AST Folder
+%%%
+
+%%%
+%%% Mutations
+%%%
+
+json_mutate(Ll = [H|T], Meta) ->
+    %io:format("Trying to parse... ~p~n", [size(H)]),
+    %file:write_file("./last_json.txt", H),
+    try tokenize(H) of
+        Tokens ->
+            %%io:format("Ast ready ~p~n", [Tokens]),
+            % {NewMeta, Res, D} = json_mutation(Tokens),
+            NewMeta = [], D = 1,
+            NewBinStr = fold_ast(hd(Tokens)),
+            if
+                NewBinStr =:= H ->
+                    {fun json_mutate/2, Ll, NewMeta, -1};
+                true ->
+                    {fun json_mutate/2, [NewBinStr | T],  [NewMeta|Meta], 
+                    D + trunc(size(NewBinStr)/(?AVG_BLOCK_SIZE*10))} %% limiting next rounds based on a size
+            end
+    catch
+        incorrect_json ->
+            {fun json_mutate/2, Ll, Meta, -1}
+    end.

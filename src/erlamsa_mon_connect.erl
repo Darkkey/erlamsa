@@ -40,7 +40,7 @@ server_tcp(ListenSocket, MonOpts) ->
     {ok, Socket} = gen_tcp:accept(ListenSocket),
     spawn(fun() -> server_tcp(ListenSocket, MonOpts) end),
     {ok, {Host, Port}} = inet:peername(Socket),
-    erlamsa_logger:log(info, "connection monitor got new connection from ~s:~p, socket ~p", 
+    erlamsa_logger:log(finding, "connection monitor got new connection from ~s:~p, socket ~p", 
                              [inet:ntoa(Host), Port, Socket]),
     loop_tcp(Socket, Timeout, MonOpts).
  
@@ -48,15 +48,15 @@ loop_tcp(Socket, Timeout, MonOpts) ->
     inet:setopts(Socket, [{active, once}]),
     receive
         {tcp, Socket, Data} ->
-            erlamsa_logger:log_data(info, "connection monitor got data on ~p:", [Socket], Data),
+            erlamsa_logger:log_data(finding, "connection monitor got data on ~p:", [Socket], Data),
             loop_tcp(Socket, Timeout, MonOpts);
         {tcp_closed, Socket} ->
-            erlamsa_logger:log(info, "connection monitor socket ~p closed by client", [Socket]),
+            erlamsa_logger:log(finding, "connection monitor socket ~p closed by client", [Socket]),
             erlamsa_monitor:do_after(MonOpts),
             gen_tcp:close(Socket)
     after 
         Timeout ->
-            erlamsa_logger:log(info, "connection monitor socket ~p closed on timeout", [Socket]),
+            erlamsa_logger:log(finding, "connection monitor socket ~p closed on timeout", [Socket]),
             erlamsa_monitor:do_after(MonOpts),
             gen_tcp:close(Socket)
     end.
