@@ -36,7 +36,19 @@
 -include("erlamsa.hrl").
 
 % API
--export([get_timestamp/0, get_supervisor_opts/1, start/1, logger/1, get_pid/0, log/3, log_data/4]).
+-export([get_timestamp/0, get_supervisor_opts/1, start/1, logger/1, get_pid/0, log/3, log_data/4, loglvl_toint/1]).
+
+%% log levels:
+%% critical, error, warning, finding, info, meta, decision, debug
+loglvl_toint(debug) -> ?DEBUG;
+loglvl_toint(decision) -> ?DECISION;
+loglvl_toint(meta) -> ?META;
+loglvl_toint(info) -> ?INFO;
+loglvl_toint(finding) -> ?FINDING;
+loglvl_toint(warning) -> ?WARNING;
+loglvl_toint(error) -> ?ERROR;
+loglvl_toint(critical) -> ?CRITICAL;
+loglvl_toint(Int) when is_integer(Int) -> Int.
 
 get_supervisor_opts(Opts) ->
     #{id => ?MODULE,
@@ -81,56 +93,90 @@ remove_newlines_from_data(Data) ->
 %%
 %% Basic I/O and file logger
 %%
-append_to_io(IO, TimeStamp, Pid, LogMsg, Data) when is_atom(IO) ->
-    io:format(IO, "~s <~p>: ~s~s~n", [TimeStamp, Pid, LogMsg, Data]);
-append_to_io(FileName, TimeStamp, Pid, LogMsg, Data) when is_list(FileName) ->
-    file:write_file(FileName, io_lib:format("~s <~p>: ~s~s~n",
-                    [TimeStamp, Pid, LogMsg, Data]), [append]).
+append_to_io(IO, TimeStamp, Pid, Type, LogMsg, Data) when is_atom(IO) ->
+    io:format(IO, "~s <~p> [~p]: ~s~s~n", [TimeStamp, Pid, Type, LogMsg, Data]);
+append_to_io(FileName, TimeStamp, Pid, Type, LogMsg, Data) when is_list(FileName) ->
+    file:write_file(FileName, io_lib:format("~s <~p> [~p]: ~s~s~n",
+                    [TimeStamp, Pid, Type, LogMsg, Data]), [append]).
 
 %% by default, data logging is now enabled --> none is default value
 build_logger_io(IO, none) ->
     fun
-        (TimeStamp, Pid, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 ->
-            append_to_io(IO, TimeStamp, Pid, LogMsg,
+        (TimeStamp, Pid, Type, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 ->
+            append_to_io(IO, TimeStamp, Pid, Type, LogMsg,
                          io_lib:format(" [data(len = ~p) = ~p]", [byte_size(Data), Data]));
-        (TimeStamp, Pid, LogMsg, _Data) ->
-            append_to_io(IO, TimeStamp, Pid, LogMsg, [])
+        (TimeStamp, Pid, Type, LogMsg, _Data) ->
+            append_to_io(IO, TimeStamp, Pid, Type, LogMsg, [])
     end;
 build_logger_io(IO, _DoData) ->
     fun
-        (TimeStamp, Pid, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 ->
-            append_to_io(IO, TimeStamp, Pid, LogMsg,
+        (TimeStamp, Pid, Type, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 ->
+            append_to_io(IO, TimeStamp, Pid, Type, LogMsg,
                          io_lib:format(" [data_len = ~p]", [byte_size(Data)]));
-        (TimeStamp, Pid, LogMsg, _Data) ->
-            append_to_io(IO, TimeStamp, Pid, LogMsg, [])
+        (TimeStamp, Pid, Type, LogMsg, _Data) ->
+            append_to_io(IO, TimeStamp, Pid, Type, LogMsg, [])
+    end.
+
+%%
+%% Syslog logger
+%%
+
+%% log levels to syslog conversion
+loglvl_syslog(debug) -> 7;
+loglvl_syslog(decision) -> 6;
+loglvl_syslog(meta) -> 6;
+loglvl_syslog(info) -> 6;
+loglvl_syslog(finding) -> 5;
+loglvl_syslog(warning) -> 4;
+loglvl_syslog(error) -> 3;
+loglvl_syslog(critical) -> 2.
+
+send_to_syslog({IP, Port}, TimeStamp, Pid, Type, LogMsg, Data) ->
+    Msg = list_to_binary(io_lib:format("~s erlamsa ~p [~p] : ~s ~s~n", [TimeStamp, Pid, Type, LogMsg, Data])),
+    Level = loglvl_syslog(Type),
+    Packet = <<16:5,Level:3,Msg/binary>>,
+    {ok, Socket} = gen_udp:open(0,[inet]),
+    en_udp:send(Socket, IP, Port, Packet),
+    gen_udp:close(Socket),
+    ok.
+
+build_logger_syslog(none, _None) ->
+    [];
+build_logger_syslog(Uri, _DoData) ->
+    fun
+        (TimeStamp, Pid, Type, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 ->
+            send_to_syslog(Uri, TimeStamp, Pid, Type, LogMsg,
+                          io_lib:format(" [data_len = ~p]", [byte_size(Data)]));
+        (TimeStamp, Pid, Type, LogMsg, _Data) ->
+            send_to_syslog(Uri, TimeStamp, Pid, Type, LogMsg, "")
     end.
 
 %%
 %% CSV Logger
 %%
-append_to_csv(FileName, TimeStamp, Pid, LogMsg, Data) when is_list(FileName) ->
+append_to_csv(FileName, TimeStamp, Pid, Type, LogMsg, Data) when is_list(FileName) ->
     file:write_file(FileName,
-                    io_lib:format("~s,~p,\"~s\",~s~n", [TimeStamp, Pid, LogMsg, Data]), [append]).
+                    io_lib:format("~s,~p,~p,\"~s\",~s~n", [TimeStamp, Pid, Type, LogMsg, Data]), [append]).
 
 %% by default, data logging is now enabled --> none is default value
 build_logger_csv(none, _None) ->
     [];
 build_logger_csv(FName, none) ->
     fun
-        (TimeStamp, Pid, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 ->
-            append_to_csv(FName, TimeStamp, Pid, LogMsg,
+        (TimeStamp, Pid, Type, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 ->
+            append_to_csv(FName, TimeStamp, Pid, Type, LogMsg,
                           io_lib:format("~p,\"~s\"", [byte_size(Data),
                                         remove_newlines_from_data(Data)]));
-        (TimeStamp, Pid, LogMsg, _Data) ->
-            append_to_csv(FName, TimeStamp, Pid, LogMsg, ",")
+        (TimeStamp, Pid, Type, LogMsg, _Data) ->
+            append_to_csv(FName, TimeStamp, Pid, Type, LogMsg, ",")
     end;
 build_logger_csv(FName, _DoData) ->
     fun
-        (TimeStamp, Pid, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 ->
-            append_to_csv(FName, TimeStamp, Pid, LogMsg,
+        (TimeStamp, Pid, Type, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 ->
+            append_to_csv(FName, TimeStamp, Pid, Type, LogMsg,
                           io_lib:format("~p,\"\"", [byte_size(Data)]));
-        (TimeStamp, Pid, LogMsg, _Data) ->
-            append_to_csv(FName, TimeStamp, Pid, LogMsg, ",")
+        (TimeStamp, Pid, Type, LogMsg, _Data) ->
+            append_to_csv(FName, TimeStamp, Pid, Type, LogMsg, ",")
     end.
 
 %%
@@ -145,9 +191,9 @@ build_logger_mnesia(Dir, _DoData) ->
     mnesia:start(),
     mnesia:create_table(log_entry, [{attributes, record_info(fields, log_entry)}]),
     fun
-        (TimeStamp, Pid, LogMsg, Data) ->
+        (TimeStamp, Pid, Type, LogMsg, Data) ->
             mnesia:transaction(fun () ->
-                mnesia:write(#log_entry{date = TimeStamp, pid = Pid, message = LogMsg, data = Data})
+                mnesia:write(#log_entry{date = TimeStamp, pid = Pid, type = Type,  message = LogMsg, data = Data})
             end),
             io:format("~p", [mnesia:info()])
     end.
@@ -166,23 +212,20 @@ build_logger(Opts) ->
                                 ),
             build_logger_file(maps:get(logger_file, Opts, none), maps:get(noiolog, Opts, none)),
             build_logger_csv(maps:get(logger_csv, Opts, none), maps:get(noiolog, Opts, none)),
+            build_logger_syslog(maps:get(logger_syslog, Opts, none), maps:get(noiolog, Opts, none)),
             build_logger_mnesia(maps:get(logger_mnesia, Opts, none), maps:get(noiolog, Opts, none))
         ]),
     OutputToLog =
-        fun (Pid, Fmt, Lst, Data) ->
+        fun (Pid, Type, Fmt, Lst, Data) ->
             TimeStamp = get_timestamp(),
             LogMsg = io_lib:format(Fmt, Lst),
-            [F(TimeStamp, Pid, LogMsg, Data) || F <- Loggers],
+            [F(TimeStamp, Pid, Type, LogMsg, Data) || F <- Loggers],
             ok
         end,
-    case maps:get(verbose, Opts, 0) of
-        V when V > 0 ->
-            fun (Pid, _Type, Fmt, Lst, Data) -> OutputToLog(Pid, Fmt, Lst, Data) end;
-        _Else ->
-            fun
-                (_Pid, debug, _Fmt, _Lst, _Data) -> ok;
-                (Pid, _Type, Fmt, Lst, Data) -> OutputToLog(Pid, Fmt, Lst, Data)
-            end
+    V = loglvl_toint(maps:get(logger_level, Opts, ?INFO)),
+    fun 
+        (Pid, Type, TypeInt, Fmt, Lst, Data) when TypeInt =< V -> OutputToLog(Pid, Type, Fmt, Lst, Data);
+        (_Pid, _Type, _TypeInt, _Fmt, _Lst, _Data) -> ok
     end.
 
 build_logger_file(none, _) ->
@@ -207,7 +250,7 @@ start(Log) ->
 logger(Log) ->
     receive
         {log, Pid, Type, Fmt, Lst, Data} ->
-            Log(Pid, Type, Fmt, Lst, Data);
+            Log(Pid, Type, loglvl_toint(Type), Fmt, Lst, Data);
         {get_pid, Pid} ->
             Pid ! {pid, self()}
     end,

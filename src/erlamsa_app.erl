@@ -86,7 +86,8 @@ start_behaviour(Dict) ->
         stdio ->
             {[], fun () -> erlamsa_main:fuzzer(Dict), timer:sleep(1) end};
         httpsvc ->
-            {[erlamsa_httpsvc:get_supervisor_opts(Dict)], fun sleep/0};
+            {[erlamsa_httpsvc:get_supervisor_opts(Dict)], 
+            fun () -> erlamsa_httpsvc:prepare_ets(Dict), sleep() end};
         faas ->
             io:format("Mode not supported yet!"),
             exit(normal);

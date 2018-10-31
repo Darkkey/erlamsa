@@ -54,7 +54,7 @@ init(Params) ->
     cdb_start(MonOpts, ?START_MONITOR_ATTEMPTS).
 
 cdb_start(_MonOpts, 0) ->
-    erlamsa_logger:log(info, "cdb_monitor: too many failures (~p), giving up",
+    erlamsa_logger:log(error, "cdb_monitor: too many failures (~p), giving up",
                         [?START_MONITOR_ATTEMPTS]);
 cdb_start(MonOpts, N) ->
     erlamsa_logger:log(info, "entering cdb_monitor, options parsing complete", []),
@@ -64,21 +64,21 @@ cdb_start(MonOpts, N) ->
     cdb_cmdline(MonOpts, Pid, StartResult, N).
 
 cdb_cmdline(MonOpts, _Pid, {State, Acc}, N) when State =:= closed; State =:= process_exit ->
-    erlamsa_logger:log(info, "cdb_monitor error (~p): '~s'", [State, Acc]),
+    erlamsa_logger:log(warning, "cdb_monitor error (~p): '~s'", [State, Acc]),
     cdb_start(MonOpts, N-1);
 cdb_cmdline(MonOpts, Pid, StartResult, _N) ->
     erlamsa_logger:log(info, "cdb_monitor execution returned, seems legit: '~s'", [StartResult]),
     CrashMsg = call_port(Pid, "g\r\n"),
-    erlamsa_logger:log(info, "cdb_monitor [-->!!!<--] detected event (CRASH?!): ~s", [CrashMsg]),
+    erlamsa_logger:log(finding, "cdb_monitor [-->!!!<--] detected event (CRASH?!): ~s", [CrashMsg]),
     Backtrace = call_port(Pid, "k\r\n"),
-    erlamsa_logger:log(info, "cdb_monitor backtrace: ~s", [Backtrace]),
+    erlamsa_logger:log(finding, "cdb_monitor backtrace: ~s", [Backtrace]),
     Registers = call_port(Pid, "r\r\n"),
-    erlamsa_logger:log(info, "cdb_monitor registers: ~s", [Registers]),
+    erlamsa_logger:log(finding, "cdb_monitor registers: ~s", [Registers]),
     {{Year, Month, Day}, {Hour, Minute, Second}} = calendar:now_to_local_time(erlang:now()),
     DumpFile = io_lib:format("~s_~4..0w_~2..0w_~2..0w_~2..0w_~2..0w_~2..0w.minidump",
                              [maps:get(app, MonOpts, ""), Year, Month, Day, Hour, Minute, Second]),
     Minidump = call_port(Pid, io_lib:format(".dump /m ~s \r\n", [DumpFile])),
-    erlamsa_logger:log(info, "cdb_monitor minidump saved to ~s with result: ~s",
+    erlamsa_logger:log(finding, "cdb_monitor minidump saved to ~s with result: ~s",
                              [DumpFile, Minidump]),
     call_port_no_wait(Pid, "q\r\n"),
     stop_port(Pid),

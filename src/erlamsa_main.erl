@@ -104,7 +104,7 @@ test(Seed) -> fuzzer(
 -spec fuzzer(#{}) -> [binary()].
 fuzzer(Dict) ->
     Seed = maps:get(seed, Dict, default),
-    CustomMutas = erlamsa_utils:make_mutas(maps:get(external, Dict, nil)),
+    CustomMutas = erlamsa_utils:make_mutas(maps:get(external_mutations, Dict, nil)),
     Mutas = maps:get(mutations, Dict, default),
     N = maps:get(n, Dict, default),
     Paths = maps:get(paths, Dict, ["-"]),
@@ -136,7 +136,7 @@ fuzzer(Dict) ->
             PatList = maps:get(patterns, Dict, erlamsa_patterns:default()),
             Pat = erlamsa_patterns:make_pattern(PatList),
             Out = erlamsa_out:string_outputs(maps:get(output, Dict, "-")),
-            Post = erlamsa_utils:make_post(maps:get(external, Dict, nil)),
+            Post = erlamsa_utils:make_post(maps:get(external_post, Dict, nil)),
             Sleep = maps:get(sleep, Dict, 0),
             fuzzer_loop(Muta, Gen, Pat, Out, RecordMeta, Verbose, {1, 0}, N, Sleep, Post, [])
     end.

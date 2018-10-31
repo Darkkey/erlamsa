@@ -9,6 +9,17 @@ $ git clone https://github.com/Darkkey/erlamsa && cd erlamsa && make
 $ echo 'Hello erlamsa!' | ./erlamsa
 ```
 
+## Features
+
+- mutational-based fuzzing engine based on radamsa;
+- support for fuzzing protocols over HTTP, TCP, UDP, and raw IP/network;
+- built-in fuzzing proxy for MitMing and fuzzing connection(s) between target's client and server;
+- FaaS (fuzzing-as-a-service) mode, plain HTTP and HTTP/json queries are supported;
+- `<<smart>>` patterns and mutations, e.g. CRC and sizer fields detection, fuzzing of data inside archives, base64-encoded data decoding, e.t.c.;
+- fuzzing for SSRFs, XXEs, ZIP path traversals;
+- various monitors to detect crashes and loggers to store fuzzing data;
+- support for external modules.
+
 ## Installation:
 
 ### Prerequisites

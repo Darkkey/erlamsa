@@ -26,9 +26,14 @@
 %%%-------------------------------------------------------------------
 
 -module(erlamsa_httpsvc).
--export([get_supervisor_opts/1]).
+-export([get_supervisor_opts/1, prepare_ets/1]).
 
 -include("erlamsa.hrl").
+
+-spec prepare_ets(options()) -> ok.
+prepare_ets(Opts) ->
+    ets:insert(global_config, [{external_mutations, maps:get(external_mutations, Opts, [])}]),
+    ok.
 
 -spec get_supervisor_opts(options()) -> supervisor:child_spec().
 get_supervisor_opts(Opts) ->

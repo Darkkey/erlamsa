@@ -32,7 +32,8 @@
 
 -spec parse_headers(mod_esi:env(), options()) -> options().
 parse_headers([{http_mutations, Mutators}|T], Acc) ->
-    {ok, M} = erlamsa_cmdparse:string_to_actions(Mutators, "mutations", erlamsa_utils:default([])),
+    DefaultMutas = erlamsa_mutations:default(erlamsa_utils:make_mutas(maps:get(external_mutations, Acc, []))),
+    {ok, M} = erlamsa_cmdparse:string_to_actions(Mutators, "mutations", DefaultMutas),
     parse_headers(T, maps:put(mutations, M, Acc));
 parse_headers([{http_patterns, Patterns}|T], Acc) ->
     {ok, P} = erlamsa_cmdparse:string_to_actions(Patterns, "patterns", erlamsa_patterns:default()),
@@ -74,7 +75,11 @@ parse_json(Env, Json) ->
 
 -spec call(term(), mod_esi:env(), binary()) -> binary().
 call(Sid, Env, In) ->
-    Opts = parse_headers(Env, maps:new()),
+    InitOpts = case ets:match(global_config, {external_mutations, '$1'}) of
+        [[Mutations]] -> maps:put(external_mutations, Mutations, maps:new());
+        _ -> maps:new()
+    end,
+    Opts = parse_headers(Env, InitOpts),
     Dict = erlamsa_utils:get_direct_fuzzing_opts(In, Opts),
     erlamsa_logger:log(info, "Request from IP ~s, session ~p",
                         [maps:get(remote_addr, Dict, nil), Sid]),

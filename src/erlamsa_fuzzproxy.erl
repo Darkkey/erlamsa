@@ -127,15 +127,14 @@ server_tcp(ListenSock, Endpoint, Opts, Verbose) ->
               end,
           ok;
         Other ->
-            io:format("Error: accept returned ~w~n", [Other]),
-            erlamsa_logger:log(info, "error: accept returned ~p", [Other]),
+            erlamsa_logger:log(warning, "error: accept returned ~p", [Other]),
             ok
     end.
 
 raise_prob(0.0, _) -> 0.0;
 raise_prob(Prob, 1.0) -> Prob;
 raise_prob(Prob, DC) ->
-    erlamsa_logger:log(debug, "increasing Prob from ~p to ~p", [Prob, Prob + Prob/DC]),
+    erlamsa_logger:log(decision, "increasing Prob from ~p to ~p", [Prob, Prob + Prob/DC]),
     Prob + Prob/DC.
 
 %%TODO: check for memory consumption and tail recursion correctness
@@ -210,7 +209,7 @@ extract_http(Data) ->
         {ok, Query, Rest} ->
             extract_http_headers(Rest, [Query]);
         Err ->
-            erlamsa_logger:log(info, "Invalid HTTP packet?: ~p~n", [Err]),
+            erlamsa_logger:log(warning, "Invalid HTTP query?: ~p~n", [Err]),
             {ok, [], Data}
     end.
 extract_http_headers(Data, Acc) ->
@@ -223,7 +222,7 @@ extract_http_headers(Data, Acc) ->
         {more, undefined} ->
             {more, Acc, Data};
         Err ->
-            erlamsa_logger:log(info, "Error parsing HTTP header: ~p~n", [Err]),
+            erlamsa_logger:log(warning, "Error parsing HTTP header: ~p~n", [Err]),
             {ok, Acc, Data}
     end.
 
@@ -261,13 +260,13 @@ pack_http_packet([], Data, Acc) ->
     <<Hdr/binary, Data/binary>>.
 
 fuzz(_Proto, _Prob, ByPass, N, _Opts, Data) when N < ByPass ->
-    erlamsa_logger:log(debug, "Packet No. ~p < ~p, bypassing data", [N, ByPass]),
+    erlamsa_logger:log(decision, "Packet No. ~p < ~p, bypassing data", [N, ByPass]),
     {nofuzz, Data};
 fuzz(Proto, Prob, _ByPass, _N, Opts, Data) ->
     fuzz(Proto, Prob, Opts, Data).
 
 fuzz(Proto, Prob, Opts, Data) ->
-    case maps:get(external, Opts, nil) of
+    case maps:get(external_fuzzer, Opts, nil) of
         nil -> fuzz_rnd(Proto, Prob, erlamsa_rnd:rand_float(), Opts, Data);
         Module ->
             erlang:apply(

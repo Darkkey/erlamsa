@@ -29,6 +29,17 @@
 -define(START_MONITOR_ATTEMPTS, 5).
 -define(PROCKET_DIR, "/deps/procket/ebin").
 
+%% log levels:
+%% crit, error, warning, issue, info, decision, meta, debug
+-define(CRITICAL, 0).
+-define(ERROR, 1).
+-define(WARNING, 2).
+-define(FINDING, 3).
+-define(INFO, 4).
+-define(META, 5).
+-define(DECISION, 6).
+-define(DEBUG, 7).
+
 -ifdef(USE_PROCKET).
 -define(LOAD_PROCKET(R), code:add_pathz(R ++ ?PROCKET_DIR)).
 -else.
