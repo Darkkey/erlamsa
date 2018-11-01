@@ -632,14 +632,14 @@ sgml_xmlfeatures(Ast = [H|T], NT, 0) when NT > 0 ->
             {tag, TagName, TagName, P, L} = Tag,
             SSRFUri = erlamsa_mutations:get_ssrf_uri(),
             DocType = erlamsa_rnd:rand_elem([
-                %% TODO: add more exploits
-                %% XXEs
+                %% TODO: add more tests for XML eXternal entities
+                %% plain XXEs
                 io_lib:format("<!DOCTYPE ~s PUBLIC \"...\" \"http~s\">", [TagName, SSRFUri]),
                 io_lib:format("<!DOCTYPE ~s SYSTEM \"/dev/zero\">", [TagName]),
                 io_lib:format("<!DOCTYPE ~s SYSTEM \"http~s\">", [TagName, SSRFUri]),
                 io_lib:format("<!DOCTYPE ~s [<!ELEMENT ~s ANY ><!ENTITY xxe SYSTEM \"http~s\" >]>", 
                               [TagName, TagName, SSRFUri]),
-                %% billion of lol'z
+                %% billion of lol'z overload
                 io_lib:format("<!DOCTYPE ~s [~n <!ENTITY lol \"lol\">~n <!ELEMENT lolz (#PCDATA)>~n<!ENTITY lol1 \"&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;\">~n<!ENTITY lol2 \"&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;\">~n<!ENTITY lol3 \"&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;\">~n<!ENTITY lol4 \"&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;\">~n<!ENTITY lol5 \"&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;\">~n<!ENTITY lol6 \"&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;\">~n<!ENTITY lol7 \"&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;\">~n<!ENTITY lol8 \"&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;\">~n<!ENTITY xxe \"&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;\">~n]>", [TagName])                             
                 ]),
             XXE = {text, list_to_binary(lists:flatten(DocType))},           
@@ -661,7 +661,7 @@ sgml_xmlfeatures(Ast, NT, 1) when NT > 0 ->
         true -> {Ast, [{sgml_xmlfeatures, failed}], -1};
         _Else -> {NewAst, [{sgml_xmlfeatures, xmlns}], 1}
     end;
-sgml_xmlfeatures(Ast, NT, _) when NT > 0 ->
+sgml_xmlfeatures(Ast, _NT, _) ->
     {Ast, [{sgml_xmlfeatures, -1}], -1}.
 
 mutate_innertext_prob(Binary, _Muta, Prob, Rnd) when Rnd > Prob ->
