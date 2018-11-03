@@ -100,7 +100,7 @@ string_lex_step(Lst = [H|T], Rawr, Chunks) ->
 -spec step_text(string(), string(), chunk_list()) -> chunk_list().
 step_text([], Seenr, Chunks) ->
     lists:reverse(flush_type_node(text, Seenr, Chunks));
-step_text([H|T], Seenr, Chunks) when H == 34; H == 39 ->
+step_text([H|T], Seenr, Chunks) when H == $"; H == $' ->
     %%fun (End) ->
         step_delimited(T, H, H, [], [H | Seenr], Chunks);
     %%end;

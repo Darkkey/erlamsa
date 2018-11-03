@@ -100,6 +100,9 @@ ascii_bad_test() ->
 		) =:= true). 
 
 ascii_delimeter_test() ->	
+	ets:new(global_config, [public, named_table, bag]),
+	ets:insert(global_config, [{cm_port, 12345}]),
+    ets:insert(global_config, [{cm_host, {127,0,0,1}}]),
 	?assert(recursive_regex_tester(
 		"----------------------------------------\"\"--------------------------------------------------",
 		"^-*\"-*$", erlamsa_mutations:construct_ascii_delimeter_mutator(), 50

