@@ -219,6 +219,8 @@ make_fuzzer(ModuleName) ->
         erlang:apply(list_to_atom(ModuleName), fuzzer, [Proto, Data, Opts])
     end.
 
+make_mutas([]) ->
+    [];
 make_mutas(nil) ->
     [];
 make_mutas(ModuleName) ->
