@@ -264,6 +264,11 @@ Below, it could be found all currently supported by erlamsa monitors and corresp
 * minimum recommended RAM to run on Windows OS is 4Gb
 * erlamsa spawns separate process upon startup, to avoid this behaviour (and save some performance) you could use `eerlamsa`/`eerlamsa.bat` scripts.
 
+## Warning
+Erlamsa is a tool that tries to generate data that could be used for testing programs against unexpected data. Thus, using erlamsa against software that may contain bugs (especially in a case when it is running with high privileges), can result in crashes, freezes, reboots, kernel panics, bluescreens, loss of data and other stuff. DO NOT use it against production system or under high-privilege user account. Using emulators or disposable systems is highly recommended.
+
+Remember, that THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 ## Code Status
 
 [![Build Status](https://travis-ci.org/Darkkey/erlamsa.svg?branch=master)](https://travis-ci.org/Darkkey/erlamsa)
