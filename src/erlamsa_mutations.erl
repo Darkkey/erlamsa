@@ -1164,7 +1164,7 @@ mutations() ->
 %% default mutations list + external mutas
 mutations(CustomMutas) ->         
                        [{?MAX_SCORE, 10, fun erlamsa_sgml:sgml_mutate/2, sgm, "SGML tree mutations"},
-                        {?MAX_SCORE, 0, fun erlamsa_json:json_mutate/2, js, "JSON tree mutations"},
+                        {?MAX_SCORE, 2, fun erlamsa_json:json_mutate/2, js, "JSON tree mutations"},
                         {?MAX_SCORE, 1, fun sed_utf8_widen/2, uw, "try to make a code point too wide"},
                         {?MAX_SCORE, 2, fun sed_utf8_insert/2, ui, "insert funny unicode"},
                         {?MAX_SCORE, 1, construct_ascii_bad_mutator(), ab, "enhance silly issues in ASCII string data handling"},
