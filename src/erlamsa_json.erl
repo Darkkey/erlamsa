@@ -49,6 +49,23 @@
 %% TODO: add specs
 
 %%%
+%%% Generic functions
+%%%
+
+fold_list(F, [H], Acc) ->
+    R = F(H),
+    fold_list(F, [], [R | Acc]);
+fold_list(F, [H|T], Acc) ->
+    R = F(H),
+    fold_list(F, T, [[R, $,] | Acc]);
+fold_list(_F, [], Acc) ->
+    lists:reverse(Acc).
+
+%%%
+%%% /Generic functions
+%%%
+
+%%%
 %%% JSON tokenizer
 %%%
 
@@ -110,7 +127,9 @@ elements(<<$], Rest/binary>>, [array_end|Context], List, Acc) ->
     %io:format("1]~n"),
     push(Rest, Context, {array, lists:reverse(List)}, Acc);
 elements(<<$,, Rest/binary>>, Context, List, Acc) ->
-    ws(Rest, [value, {elements, List}|Context], Acc).
+    ws(Rest, [value, {elements, List}|Context], Acc);
+elements(<<_C:8, _Rest/binary>>, _Context, _List, _Acc) ->
+    throw(incorrect_json).
 
 %% Objects
 object(<<$}, Rest/binary>>, [object_end|Context],  Acc) ->
@@ -123,7 +142,9 @@ members(<<$}, Rest/binary>>, [object_end|Context], Pairs, Acc) ->
     %io:format("nnnnnnnnn ~p~n", [{Rest, [value|Context], [{object, lists:reverse(Pairs)}|Acc]}]),
     push(Rest, Context, {object, lists:reverse(Pairs)}, Acc);
 members(<<$,, Rest/binary>>, Context, Pairs, Acc) ->
-    ws(Rest, [pair, {members, Pairs}|Context], Acc).
+    ws(Rest, [pair, {members, Pairs}|Context], Acc);
+members(<<_C:8, _Rest/binary>>, _Context, _Pairs, _Acc) ->
+    throw(incorrect_json).
 
 pair(<<$:, Rest/binary>>, [pair_delim | Context], Acc) ->
     %io:format("1: ~p~n", [{Rest, Context, Acc}]),
@@ -144,7 +165,8 @@ push(Bin, [{members, List} | Context], Value, Acc) ->
 push(Bin, [pair_delim | Context], Key, Acc) ->
     ws(Bin, [pair_delim, {pair_start, Key} | Context], Acc);
 push(Bin, [pair_end, {pair_start, Key} | Context], Value, Acc) ->
-    push(Bin, Context, {pair, Key, Value}, Acc).
+    push(Bin, Context, {pair, Key, Value}, Acc);
+push(_, _, _, _) -> throw(incorrect_json).
 
 
 %% TODO: more effective way to handle big strings
@@ -209,15 +231,6 @@ tokens_to_erlang(Token) ->
 
 %% TODO: beautify parameter to insert ' ' and '\n'
 
-fold_list(F, [H], Acc) ->
-    R = F(H),
-    fold_list(F, [], [R | Acc]);
-fold_list(F, [H|T], Acc) ->
-    R = F(H),
-    fold_list(F, T, [[R, $,] | Acc]);
-fold_list(_F, [], Acc) ->
-    lists:reverse(Acc).
-
 fold_ast([H], Acc) ->
     fold_ast(H, Acc);
 fold_ast({pair, P1, P2}, Acc) -> 
@@ -230,17 +243,224 @@ fold_ast({number, Value}, Acc) ->
     [Value | Acc];
 fold_ast({object, Els}, Acc) -> 
     ["{", fold_ast(Els, []), "}" | Acc];
+fold_ast({array, Els}, Acc) -> 
+    ["[", fold_ast(Els, []), "]" | Acc];
 fold_ast([], Acc) -> 
     lists:flatten(Acc);
 fold_ast(H, Acc) when is_list(H) ->
     M = fold_list(fun (A) -> fold_ast(A, []) end, H, []),
     fold_ast([], [M | Acc]).
-
 fold_ast(Ast) ->
     list_to_binary(fold_ast(Ast, [])).
 
 %%%
 %%% /JSON AST Folder
+%%%
+
+%%%
+%%% JSON AST utils
+%%%
+
+walk_reverse(L) when is_list(L) -> lists:reverse(L);
+walk_reverse(L) -> L.
+
+walk_uncons1(L) when is_list(L), length(L) =:= 1 -> hd(L);
+walk_uncons1(L) -> L.
+
+walk(Ast, Fun, InitAcc) ->
+    {Res, ResN} = lists:foldl(
+        fun
+            Walker({Type, Els}, {Acc, Count}) when Type =:= object; Type =:= array ->
+                %io:format("Object or Array: ~p : ~p~n", [{Type, Els}, {Acc, Count}]),
+                {ChildAcc, ChildCnt} = Walker(Els, {InitAcc, Count + 1}),
+                {Fun({Type, walk_reverse(ChildAcc)}, Acc, Count + 1), ChildCnt};
+            Walker({pair, El1, El2}, {Acc, Count}) ->
+                %io:format("Pair: ~p : ~p~n", [{pair, El1, El2}, {Acc, Count}]),
+                {ChildAcc1, ChildCnt1} = Walker(El1, {InitAcc, Count + 1}),
+                {ChildAcc2, ChildCnt2} = Walker(El2, {InitAcc, ChildCnt1}),
+                {Fun({pair, walk_uncons1(walk_reverse(ChildAcc1)), 
+                            walk_uncons1(walk_reverse(ChildAcc2))}, Acc, Count + 1), ChildCnt2};
+            Walker(El, {Acc, Count}) when is_list(El) ->
+                %io:format("List: ~p : ~p~n", [El, {Acc, Count}]),
+                lists:foldl(fun(A, B) -> Walker(A, B) end, {Acc, Count}, El);
+            Walker(Elem, {Acc, Count}) ->
+                %io:format("Single elem: ~p : ~p~n", [Elem, {Acc, Count}]),
+                {Fun(Elem, Acc, Count + 1), Count + 1}
+        end,
+        {InitAcc, 0}, Ast),
+    {walk_reverse(Res), ResN}.
+
+select(Ast, Fun) ->
+    lists:foldl(
+        fun
+            Walker(El = {Type, Els}, {Acc, Count}) when Type =:= object; Type =:= array ->
+                case Fun(El, Count + 1) of
+                    false -> 
+                        Walker(Els, {Acc, Count + 1});
+                    Res -> 
+                        {Res, Count + 1}
+                end;
+            Walker(El = {pair, El1, El2}, {Acc, Count}) ->
+                case Fun(El, Count + 1) of
+                    false ->
+                        case Walker(El1, {Acc, Count + 1}) of
+                            {false, ChildCnt1} ->
+                                case Walker(El2, {Acc, ChildCnt1}) of
+                                    {false, ChildCnt2} -> 
+                                        {Acc, ChildCnt2};
+                                    Res2 -> Res2
+                                end;
+                            Res1 -> Res1
+                        end;
+                    Res -> {Res, Count + 1}
+                end;
+            Walker(El, {Acc, Count}) when is_list(El) ->
+                lists:foldl(fun(A, B) -> Walker(A, B) end, {Acc, Count}, El);
+            Walker(Elem, {Acc, Count}) ->
+                case Fun(Elem, Count + 1) of 
+                    false -> {Acc, Count + 1};
+                    Res -> {Res, Count + 1}
+                end
+        end,
+        {false, 0}, Ast).
+
+test_walk(Ast) ->
+    walk(Ast,
+        fun  (E, Acc, _N) ->
+            %io:format("~p is ~w~n", [E, N]),
+            [E|Acc] 
+        end,
+        []).
+
+count(Ast) ->
+    walk(Ast,
+        fun
+            ({Type, Els}, Acc, _N) when Type =:= object; Type =:= array ->
+                Els + Acc + 1;
+            ({pair, El1, El2}, Acc, _N) ->
+                El1 + El2 + Acc + 1;
+            (_E, Acc, _N) ->
+                Acc + 1
+        end, 0).
+
+select_elem(Ast, N) ->
+    {Res, _} = select(Ast,
+            fun
+                (Elem, I) when I =:= N ->
+                    {Elem, I};
+                (_Elem, _I) ->
+                    false
+            end),
+    Res.
+
+replace_elem(Ast, R, El) ->
+    walk(Ast,
+        fun
+            (_Elem, Tree, I) when I == R ->
+                [El | Tree];
+            (Elem, Tree, _I) ->
+                [Elem | Tree]
+        end, []).
+
+%%%
+%%% /JSON AST utils
+%%%
+
+%%%
+%%% JSON AST -> Erlang simple structs
+%%%
+
+tokens_to_simpleast(Ast) when is_list(Ast) ->
+    lists:map(fun tokens_to_simpleast/1, Ast);
+tokens_to_simpleast({object, Lst}) ->
+    {lists:map(fun tokens_to_simpleast/1, Lst)};
+tokens_to_simpleast({array, Lst}) ->
+    lists:map(fun tokens_to_simpleast/1, Lst);
+tokens_to_simpleast({pair, Key, Value}) ->
+    {tokens_to_simpleast(Key), tokens_to_simpleast(Value)};
+tokens_to_simpleast({string, Value}) ->
+    {string, Value};
+tokens_to_simpleast({number, Value}) ->
+    try list_to_integer(Value) of
+        Int -> Int
+    catch error:badarg ->
+        try list_to_float(Value) of
+            Float -> Float
+        catch error:badarg ->
+            invalid_number
+        end
+    end;
+tokens_to_simpleast(Token) ->
+    Token.
+
+%%%
+%%% /JSON AST -> Erlang simple structs
+%%%
+
+%%%
+%%% JSON Simple AST utils
+%%%
+
+% walk_simple(Ast, Fun, InitAcc) ->
+%     {Res, ResN} = lists:foldl(
+%         fun
+%             Walker(A, {Acc, Count}) when is_list(A) ->
+%                 %io:format("Object or Array: ~p : ~p~n", [{Type, Els}, {Acc, Count}]),
+%                 {ChildAcc, ChildCnt} = Walker(Els, {InitAcc, Count + 1}),
+%                 {Fun({Type, walk_reverse(ChildAcc)}, Acc, Count + 1), ChildCnt};
+%             Walker({pair, El1, El2}, {Acc, Count}) ->
+%                 %io:format("Pair: ~p : ~p~n", [{pair, El1, El2}, {Acc, Count}]),
+%                 {ChildAcc1, ChildCnt1} = Walker(El1, {InitAcc, Count + 1}),
+%                 {ChildAcc2, ChildCnt2} = Walker(El2, {InitAcc, ChildCnt1}),
+%                 {Fun({pair, walk_uncons1(walk_reverse(ChildAcc1)), 
+%                             walk_uncons1(walk_reverse(ChildAcc2))}, Acc, Count + 1), ChildCnt2};
+%             Walker(El, {Acc, Count}) when is_list(El) ->
+%                 %io:format("List: ~p : ~p~n", [El, {Acc, Count}]),
+%                 lists:foldl(fun(A, B) -> Walker(A, B) end, {Acc, Count}, El);
+%             Walker(Elem, {Acc, Count}) ->
+%                 %io:format("Single elem: ~p : ~p~n", [Elem, {Acc, Count}]),
+%                 {Fun(Elem, Acc, Count + 1), Count + 1}
+%         end,
+%         {InitAcc, 0}, Ast),
+%     {walk_reverse(Res), ResN}.
+
+%%%
+%%% /JSON Simple AST utils
+%%%
+
+%%%
+%%% JSON Simple AST Folder
+%%%
+
+fold_simpleast(H, Acc) when is_list(H) ->
+    lists:flatten([$[, fold_list(fun (A) -> fold_simpleast(A, []) end, H, []), $] | Acc]);
+fold_simpleast({H}, Acc) when is_list(H) ->
+    lists:flatten([${, fold_list(fun (A) -> fold_simpleast(A, []) end, H, []), $} | Acc]);
+fold_simpleast({string, A}, Acc) ->
+    lists:flatten([$", A, $" | Acc]);
+fold_simpleast({A, B}, Acc) ->
+    lists:flatten([fold_simpleast(A, Acc), $:, fold_simpleast(B, Acc) | Acc]);
+fold_simpleast(A, Acc) when is_integer(A);is_float(A) ->
+    [lists:flatten(io_lib:format("~p", [A])) | Acc];
+fold_simpleast([], Acc) ->
+    lists:flatten(Acc);
+fold_simpleast(A, Acc) ->
+    [A | Acc].
+%%%
+%%% /JSON Simple AST Folder
+%%%
+
+%%%
+%%% Mutators
+%%%
+
+% json_dup(Ast, N) ->
+%     R = erlamsa_rnd:erand(N),
+%     io:format("~p", [select_elem(Ast, R)]),
+%     repeat_elem(Ast, R, 1).
+
+%%%
+%%% /Mutators
 %%%
 
 %%%
@@ -254,8 +474,13 @@ json_mutate(Ll = [H|T], Meta) ->
         Tokens ->
             %%io:format("Ast ready ~p~n", [Tokens]),
             % {NewMeta, Res, D} = json_mutation(Tokens),
+            {N, N} = count(Tokens),
+            S = tokens_to_simpleast(hd(Tokens)),
+            %io:format("~p~n", [json_dup(Tokens, N)]),
+            io:format("~s~n", [fold_simpleast(S, [])]),
+            %{TstWalk, N} = test_walk(Tokens), R = erlamsa_rnd:erand(N), io:format("~p : ~p~n ~p is ~p~n", [N, Tokens =:= TstWalk, R, select_elem(Tokens, R)]),
             NewMeta = [], D = 1,
-            NewBinStr = fold_ast(hd(Tokens)),
+            NewBinStr = fold_ast(Tokens),
             if
                 NewBinStr =:= H ->
                     {fun json_mutate/2, Ll, NewMeta, -1};
