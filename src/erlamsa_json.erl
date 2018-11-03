@@ -298,6 +298,31 @@ walk(Ast, Fun, InitAcc) ->
         {InitAcc, 0, 0}, Ast),
     {walk_reverse(Res), ResT, ResN}.
 
+walk2acc(Ast, Fun, InitAcc) ->
+    {Res, Res2} = lists:foldl(
+        fun
+            Walker({Type, Els}, {Acc, Acc2}) when Type =:= object; Type =:= array ->
+                %io:format("Object or Array: ~p : ~p~n", [{Type, Els}, {Acc, Count}]),
+                {ChildAcc, ChildAcc2} = Walker(Els, InitAcc),
+                {UAcc, UAcc2} = Fun({Type, walk_reverse(ChildAcc)}, Acc, Acc2),
+                {UAcc, [ChildAcc2|UAcc2]};
+            Walker({pair, El1, El2}, {Acc, Acc2}) ->
+                %io:format("Pair: ~p : ~p~n", [{pair, El1, El2}, {Acc, Count}]),
+                {ChildAcc1, ChildAcc12} = Walker(El1, InitAcc),
+                {ChildAcc2, ChildAcc22} = Walker(El2, InitAcc),
+                {UAcc, UAcc2} = Fun({pair, walk_uncons1(walk_reverse(ChildAcc1)), 
+                                           walk_uncons1(walk_reverse(ChildAcc2))}, Acc, Acc2),
+                {UAcc, [ChildAcc12, ChildAcc22 | UAcc2]};
+            Walker(El, Acc) when is_list(El) ->
+                %io:format("List: ~p : ~p~n", [El, {Acc, Count}]),
+                lists:foldl(fun(A, B) -> Walker(A, B) end, Acc, El);
+            Walker(Elem, {Acc, Acc2}) ->
+                %io:format("Single elem: ~p : ~p~n", [Elem, {Acc, Count}]),
+                Fun(Elem, Acc, Acc2)
+        end,
+        InitAcc, Ast),
+    {walk_reverse(Res), lists:reverse(lists:flatten(Res2))}.
+
 select(Ast, Fun) ->
     lists:foldl(
         fun
@@ -540,15 +565,24 @@ json_insert(Ast, N) ->
 %%%
 %%% Mutations
 %%%
+
+mutate_innertext_prob(String, _Muta, Prob, Rnd) when Rnd > Prob ->
+    {[], String}; %% No mutations
+mutate_innertext_prob(String, Muta, _Prob, _Rnd) ->
+    Binary = list_to_binary(String),
+    {_NewMuta, NewLstBin, Meta} = Muta([Binary], []),
+    %%io:format("res: ~p~n", [{NewLstBin, Meta}]),
+    {Meta, binary_to_list(hd(NewLstBin))}.
+
 json_mutation(Ast, {N, NT}) ->
-    json_mutation(Ast, {N, NT}, erlamsa_rnd:rand(5)).
+    json_mutation(Ast, {N, NT}, erlamsa_rnd:rand(7000)).
 
 json_mutation(Ast, {N, _NT}, 0) ->
     {Res, _, _} = json_swap(Ast, N),
     {[{json_swap, 1}], Res, 1};
 json_mutation(Ast, {N, _NT}, 1) ->
     {Res, _, _} = json_dup(Ast, N),
-    {[{sgml_dup, 1}], Res, 1};
+    {[{json_dup, 1}], Res, 1};
 json_mutation(Ast, {_N, NT}, 2) ->
     {Res, _, _} = json_pump(Ast, NT),
     {[{json_pump, 1}], Res, -2}; %% don't allow too much pumps...
@@ -557,7 +591,20 @@ json_mutation(Ast, {N, _NT}, 3) ->
     {[{json_repeat, 1}], Res, 1};
 json_mutation(Ast, {N, _NT}, 4) ->
     {Res, _, _} = json_insert(Ast, N),
-    {[{sgml_insert, 1}], Res, 1}.
+    {[{json_insert, 1}], Res, 1};
+json_mutation(Ast, {N, _NT}, _R) when N > 0 ->  %% Prob = 25% for inner mutation 
+    Muta = erlamsa_mutations:mutators_mutator(erlamsa_mutations:inner_mutations()),
+    {Res, Meta} = walk2acc(Ast,
+                    fun
+                        ({string, String}, Tree, InnerMeta) ->
+                            {NewMeta, NewString} = mutate_innertext_prob(String, Muta, 3/N, erlamsa_rnd:rand_float()),
+                            {[{string, NewString} | Tree], [NewMeta | InnerMeta]};
+                        (El, Tree, InnerMeta) ->
+                            {[El | Tree], InnerMeta}
+                    end, {[], []}),
+    {[Meta, {json_innertext,1}], Res, 1};
+json_mutation(Ast, _, _) ->
+    {[], Ast, -1}.
 
 json_mutate(Ll = [H|T], Meta) ->
     %io:format("Trying to parse... ~p~n", [size(H)]),
