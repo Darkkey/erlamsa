@@ -198,7 +198,7 @@ mutate_once_archiver(Binary, {ok, FileSpec}, Rest, Ip, Mutator, Meta, NextPat) -
             mutate_once_archiver(Binary, {error, Err}, Rest, Ip, Mutator, Meta, NextPat)
     end.
 
-%% mutate_once for csum pattern
+%% mutate_once for archiver
 -spec mutate_once_archiver(any(), mutator(), meta_list(), mutator_cont_fun()) -> list().
 mutate_once_archiver(Ll, Mutator, Meta, NextPat) -> 
     Ip = erlamsa_rnd:rand(?INITIAL_IP),
@@ -212,6 +212,52 @@ mutate_once_archiver(Ll, Mutator, Meta, NextPat) ->
                  end,
     UnZip = zip:foldl(fun(N, I, B, Acc) -> [{N, B(), I()} | Acc] end, [], {Name, ArchiveBin}),
     mutate_once_archiver(ArchiveBin, UnZip, NewRest, Ip, Mutator, Meta, NextPat).
+
+-spec mutate_once_compressed(atom(), binary(), mutator(), meta_list(), integer(), mutator_cont_fun()) -> {binary(), list()}.
+mutate_once_compressed(gzip, Bin, Mutator, Meta, Ip, NextPat) ->
+    try zlib:gunzip(Bin) of
+        Data ->
+            {NewData, RemainingMutas} = prepare4sizer(mutate_once_loop(Mutator, [], NextPat, Ip, Data, [])),
+            {_, NewMeta} = erlamsa_utils:safe_hd(RemainingMutas),
+            NewBin = zlib:gzip(NewData),
+            {NewBin, [{compressed, gzip}, NewMeta, {decompressed, gzip} | Meta]}
+    catch 
+        error:data_error -> 
+            mutate_once_compressed(deflate, Bin, Mutator, Meta, Ip, NextPat)
+    end;
+mutate_once_compressed(deflate, Bin, Mutator, Meta, Ip, NextPat) ->
+    ZI = zlib:open(),
+    zlib:inflateInit(ZI),
+    try zlib:inflate(ZI, Bin) of
+        Data ->
+            zlib:close(ZI),
+            {NewData, RemainingMutas} = prepare4sizer(mutate_once_loop(Mutator, [], NextPat, Ip, list_to_binary(Data), [])),
+            {_, NewMeta} = erlamsa_utils:safe_hd(RemainingMutas),
+            ZD = zlib:open(),
+            zlib:deflateInit(ZD,default),
+            NewBin = zlib:deflate(ZD, [NewData], finish),
+            ok = zlib:deflateEnd(ZD),
+            zlib:close(ZD),
+            {list_to_binary(NewBin), [{compressed, zlib}, NewMeta, {decompressed, zlib} | Meta]}
+    catch 
+        error:data_error -> 
+            zlib:close(ZI),
+            {Bin, Meta}
+    end.
+
+%% mutate_once for compressed pattern
+-spec mutate_once_compressed(any(), mutator(), meta_list(), mutator_cont_fun()) -> list().
+mutate_once_compressed(Ll, Mutator, Meta, NextPat) -> 
+    Ip = erlamsa_rnd:rand(?INITIAL_IP),
+    {Bin, Rest} = erlamsa_utils:uncons(Ll, false),
+    {NewBin, NewMeta} = mutate_once_compressed(gzip, Bin, Mutator, Meta, Ip, NextPat),
+    {This, LlN} = split({NewBin, Rest}),
+    case NewBin =:= Bin of
+        false ->
+            [NewBin | Rest] ++ [{fun () -> [] end, NewMeta}];
+        true ->
+            mutate_once_loop(Mutator, [{compressed, failed} | Meta], NextPat, Ip, This, LlN)
+    end.
 
 %% Ll -- list of smth
 %% TODO: WARNING: Ll could be a function in Radamsa terms
@@ -326,6 +372,10 @@ make_pat_csum() ->
 make_pat_zip() ->
     make_complex_pat(fun mutate_once_archiver/4, archiver).
 
+-spec make_pat_cpr() -> fun().
+make_pat_cpr() ->
+    make_complex_pat(fun mutate_once_compressed/4, compressed).
+
 %% TODO: temporary contract, fix it.
 -spec pat_nomuta(any(), mutator(), meta_list()) -> list().
 pat_nomuta(Ll, Mutator, Meta) ->
@@ -338,10 +388,11 @@ pat_nomuta(Ll, Mutator, Meta) ->
 patterns() -> [{1, fun pat_once_dec/3, od, "Mutate once pattern"},
                {2, fun pat_many_dec/3, nd, "Mutate possibly many times"},
                {1, fun pat_burst/3, bu, "Make several mutations closeby once"},
-               {1, make_pat_skip(), sk, "Skip random sized block and mutate rest"},
+               {2, make_pat_skip(), sk, "Skip random sized block and mutate rest"},
                {2, make_pat_sizer(), sz, "Try to find sizer and mutate enclosed data"},
-               {2, make_pat_csum(), cs, "Try to find control sum field and mutate enclosed data"},               
-               {1, make_pat_zip(), ar, "Check whether data is an archive (ZIP) and mutate enclosed files"},               
+               {1, make_pat_csum(), cs, "Try to find control sum field and mutate enclosed data"},               
+               {1, make_pat_zip(), ar, "Check whether data is an container (ZIP archive) and mutate enclosed files"},               
+               {1, make_pat_cpr(), cp, "Check whether data compressed, decompress and mutate"},               
                {0, fun pat_nomuta/3, nu, "Pattern that calls no mutations"}
               ].
 
