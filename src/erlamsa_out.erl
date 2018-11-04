@@ -103,8 +103,8 @@ rawsock_writer(Addr, Options) ->
     end.
 
 
--spec tcplisten_writer(inet:port_number()) -> fun().
-tcplisten_writer(LocalPort) ->
+-spec tcplisten_writer(inet:port_number(), fun()) -> fun().
+tcplisten_writer(LocalPort, PostProcess) ->
     fun F(_N, Meta) ->
         {Res, ListenSock} = gen_tcp:listen(LocalPort,
                                             [binary, {active, false},
@@ -121,7 +121,7 @@ tcplisten_writer(LocalPort) ->
                     TmpRecv = gen_tcp:recv(ClientSock, 0, infinity),
                     erlamsa_logger:log(info, "tcp client connect from ~p:~p: ~p",
                                        [Address, Port, TmpRecv]),
-                    gen_tcp:send(ClientSock, Data), timer:sleep(1),
+                    gen_tcp:send(ClientSock, PostProcess(Data)), timer:sleep(1),
                     gen_tcp:close(ClientSock)
                 end,
                 %% TODO: ugly timeout before closing..., should be in another thread
@@ -195,7 +195,23 @@ udpsock_writer(Addr, PortFrom, PortTo, Options) ->
         end
     end.
 
+
+-spec make_http_server_reply(string()) -> fun().
+make_http_server_reply(ContentType) ->
+    fun (Data) ->
+        Len = size(Data),
+        Headers = list_to_binary(
+                    io_lib:format("HTTP/1.1 200 OK\r\nContent-type: ~s\r\nContent-Length: ~p\r\n\r\n", 
+                                    [ContentType, Len])
+                    ),
+        <<Headers/binary, Data/binary>>
+    end.
+
 -spec http_writer(tuple()) -> fun().
+http_writer({[], Port, _Path, _Query, []}) ->
+    http_writer({[], Port, _Path, _Query, "application/octet-stream"});
+http_writer({[], Port, _Path, _Query, ContentType}) ->
+    tcplisten_writer(Port, make_http_server_reply(ContentType));
 http_writer({Host, Port, Path, Query, []}) ->
     make_http_writer(Host, Port, Path, Query, "GET", "", []);
 http_writer({Host, Port, Path, Query, ["GET", Param|T]}) ->
@@ -262,15 +278,15 @@ string_outputs(Str) ->
     case Str of
         "-" -> fun stdout_stream/2;
         return -> fun return_stream/2;
-        {tcp, {Port}} -> tcplisten_writer(list_to_integer(Port));
+        {tcp, {Port}} -> tcplisten_writer(list_to_integer(Port), fun (A) -> A end);
         {udp, {Port}} -> udplisten_writer(list_to_integer(Port));
         {tcp, {Addr, Port}} -> tcpsock_writer(Addr, list_to_integer(Port));
         {udp, {StrIfAddr, PortFrom, Addr = "255.255.255.255", PortTo}} -> 
-		{ok, IfAddr} = inet:getaddr(StrIfAddr, inet), %%TODO: ugly, refactor in distinc function
-		udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), [{broadcast, true}, {ip, IfAddr}]);
+            {ok, IfAddr} = inet:getaddr(StrIfAddr, inet), %%TODO: ugly, refactor in distinc function
+            udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), [{broadcast, true}, {ip, IfAddr}]);
         {udp, {StrIfAddr, PortFrom, Addr, PortTo}} -> 
-		{ok, IfAddr} = inet:getaddr(StrIfAddr, inet),
-		udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), [{ip, IfAddr}]);
+            {ok, IfAddr} = inet:getaddr(StrIfAddr, inet),
+            udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), [{ip, IfAddr}]);
         {udp, {PortFrom, Addr, PortTo}} -> udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), []);
         {udp, {Addr, Port}} -> udpsock_writer(Addr, list_to_integer(Port), list_to_integer(Port), []);
         {ip, {Addr, Proto}} -> rawsock_writer(Addr,
