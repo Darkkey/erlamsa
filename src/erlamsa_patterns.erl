@@ -92,24 +92,13 @@ mutate_once_sizer(Binary, [], Rest, Ip, Mutator, Meta, NextPat) ->
     end;
 mutate_once_sizer(Binary, Elem = {ok, Size, Endianness, Len, A, _B}, Rest, Ip, Mutator, Meta, NextPat) ->
     Am8 = A * 8, Len8 = Len * 8,
-    {H, Len, Blob, TailBin} = 
-        case Endianness of
-            big ->
-                <<H_e:Am8, Len_e:Size/big, Blob_e:Len8, Rest_e/binary>> = Binary,
-                {H_e, Len_e, Blob_e, Rest_e};
-            little ->
-                <<H_e:Am8, Len_e:Size/little, Blob_e:Len8, Rest_e/binary>> = Binary,
-                {H_e, Len_e, Blob_e, Rest_e}
-        end,
+    {H, Len, Blob, TailBin} = erlamsa_field_predict:extract_blob(Endianness, Binary, Am8, Size, Len8),
     {This, LlN} = split({<<Blob:Len8>>, Rest}),
     SizerMeta = [{sizer, Elem} | Meta],
     {NewBlob, RestLst} = prepare4sizer(mutate_once_loop(Mutator, SizerMeta, NextPat, Ip, This, LlN)),
     NewLen = size(NewBlob),
     %io:format(standard_error, "~nNewLen = ~p/~p/~p/~p~n", [NewLen, NewBlob, TailBin, RestLst]),
-    NewBin = case Endianness of
-                big -> <<H:Am8, NewLen:Size/big, NewBlob/binary>>;
-                little -> <<H:Am8, NewLen:Size/little, NewBlob/binary>>
-             end,
+    NewBin = erlamsa_field_predict:rebuild_blob(Endianness, H, Am8, NewLen, Size, 0, 0, NewBlob),
     [NewBin, TailBin | RestLst].
 
 %% mutate_once for sizer pattern
