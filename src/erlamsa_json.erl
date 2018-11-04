@@ -606,6 +606,8 @@ mutate_innertext_prob(String, Muta, _Prob, _Rnd) ->
     %%io:format("res: ~p~n", [{NewLstBin, Meta}]),
     {Meta, binary_to_list(hd(NewLstBin))}.
 
+json_mutation(Ast, {0, 0}) ->
+    {[{failed, json}], Ast, -1};
 json_mutation(Ast, {N, NT}) ->
     json_mutation(Ast, {N, NT}, erlamsa_rnd:rand(8)).
 
@@ -659,5 +661,5 @@ json_mutate(Ll = [H|T], Meta) ->
             end
     catch
         incorrect_json ->
-            {fun json_mutate/2, Ll, Meta, -1}
+            {fun json_mutate/2, Ll, [{failed, json}|Meta], -1}
     end.
