@@ -61,7 +61,8 @@ outputs() ->
         {"filename_iter%n.txt", "data will be written to files with template filename_iter%n.txt, where %n will be replaced by current interation number"},
         {"tcp://ipaddr:port", "send fuzzed data to remote tcp <port> located at <ipaddr>"},
         {"udp://[[ifaceip:]srcport:]ipaddr:port", "send fuzzed data to remote udp <port> located at <ipaddr> (listening on <ifaceip>:<srcport>)"},
-        {"[tcp|udp]://:port", "listens on tcp or udp <port> and send fuzzed data upon client connect/send message"},
+        {"[tcp|udp]://:port", "listens on tcp or udp <port> and sends fuzzed data upon client connect/send message"},
+        {"http://:port,[Content-Type]", "simple HTTP server on <port> that sends fuzzed data upon client's request"},
         {"http://addr[:port]/path?params,[GET|POST],header1,...", "send fuzzed date to remote http host located at addr"},
         {"ip://ipaddr:proto", "send fuzzed data to remote host located at <ipaddr> using protocol no. <proto> on top of IP (Linux & OS X)"},
         {"raw://ipaddr:iface", "send fuzzed data to remote host located at <ipaddr> raw protocol, outgoing interface is specified with <iface> (Linux only)"}
