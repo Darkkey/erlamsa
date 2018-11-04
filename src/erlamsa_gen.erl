@@ -120,6 +120,35 @@ file_streamer(Paths, BlockScale) ->
         end
     end.
 
+-spec jump_somewhere(fun(), fun()) -> fun().
+jump_somewhere(Ll1, Ll2) ->
+    fun () -> 
+        Data1 = erlamsa_rnd:rand_elem(Ll1()), Data2 = erlamsa_rnd:rand_elem(Ll2()),
+        S1 = erlamsa_rnd:rand(size(Data1)), S2 = erlamsa_rnd:rand(size(Data2)), 
+        L1 = erlamsa_rnd:erand(size(Data1) - S1), L2 = erlamsa_rnd:erand(size(Data2) - S2),
+        <<_:S1/unit:8,Block1:L1/unit:8,_/binary>> = Data1,
+        <<_:S2/unit:8,Block2:L2/unit:8,_/binary>> = Data2,
+        <<Block1:L1/unit:8, Block2:L2/unit:8>>
+    end.
+
+%% jump input
+-spec jump_streamer([string()], float()) -> fun().
+jump_streamer(Paths, BlockScale) ->
+    fun () ->
+        Path1 = erlamsa_rnd:rand_elem(Paths), Path2 = erlamsa_rnd:rand_elem(Paths),
+        {Res1, Port1} = file:open(Path1, [read, raw, binary]), %% TODO: FIXME: could we use raw?
+        {Res2, Port2} = file:open(Path2, [read, raw, binary]), %% TODO: FIXME: could we use raw?
+        case {Res1, Res2} of
+            {ok, ok} ->
+                Ll1 = port_stream(Port1, BlockScale),
+                Ll2 = port_stream(Port2, BlockScale),
+                {jump_somewhere(Ll1, Ll2), [{generator, jump}, {source, path}]};
+            _Else ->
+                Err = lists:flatten(io_lib:format("Error opening file(s) '~s/~s'", [Path1, Path2])),
+                erlamsa_utils:error(Err)
+        end
+    end.
+
 split_binary(Bin, BlockScale, Wanted) when byte_size(Bin) > byte_size(Wanted) ->
     Cut = Wanted * 8,
     <<Block:Cut, Rest/binary>> = Bin,
@@ -178,6 +207,10 @@ make_generator_fun(Args, Inp, BlockScale, Fail, N) ->
                     {Pri, file_streamer(Args, BlockScale)};
                 file ->
                     false;
+                jump when length(Args) > 1 ->
+                    {Pri, jump_streamer(Args, BlockScale)};
+                jump ->
+                    false;
                 direct when Inp =:= nil ->
                     false;
                 direct ->
@@ -200,6 +233,7 @@ make_generator(Pris, Args, Inp, BlockScale, Fail, N) ->
 
 -spec generators() -> list().
 generators() -> [{random, 1, "generate random data"},
+                {jump, 100, "jump between multiple files"},
                 {direct, 500, "read data directly from erlang function call arguments"},
                 {file, 1000, "read data from given files"},
                 {stdin, 100000,
