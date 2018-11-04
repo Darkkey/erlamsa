@@ -703,12 +703,22 @@ get_ssrf_uri() ->
 change_scheme([$e, $l, $i, $f | T]) -> lists:reverse([$p, $t, $t, $h | T]);
 change_scheme(Lst) -> lists:reverse(Lst).
 
+-spec rand_uri_mutate(string(), string(), integer()) -> {string(), integer(), list()}.
+rand_uri_mutate(T, Acc, 1) ->
+    {change_scheme(Acc) ++ get_ssrf_uri() ++ T, 1, {uri, success}};
+rand_uri_mutate(T, Acc, 2) ->
+    {SSRFHost, SSRFPort} = get_ssrf_ep(), 
+    AtAddr = lists:flatten(io_lib:format(" @~s:~p", [SSRFHost, SSRFPort])),
+    [Domain, Query] = string:split(T, "/"),
+    Modified = lists:flatten([change_scheme(Acc), "://", Domain, AtAddr, $/, Query]),
+    {Modified, 1, {uri, success}}.
+
 -spec try_uri_mutate(list()) -> {list(), integer(), list()}.
 try_uri_mutate(Lst) -> try_uri_mutate(Lst, []).
 
 -spec try_uri_mutate(list(), list()) -> {list(), integer(), list()}.
 try_uri_mutate([ $:, $/, $/ | T], Acc) ->
-    {change_scheme(Acc) ++ get_ssrf_uri() ++ T, 1, {uri, success}};
+    rand_uri_mutate(T, Acc, erlamsa_rnd:erand(2));
 try_uri_mutate([], Acc) -> {lists:reverse(Acc), 0, []};
 try_uri_mutate([H|T], Acc) -> 
     try_uri_mutate(T, [H|Acc]).
