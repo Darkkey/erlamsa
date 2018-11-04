@@ -35,12 +35,17 @@
 -endif.
 
 %% API
--export([get_possible_simple_lens/1, get_possible_csum_locations/1, recalc_csum/2]).
+-export([get_possible_simple_lens/1, get_possible_csum_locations/1, extract_blob/5, rebuild_blob/8, recalc_csum/2]).
 
 -type lenfield_range() :: {integer(), integer()}.
 -type sizer_location() :: {ok, integer(), integer(), big | little, integer(), integer()}.
 -type csum_type() :: xor8 | crc32.
 -type csum_location() :: {csum_type(), integer(), integer(), integer()}.
+-type big_or_little() :: big | little.
+
+%%%
+%%% Tools for sizer predictions
+%%%
 
 -spec basic_u8len(lenfield_range(), binary()) -> [] | sizer_location().
 basic_u8len({A, B}, Binary) when A < B, B > 0, A < size(Binary) ->
@@ -98,6 +103,28 @@ get_possible_simple_lens(Binary) ->
     lists:flatten([
         [simple_len({X, size(Binary)}, Binary), simple_u8len(X, Binary)]
             || X <- lists:seq(0, 3)]).
+
+%%%
+%%% Tools for extracting rebuilding binaries with sizers
+%%%
+
+-spec extract_blob(big_or_little(), binary(), integer(), integer(), integer()) -> {binary(), integer(), binary(), binary()}.
+extract_blob(big, Binary, Am8, Size, Len8) ->
+    <<H_e:Am8, Len_e:Size/big, Blob_e:Len8, Rest_e/binary>> = Binary,
+    {H_e, Len_e, Blob_e, Rest_e};
+extract_blob(little, Binary, Am8, Size, Len8) ->
+    <<H_e:Am8, Len_e:Size/little, Blob_e:Len8, Rest_e/binary>> = Binary,
+    {H_e, Len_e, Blob_e, Rest_e}.
+
+-spec rebuild_blob(big_or_little(), binary(), integer(), integer(), integer(), binary(), integer(), binary()) -> binary().
+rebuild_blob(big, H, Am8, Len, Size, Blob, Len8, Block) ->
+    <<H:Am8, Len:Size/big, Blob:Len8, Block/binary>>;
+rebuild_blob(little, H, Am8, Len, Size, Blob, Len8, Block) ->
+    <<H:Am8, Len:Size/little, Blob:Len8, Block/binary>>.
+
+%%%
+%%% Tools for dealing with control sums
+%%%
 
 -spec calc_xor8(binary()) -> integer().
 calc_xor8(B) ->
