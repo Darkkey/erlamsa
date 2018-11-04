@@ -156,7 +156,7 @@ get_possible_csum_locations(<<>>) ->
     [];
 get_possible_csum_locations(Binary) ->
     Len = size(Binary),
-    PreambleSeq = lists:seq(0, min(trunc(2*Len/3), lists:seq(0, ?PREAMBLE_MAX_BYTES))),
+    PreambleSeq = lists:seq(0, min(trunc(2*Len/3), 30*?PREAMBLE_MAX_BYTES)),
     lists:flatten([[has_xor8_checksum(Binary, Len, A) || A <- PreambleSeq], 
                    [has_crc32_checksum(Binary, Len, A) || A <- PreambleSeq]]).
     
