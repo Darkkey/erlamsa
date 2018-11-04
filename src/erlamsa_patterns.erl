@@ -193,7 +193,7 @@ mutate_once_archiver(Binary, {ok, FileSpec}, Rest, Ip, Mutator, Meta, NextPat) -
     %io:format("Rebuilding ZIP..."),
     case zip:create(Name, lists:reverse(NewFileSpec), [memory]) of
         {ok, {Name, NewBin}} ->  %% FIXME: ++ Rest?
-            [NewBin | {fun () -> [] end, [{archiver, ok}, lists:flatten(NewMeta) | Meta]}];
+            [NewBin | {fun (A,B) -> {Mutator, A, B} end, [{archiver, ok}, lists:flatten(NewMeta) | Meta]}];
         {error, Err} ->
             mutate_once_archiver(Binary, {error, Err}, Rest, Ip, Mutator, Meta, NextPat)
     end.
@@ -254,7 +254,7 @@ mutate_once_compressed(Ll, Mutator, Meta, NextPat) ->
     {This, LlN} = split({NewBin, Rest}),
     case NewBin =:= Bin of
         false ->
-            [NewBin | Rest] ++ [{fun () -> [] end, NewMeta}];
+            [NewBin | Rest] ++ [{fun (A,B) -> {Mutator, A, B} end, NewMeta}];
         true ->
             mutate_once_loop(Mutator, [{compressed, failed} | Meta], NextPat, Ip, This, LlN)
     end.
