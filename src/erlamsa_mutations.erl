@@ -1054,12 +1054,26 @@ nomutation(Ll, Meta) ->
 %% Length predict mutations -- trying to mutate len
 %%
 
+-spec rebuild_blob(big|little, binary(), integer(), integer(), integer(), binary(), integer(), binary()) -> binary().
+rebuild_blob(big, H, Am8, Len, Size, Blob, Len8, Block) ->
+    <<H:Am8, Len:Size/big, Blob:Len8, Block/binary>>;
+rebuild_blob(little, H, Am8, Len, Size, Blob, Len8, Block) ->
+    <<H:Am8, Len:Size/little, Blob:Len8, Block/binary>>.
+
 %% TODO: correct spec
 %%-spec mutate_length(binary()) -> {integer(), binary()}.
 mutate_length(Binary, []) -> {-2, Binary};
-mutate_length(Binary, _Elem = {ok, Size, Len, A, _B}) ->
+mutate_length(Binary, _Elem = {ok, Size, Endianness, Len, A, _B}) ->
     Am8 = A * 8, Len8 = Len * 8,
-    <<H:Am8, Len:Size, Blob:Len8, Rest/binary>> = Binary,
+    {H, Len, Blob, Rest} = 
+        case Endianness of
+            big ->
+                <<H_e:Am8, Len_e:Size/big, Blob_e:Len8, Rest_e/binary>> = Binary,
+                {H_e, Len_e, Blob_e, Rest_e};
+            little ->
+                <<H_e:Am8, Len_e:Size/little, Blob_e:Len8, Rest_e/binary>> = Binary,
+                {H_e, Len_e, Blob_e, Rest_e}
+        end,
     <<TmpNewLen:Size>> = erlamsa_rnd:random_block(trunc(Size/8)),
     NewLen = min(?ABSMAX_BINARY_BLOCK, TmpNewLen*2),
     Result = 
@@ -1071,12 +1085,14 @@ mutate_length(Binary, _Elem = {ok, Size, Len, A, _B}) ->
             %% expand blob field with random data 
             2 -> 
                 RndBlock = erlamsa_rnd:fast_pseudorandom_block(NewLen),
-                TmpBin = <<H:Am8, Len:Size, Blob:Len8, RndBlock/binary>>,
+                TmpBin = rebuild_blob(Endianness, H, Am8, Len, Size, Blob, Len8, RndBlock),
                 <<TmpBin/binary, Rest/binary>>;
             %% drop blob field
-            3 -> <<H:Am8, Len:Size, Rest/binary>>;
+            3 ->
+                rebuild_blob(Endianness, H, Am8, NewLen, Size, 0, 0, Rest);
             %% set len field = random bytes(..)
-            _Else -> <<H:Am8, NewLen:Size, Blob:Len8, Rest/binary>>
+            _Else -> 
+                rebuild_blob(Endianness, H, Am8, NewLen, Size, Blob, Len8, Rest)                
         end,
     {+1, Result}.
 
