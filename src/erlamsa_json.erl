@@ -246,6 +246,8 @@ fold_ast({pair, P1, P2}, Acc) ->
     [P1Json, ":", P2Json | Acc];
 fold_ast({string, Value}, Acc) -> 
     [$", Value, $" | Acc];
+fold_ast({constant, Value}, Acc) when is_atom(Value) -> 
+    [atom_to_list(Value) | Acc];
 fold_ast({number, Value}, Acc) ->
     [Value | Acc];
 fold_ast({object, Els}, Acc) -> 

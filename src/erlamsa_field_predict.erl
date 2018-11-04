@@ -38,7 +38,7 @@
 -export([get_possible_simple_lens/1, get_possible_csum_locations/1, recalc_csum/2]).
 
 -type lenfield_range() :: {integer(), integer()}.
--type sizer_location() :: {ok, integer(), integer(), integer(), integer()}.
+-type sizer_location() :: {ok, integer(), integer(), big | little, integer(), integer()}.
 -type csum_type() :: xor8 | crc32.
 -type csum_location() :: {csum_type(), integer(), integer(), integer()}.
 
@@ -47,7 +47,7 @@ basic_u8len({A, B}, Binary) when A < B, B > 0, A < size(Binary) ->
     Am8 = A*8,
     case Binary of
         <<_H:Am8, Len:8, _Rest/binary>> when Len =:= B - A - 1, Len > 2
-            -> {ok, 8, Len, A, B};
+            -> {ok, 8, big, Len, A, B};
         _Else -> []
     end;
 basic_u8len(_Range, _Binary) -> [].
@@ -62,10 +62,13 @@ simple_u8len(A, Binary) ->
 basic_len({A, B}, Binary) when A < B, B > 0, A < size(Binary) ->
     Am8 = A*8,
     case Binary of
-        <<_H:Am8, Len:16, _Rest/binary>> when Len =:= B - A - 2, Len > 2 -> {ok, 16, Len, A, B};
-        <<_H:Am8, Len:32, _Rest/binary>> when Len =:= B - A - 4, Len > 2 -> {ok, 32, Len, A, B};
-        <<_H:Am8, Len:64, _Rest/binary>> when Len =:= B - A - 8, Len > 2 -> {ok, 64, Len, A, B};
-        _Else -> []
+        <<_H:Am8, Len:16/big, _Rest/binary>> when Len =:= B - A - 2, Len > 2 -> {ok, 16, big, Len, A, B};
+        <<_H:Am8, Len:32/big, _Rest/binary>> when Len =:= B - A - 4, Len > 2 -> {ok, 32, big, Len, A, B};
+        <<_H:Am8, Len:64/big, _Rest/binary>> when Len =:= B - A - 8, Len > 2 -> {ok, 64, big, Len, A, B};
+        <<_H:Am8, Len:16/little, _Rest/binary>> when Len =:= B - A - 2, Len > 2 -> {ok, 16, little, Len, A, B};
+        <<_H:Am8, Len:32/little, _Rest/binary>> when Len =:= B - A - 4, Len > 2 -> {ok, 32, little, Len, A, B};
+        <<_H:Am8, Len:64/little, _Rest/binary>> when Len =:= B - A - 8, Len > 2 -> {ok, 64, little, Len, A, B};    
+    _Else -> []
     end;
 basic_len(_Range, _Binary) -> [].
 
