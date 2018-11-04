@@ -606,8 +606,12 @@ mutate_innertext_prob(String, Muta, _Prob, _Rnd) ->
     %%io:format("res: ~p~n", [{NewLstBin, Meta}]),
     {Meta, binary_to_list(hd(NewLstBin))}.
 
-json_mutation(Ast, {0, 0}) ->
-    {[{failed, json}], Ast, -1};
+%% Prevent too much JSONish on non-JSON data
+json_mutation(Ast, {N, 0}) when N < 2 ->
+    case {erlamsa_rnd:erand(7), N} of
+        {4, 1} -> json_mutation(Ast, {N, 0}, erlamsa_rnd:rand(8));
+        _Else -> {[{failed, json}], Ast, -1}
+    end;
 json_mutation(Ast, {N, NT}) ->
     json_mutation(Ast, {N, NT}, erlamsa_rnd:rand(8)).
 
@@ -649,7 +653,6 @@ json_mutate(Ll = [H|T], Meta) ->
     try tokenize(H) of
         Tokens ->
             {N, NT, N} = count(Tokens),
-            %%io:format("Ast ready ~p~n", [Tokens]),
             {NewMeta, Res, D} = json_mutation(Tokens, {N, NT}),
             NewBinStr = fold_ast(Res),
             if
