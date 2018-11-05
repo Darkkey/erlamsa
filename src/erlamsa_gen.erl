@@ -188,10 +188,8 @@ mux_generators([], Fail) -> Fail("No generators!");
 mux_generators([[_, T]|[]], _) -> T; %% TODO: Check here!
 mux_generators(Generators, _) ->
     {SortedGenerators, N} = erlamsa_utils:sort_by_priority(Generators),
-    fun () ->
-        F = erlamsa_utils:choose_pri(SortedGenerators, erlamsa_rnd:rand(N)),
-        F()
-    end.
+    {Name, F} = erlamsa_utils:choose_pri(SortedGenerators, erlamsa_rnd:rand(N)),
+    {Name, fun () -> F() end}.
 
 %% create a lambda-generator function based on the array
 -spec make_generator_fun(list(), binary() | nil, float(), fun(), non_neg_integer()) -> fun().
@@ -200,23 +198,23 @@ make_generator_fun(Args, Inp, BlockScale, Fail, N) ->
         ({Name, Pri}) ->
             case Name of
                 stdin when hd(Args) == "-" ->
-                    {Pri, stdin_generator(N == 1, BlockScale)}; %% TODO: <<-- 1 in Radamsa
+                    {Pri, {Name, stdin_generator(N == 1, BlockScale)}}; %% TODO: <<-- 1 in Radamsa
                 stdin ->
                     false;
                 file when Args =/= [] andalso Args =/= ["-"] andalso Args =/= [direct] ->
-                    {Pri, file_streamer(Args, BlockScale)};
+                    {Pri, {Name, file_streamer(Args, BlockScale)}};
                 file ->
                     false;
                 jump when length(Args) > 1 ->
-                    {Pri, jump_streamer(Args, BlockScale)};
+                    {Pri, {Name, jump_streamer(Args, BlockScale)}};
                 jump ->
                     false;
                 direct when Inp =:= nil ->
                     false;
                 direct ->
-                    {Pri, direct_generator(Inp, BlockScale)};
+                    {Pri, {Name, direct_generator(Inp, BlockScale)}};
                 random ->
-                    {Pri, random_generator(BlockScale)};
+                    {Pri, {Name, random_generator(BlockScale)}};
                 _Else ->
                     Fail("Unknown generator name."),
                     false

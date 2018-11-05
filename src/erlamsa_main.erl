@@ -101,6 +101,37 @@ test(Seed) -> fuzzer(
                         maps:put(output, "-",
                             maps:put(seed, Seed, maps:new()))))).
 
+-spec get_threading_mode(any(), integer(), integer()) -> {single | multi, integer()}. 
+get_threading_mode(_, N, Workers) when N =:= 1; Workers =:= 1 ->  {single, 1};
+get_threading_mode("-", _N, _Workers) ->  {single, 1};
+get_threading_mode(return, _N, _Workers) ->  {single, 1};
+get_threading_mode(stdout, _N, _Workers) ->  {single, 1};
+get_threading_mode(stderr, _N, _Workers) ->  {single, 1};
+get_threading_mode(_Mode, N, Workers) ->  
+    Div = N div Workers,
+    Rem = N rem Workers,
+    Tasks = [{A*Div, (A+1)*Div - 1, A} || A <- lists:seq(0, Workers-1)],
+    [{{LastA, LastB, WNum}, LastRem}|T] = 
+        (fun 
+            MergeRem([H1|T1], [H2|T2], Acc) -> 
+                MergeRem(T1, T2, [{H1, H2+Div*Workers}|Acc]); 
+            MergeRem([H1|T1], [], Acc) -> 
+                MergeRem(T1, [], [{H1, 0}|Acc]); 
+            MergeRem([], [], Acc) -> Acc
+        end)(Tasks, lists:seq(0, Rem), []),
+    [{{0, FirstB, FirstW}, FirstRem}|FT] = lists:reverse([{{LastA, min(LastB, N), WNum}, LastRem}|T]),
+    {multi, [{{1, FirstB, FirstW}, FirstRem}|FT]}.
+
+-spec wait_for_finished(integer()) -> ok.
+wait_for_finished(0) -> ok;
+wait_for_finished(N) ->
+    receive
+        {finished, W, Pid, _ThreadSetting} -> 
+            %io:format("Got from thread: ~p~n", [_ThreadSetting]),
+            erlamsa_logger:log(info, "fuzzing worker process no. ~p <~p> finished", [W, Pid]),
+            wait_for_finished(N-1)
+    end.
+
 -spec fuzzer(#{}) -> [binary()].
 fuzzer(Dict) ->
     Seed = maps:get(seed, Dict, default),
@@ -127,7 +158,8 @@ fuzzer(Dict) ->
             Muta = erlamsa_mutations:make_mutator(Mutas, CustomMutas),
             DirectInput = maps:get(input, Dict, nil),
             BlockScale = maps:get(blockscale, Dict, 1.0),
-            Gen = erlamsa_gen:make_generator(maps:get(generators, Dict,
+            %% TODO: FIXME: for mutithreaded output choose generator later?
+            {GenName, Gen} = erlamsa_gen:make_generator(maps:get(generators, Dict,
                                              erlamsa_gen:default()), Paths,
                                              DirectInput, BlockScale, Fail, N
                                             ),
@@ -138,7 +170,27 @@ fuzzer(Dict) ->
             Out = erlamsa_out:string_outputs(maps:get(output, Dict, "-")),
             Post = erlamsa_utils:make_post(maps:get(external_post, Dict, nil)),
             Sleep = maps:get(sleep, Dict, 0),
-            fuzzer_loop(Muta, Gen, Pat, Out, RecordMeta, Verbose, {1, 0}, N, Sleep, Post, [])
+            {ThreadMode, Threads} = get_threading_mode(maps:get(output, Dict, "-"), N, maps:get(workers, Dict, 1)),
+            case ThreadMode of 
+                single ->
+                    fuzzer_loop(Muta, Gen, Pat, Out, RecordMeta, Verbose, {1, 0}, N, Sleep, Post, []);
+                multi -> 
+                    %% Selecting generator
+                    %% For stdio we need to pre-read the data;
+                    %% otherwise it could be some random that we should variate
+                    MultiGen = case GenName of
+                        stdin -> GenRes = Gen(), fun() -> GenRes end;
+                        _Else -> Gen
+                    end,
+                    MainProcessPid = erlang:self(),
+                    [spawn(fun() -> 
+                            erlamsa_logger:log(info, "fuzzing worker process ~p started, range {~p, ~p} + ~p additional", [W, A, B, R]),
+                            fuzzer_loop(Muta, MultiGen, Pat, Out, RecordMeta, Verbose, {A, 0}, B, Sleep, Post, []),
+                            fuzzer_loop(Muta, MultiGen, Pat, Out, RecordMeta, Verbose, {R, 0}, R, Sleep, Post, []),
+                            MainProcessPid ! {finished, W, erlang:self(), {{A, B, W}, R}}
+                        end)  || {{A, B, W}, R} <- Threads],
+                    wait_for_finished(length(Threads))
+            end
     end.
 
 -spec record_result(binary(), list()) -> list().
@@ -147,6 +199,8 @@ record_result(X, Acc) -> [X | Acc].
 
 -spec fuzzer_loop(fun(), fun(), fun(), fun(), fun(), fun(), non_neg_integer(),
                   non_neg_integer(), non_neg_integer() | inf, fun(), list()) -> [binary()].
+fuzzer_loop(_, _, _, _, _, _, {0, _}, 0, _, _, _) ->
+    [];
 fuzzer_loop(_, _, _, _, RecordMetaFun, _, {I, _}, N, _, _, Acc)
                                                     when is_integer(N) andalso N < I ->
     RecordMetaFun({close, ok}), lists:reverse(Acc);
