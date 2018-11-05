@@ -259,7 +259,6 @@ http_headers([], Acc) ->
 -spec make_http_writer(inet:ip_address(), inet:port_number(), string(),
                        string(), string(), string(), list(string())) -> fun().
 make_http_writer(Host, Port, Path, Query, Type, Param, Options) ->
-    %% TODO:fixme with re
     Maker = create_http_header(Host, Type, Param, Path, Query, http_headers(Options, [])),
     fun F(_N, Meta) ->
         {F, {http,

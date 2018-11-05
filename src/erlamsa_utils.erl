@@ -176,15 +176,6 @@ check_empty(X) when is_list(X) -> X.
 applynth(1, [E|Rest], Fun) -> Fun(E, Rest);
 applynth(I, [E|Rest], Fun) -> [E|applynth(I-1, Rest, Fun)].
 
-%% TODO: Should be replaced by applynth
-%% apply function to list element at position N
-%% Fun MUST return list!
-%% WARN: TODO: Ugly, need rewrite
-% led(L, Pos, Fun) ->
-%     % io:write({L, Pos, Fun, lists:sublist(L, Pos - 1), Fun(lists:nth(Pos,L)),
-%     %   lists:nthtail(Pos,L)}),
-%     lists:sublist(L, Pos - 1) ++ Fun(lists:nth(Pos,L)) ++ lists:nthtail(Pos,L).
-
 %% get an element by key from gb_tree, return DefaultValue if none exists
 -spec get(any(), any(), gb_trees:tree()) -> any().
 get(Key, DefaultValue, Tree) ->

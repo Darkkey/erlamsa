@@ -100,7 +100,7 @@ list_swap(L, Len) ->
 
 -spec list_perm(list(), non_neg_integer()) -> list().
 %% permute values
-%% FIXME: the behaviour of this function differs from radamsa (list-perm ...)
+%% NOTE: the behaviour of this function differs from radamsa (list-perm ...)
 %% FIXME: should be optimized
 list_perm([], 0) -> [];
 list_perm(L, Len) when Len < 3 -> L;

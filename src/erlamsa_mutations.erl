@@ -218,7 +218,6 @@ construct_sed_byte_random() ->  %% swap a byte with a random one
 
 %-spec construct_sed_bytes_muta(byte_edit_fun(), atom()) -> mutation_fun().
 -spec construct_sed_bytes_muta(fun(), atom()) -> mutation_fun().
-%% WARNING && TODO: this impementation is DIRTY and not as effective as Radamsa
 construct_sed_bytes_muta(F, Name) ->
     fun 
     Self([<<>>|BTail], Meta) -> 
@@ -226,9 +225,10 @@ construct_sed_bytes_muta(F, Name) ->
     Self([BVec|BTail], Meta) ->        
         BSize = byte_size(BVec),        
         S = erlamsa_rnd:rand(BSize), 
-        L = erlamsa_rnd:rand_range(1, BSize - S + 1),  %% FIXME: here any (min 2), in radamsa 20: fixme: magic constant, should use something like repeat-len
-                                                   %% ^^ check may be max(20, ...) with "MAGIX" could be MORE effective
-                                                   %% TODO: make this interval more random...?
+        L = erlamsa_rnd:rand_range(1, BSize - S + 1),  
+        %% WARN: ^ here any (min 2), in radamsa 20: magic constant, 
+        %% should use something like repeat-len
+        %% ^^ check may be max(20, ...) with "MAGIX" could be MORE effective
         H_bits = S*8,
         P_bits = L*8, 
         <<H:H_bits, P:P_bits, T/binary>> = BVec,      
@@ -238,7 +238,7 @@ construct_sed_bytes_muta(F, Name) ->
     end.
 
 -spec construct_sed_bytes_perm() -> mutation_fun().
-%% WARNING: in radamsa max permutation block could not exceed length 20, here could be any length
+%% WARN: in radamsa max permutation block could not exceed length 20, here could be any length
 construct_sed_bytes_perm() -> %% permute a few bytes
     construct_sed_bytes_muta(
         fun (H, Bs, T, BTail) -> 
@@ -253,7 +253,6 @@ construct_sed_bytes_repeat() -> %% repeat a seq
     construct_sed_bytes_muta(
         fun (H, Bs, T, BTail) ->            
             N = max(2, erlamsa_rnd:rand_log(10)), %% max 2^10 = 1024 stuts
-            %% !FIXME: !WARNING: Below is VERY INEFFECTIVE CODE, just working sketch, may be need to optimize?            
             C = list_to_binary([Bs || _ <- lists:seq(1,N)]),
             Res = [<<H/binary, C/binary ,T/binary>> | BTail],
             Res
@@ -806,7 +805,7 @@ pick_sublist(Lst) ->
     case Subs of
         [] -> false;
         _Else ->
-            erlamsa_rnd:rand_elem(Subs) %% TODO: FIXME: CHECK IF it's correct!
+            erlamsa_rnd:rand_elem(Subs) 
     end.
 
 %% TODO: type for fun().
