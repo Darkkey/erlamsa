@@ -137,8 +137,6 @@ raise_prob(Prob, DC) ->
     erlamsa_logger:log(decision, "increasing Prob from ~p to ~p", [Prob, Prob + Prob/DC]),
     Prob + Prob/DC.
 
-%%TODO: check for memory consumption and tail recursion correctness
-%%FIXME: fuzzing for multiple endpoints?
 loop_udp(SrvSocket, Endpoint, init_clientsocket, ClientHost, ClientPort, Opts, Verbose) ->
     erlamsa_rnd:seed(now()),
     {"udp", _LPort, ClSocketPort, _, _} = Endpoint,

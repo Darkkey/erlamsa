@@ -54,7 +54,7 @@ receive_port(Port) ->
             port_exit 
 	end.
 
-%%TODO:FIXME:Very ugly, thx to r2 weirdiness, this may be slow and unefficient.
+%% Very ugly, thx to r2 weirdiness, this may be slow and unefficient.
 read_r2_data(Port) ->
     read_r2_data(Port, none, []).
 read_r2_data(Port, 0, [[0]] ) ->
