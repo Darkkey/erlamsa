@@ -70,10 +70,12 @@ sleep() ->
 
 -spec prepare_auxproc(options()) -> list(supervisor:child_spec()).
 prepare_auxproc(Dict) ->
+    ExtRnd = maps:get(ext_rnd, Dict, fun(_Dict) -> [] end),
     [
         erlamsa_logger:get_supervisor_opts(Dict),
         erlamsa_fsupervisor:get_supervisor_opts(Dict),
-        erlamsa_monitor:get_supervisor_opts(Dict)
+        erlamsa_monitor:get_supervisor_opts(Dict),
+        ExtRnd(Dict)
     ].
 
 -spec start_behaviour(options()) -> {list(supervisor:child_spec()), fun()}.

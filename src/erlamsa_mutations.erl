@@ -1183,9 +1183,9 @@ mutations(CustomMutas) ->
                         {?MAX_SCORE, 1, sed_tree_dup(), tr2, "duplicate a node"},
                         {?MAX_SCORE, 1, sed_tree_del(), td, "delete a node"},
                         {?MAX_SCORE, 2, fun sed_num/2, num, "try to modify a textual number"},                        
-                        {?MAX_SCORE, 1, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1, "swap one node with another one"},
-                        {?MAX_SCORE, 1, fun sed_tree_stutter/2, tr, "repeat a path of the parse tree"},
-                        {?MAX_SCORE, 1, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2, "swap two nodes pairwise"},
+                        {?MAX_SCORE, 2, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1, "swap one node with another one"},
+                        {?MAX_SCORE, 2, fun sed_tree_stutter/2, tr, "repeat a path of the parse tree"},
+                        {?MAX_SCORE, 2, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2, "swap two nodes pairwise"},
                         {?MAX_SCORE, 1, construct_sed_byte_drop(), bd, "drop a byte"},
                         {?MAX_SCORE, 1, construct_sed_byte_inc(), bei, "increment a byte by one"},
                         {?MAX_SCORE, 1, construct_sed_byte_dec(), bed, "decrement a byte by one"},
@@ -1213,7 +1213,7 @@ mutations(CustomMutas) ->
                         {?MAX_SCORE, 2, fun length_predict/2, len, "predicted length mutation"},
                         {?MAX_SCORE, 2, fun base64_mutator/2, b64, "try mutate base64-encoded block"},
                         {?MAX_SCORE, 1, fun uri_mutator/2, uri, "try mutate URI to cause SSRF"},
-                        {?MAX_SCORE, 2, fun zip_path_traversal/2, zip, "ZIP path traversal"},
+                        {?MAX_SCORE, 1, fun zip_path_traversal/2, zip, "ZIP path traversal"},
                         {?MAX_SCORE, 0, fun nomutation/2, nil, "no mutation will occur (debugging purposes)"}
                         |CustomMutas].
 

@@ -38,21 +38,6 @@
 %% API
 -export([test/0, test/1, test_input/1, fuzzer/1]).
 
--spec urandom_seed() -> {non_neg_integer(), non_neg_integer(), non_neg_integer()}.
-urandom_seed() ->
-    list_to_tuple(
-        lists:map(
-            fun(_) ->
-                lists:foldl(
-                    fun(X, A) -> X + (A bsl 8) end,
-                    0,
-                    binary_to_list(crypto:strong_rand_bytes(2))
-                )
-            end,
-            lists:seq(1, 3)
-        )
-    ).
-
 -spec make_verb_to_file(string()) -> fun().
 make_verb_to_file(Path) ->
     {Res, Fd} = file:open(Path, [write]),
@@ -134,63 +119,54 @@ wait_for_finished(N) ->
 
 -spec fuzzer(#{}) -> [binary()].
 fuzzer(Dict) ->
-    Seed = maps:get(seed, Dict, default),
+    SeedFun = maps:get(seed, Dict, fun() -> erlamsa_rnd:gen_urandom_seed() end),
     CustomMutas = erlamsa_utils:make_mutas(maps:get(external_mutations, Dict, nil)),
-    Mutas = maps:get(mutations, Dict, default),
-    N = maps:get(n, Dict, default),
+    Mutas = maps:get(mutations, Dict, erlamsa_mutations:default(CustomMutas)),
+    N = maps:get(n, Dict, 1),
     Paths = maps:get(paths, Dict, ["-"]),
-    if
-        Seed =:= default ->
-            fuzzer(maps:put(seed, urandom_seed(), Dict));
-        Mutas =:= default ->
-            fuzzer(maps:put(mutations, erlamsa_mutations:default(CustomMutas), Dict));
-        N =:= default ->
-            fuzzer(maps:put(n, 1, Dict));
-        true ->
-            Verbose = erlamsa_utils:verb(stderr, maps:get(verbose, Dict, 0)),
-            Seed = maps:get(seed, Dict),
-            erlamsa_rnd:seed(Seed),
-            file:write_file("./last_seed.txt", io_lib:format("~p", [Seed])),
-            Verbose(io_lib:format("Random seed: ~p~n", [Seed])),
-            erlamsa_logger:log(info, "starting fuzzer main (parent = ~p), random seed is: ~p",
-                               [maps:get(parentpid, Dict, none), Seed]),
-            Fail = fun(Why) -> io:write(Why), throw(Why) end,
-            Muta = erlamsa_mutations:make_mutator(Mutas, CustomMutas),
-            DirectInput = maps:get(input, Dict, nil),
-            BlockScale = maps:get(blockscale, Dict, 1.0),
-            %% TODO: FIXME: for mutithreaded output choose generator later?
-            {GenName, Gen} = erlamsa_gen:make_generator(maps:get(generators, Dict,
-                                             erlamsa_gen:default()), Paths,
-                                             DirectInput, BlockScale, Fail, N
-                                            ),
-            RecordMeta = maybe_meta_logger( maps:get(metadata, Dict, nil), Fail),
-            RecordMeta({seed, maps:get(seed, Dict)}),
-            PatList = maps:get(patterns, Dict, erlamsa_patterns:default()),
-            Pat = erlamsa_patterns:make_pattern(PatList),
-            Out = erlamsa_out:string_outputs(maps:get(output, Dict, "-")),
-            Post = erlamsa_utils:make_post(maps:get(external_post, Dict, nil)),
-            Sleep = maps:get(sleep, Dict, 0),
-            {ThreadMode, Threads} = get_threading_mode(maps:get(output, Dict, "-"), N, maps:get(workers, Dict, 1)),
-            case ThreadMode of 
-                single ->
-                    fuzzer_loop(Muta, Gen, Pat, Out, RecordMeta, Verbose, {1, 0}, N, Sleep, Post, []);
-                multi -> 
-                    %% Selecting generator
-                    %% For stdio we need to pre-read the data;
-                    %% otherwise it could be some random that we should variate
-                    MultiGen = case GenName of
-                        stdin -> GenRes = Gen(), fun() -> GenRes end;
-                        _Else -> Gen
-                    end,
-                    MainProcessPid = erlang:self(),
-                    [spawn(fun() -> 
-                            erlamsa_logger:log(info, "fuzzing worker process ~p started, range {~p, ~p} + ~p additional", [W, A, B, R]),
-                            fuzzer_loop(Muta, MultiGen, Pat, Out, RecordMeta, Verbose, {A, 0}, B, Sleep, Post, []),
-                            fuzzer_loop(Muta, MultiGen, Pat, Out, RecordMeta, Verbose, {R, 0}, R, Sleep, Post, []),
-                            MainProcessPid ! {finished, W, erlang:self(), {{A, B, W}, R}}
-                        end)  || {{A, B, W}, R} <- Threads],
-                    wait_for_finished(length(Threads))
-            end
+    Verbose = erlamsa_utils:verb(stderr, maps:get(verbose, Dict, 0)),
+    Seed = SeedFun(),
+    erlamsa_rnd:seed(Seed),
+    file:write_file("./last_seed.txt", io_lib:format("~p", [Seed])),
+    Verbose(io_lib:format("Random seed: ~p~n", [Seed])),
+    erlamsa_logger:log(info, "starting fuzzer main (parent = ~p), random seed is: ~p",
+                        [maps:get(parentpid, Dict, none), Seed]),
+    Fail = fun(Why) -> io:write(Why), throw(Why) end,
+    Muta = erlamsa_mutations:make_mutator(Mutas, CustomMutas),
+    DirectInput = maps:get(input, Dict, nil),
+    BlockScale = maps:get(blockscale, Dict, 1.0),
+    %% TODO: FIXME: for mutithreaded output choose generator later?
+    {GenName, Gen} = erlamsa_gen:make_generator(maps:get(generators, Dict,
+                                        erlamsa_gen:default()), Paths,
+                                        DirectInput, BlockScale, Fail, N
+                                    ),
+    RecordMeta = maybe_meta_logger( maps:get(metadata, Dict, nil), Fail),
+    RecordMeta({seed, Seed}),
+    PatList = maps:get(patterns, Dict, erlamsa_patterns:default()),
+    Pat = erlamsa_patterns:make_pattern(PatList),
+    Out = erlamsa_out:string_outputs(maps:get(output, Dict, "-")),
+    Post = erlamsa_utils:make_post(maps:get(external_post, Dict, nil)),
+    Sleep = maps:get(sleep, Dict, 0),
+    {ThreadMode, Threads} = get_threading_mode(maps:get(output, Dict, "-"), N, maps:get(workers, Dict, 1)),
+    case ThreadMode of 
+        single ->
+            fuzzer_loop(Muta, Gen, Pat, Out, RecordMeta, Verbose, {1, 0}, N, Sleep, Post, []);
+        multi -> 
+            %% Selecting generator
+            %% For stdio we need to pre-read the data;
+            %% otherwise it could be some random that we should variate
+            MultiGen = case GenName of
+                stdin -> GenRes = Gen(), fun() -> GenRes end;
+                _Else -> Gen
+            end,
+            MainProcessPid = erlang:self(),
+            [spawn(fun() -> 
+                    erlamsa_logger:log(info, "fuzzing worker process ~p started, range {~p, ~p} + ~p additional", [W, A, B, R]),
+                    fuzzer_loop(Muta, MultiGen, Pat, Out, RecordMeta, Verbose, {A, 0}, B, Sleep, Post, []),
+                    fuzzer_loop(Muta, MultiGen, Pat, Out, RecordMeta, Verbose, {R, 0}, R, Sleep, Post, []),
+                    MainProcessPid ! {finished, W, erlang:self(), {{A, B, W}, R}}
+                end)  || {{A, B, W}, R} <- Threads],
+            wait_for_finished(length(Threads))
     end.
 
 -spec record_result(binary(), list()) -> list().
