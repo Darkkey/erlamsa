@@ -98,7 +98,7 @@ cmdline_optsspec() ->
                                                                 "<arg>, which mutation patterns to use"},
     {proxyprob	, $P,	"proxy",		string,					"<arg>, activate fuzzing proxy mode, param is fuzzing probability in form of s->c,c->s e.g.: 0.5,0.5"},
 %	 {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},
-    {seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int"},
+    {seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int or source:device for an external source of entropy (e.g. binary file)"},
     {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},
     {maxrunningtime
                 , $t, 	"maxrunningtime",
@@ -213,7 +213,7 @@ string_to_actions(Lst, What, DefaultLst) ->
         notfound ->
             {fail, "No such " ++ What ++ "!"}
     end.
-%% TODO: check if mutation name exist
+
 -spec string_to_action_loop([list(string())], maps:map(), list()) -> [{atom(), non_neg_integer()}].
 string_to_action_loop([H|T], Default, Acc) ->
     Name = list_to_atom(hd(H)),
@@ -344,9 +344,14 @@ convert_metapath(Path) -> Path.
 
 parse_seed(Seed) ->
     list_to_tuple([list_to_integer(X) || X <- string:tokens(Seed, ",")]).
+
+parse_seed_opt("source:" ++ Source, Dict) ->
+        maps:put(seed, fun() -> erlamsa_rnd_ext:get_seed() end, 
+                maps:put(ext_rnd, fun(Opts) -> erlamsa_rnd_ext:get_supervisor_opts(Opts) end, 
+                        maps:put(ext_rnd_source, Source, Dict)));
 parse_seed_opt(Seed, Dict) ->
     try
-        maps:put(seed, parse_seed(Seed), Dict)
+        maps:put(seed, fun() -> parse_seed(Seed) end, Dict)
     catch
         error:badarg ->
             fail("Invalid seed format! Usage: int,int,int")
@@ -420,7 +425,6 @@ parse_opts([list|_T], Dict) ->
     halt(0);
 parse_opts([{monitor, MonitorSpec}|T], Dict) ->
     %%Syntax is monitor_name:params
-    %%TODO: temporary solution, check whether monitor is actually supported
     Monitor = parse_monitor(string:split(MonitorSpec, ":", leading)),
     parse_opts(T, maps:put(monitor, 
                             [Monitor | maps:get(monitor, Dict, erlamsa_monitor:default())], 
