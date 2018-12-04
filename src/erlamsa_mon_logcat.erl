@@ -24,12 +24,12 @@ start(Params) ->
    {ok, Pid}.
 
 init(Params) ->
-    {GenericMonOpts, LeftParams} = erlamsa_monitor:parse_after(string:split(Params, ",", all)),
+    {GenericMonOpts, LeftParams} = erlamsa_monitor:parse_after(string:tokens(Params, ",")),
     MonOpts = parse_params(LeftParams, GenericMonOpts),
     logcat_start(MonOpts, 0).
 
 parse_crash_data_line(State, Data, AppPid, Acc) ->
-    Tokens = string:split(Data, " ", all),
+    Tokens = string:tokens(Data, " "),
     case {Tokens, State} of
         {[_, _, _, _, "F", "DEBUG", [], [], ":", "***" | _T], listen} ->
             {crash_start, Acc};
@@ -59,7 +59,7 @@ get_crash_data(State, [], AppPid, Acc) ->
 wait_for_crash(LCPid, AppPid, State, Acc) ->
     receive 
         {stream_data, LCPid, Data} ->
-            case get_crash_data(State, string:split(Data, [10], all), AppPid, Acc) of
+            case get_crash_data(State, string:tokens(Data, [10]), AppPid, Acc) of
                 {crash_complete, Res} ->
                     io:format("Crash catched: ~p~n~n~n~n~n~n~n", [Res]),
                     Res;
@@ -75,7 +75,7 @@ parse_ps_output(_) -> 0.
 
 handle_lc_session(start, nil, App, Activity, _Param) ->
     Str = os:cmd(io_lib:format("adb shell 'ps | grep ~s'", [App])),
-    CheckRunning = parse_ps_output(string:split(Str, " ", all)),
+    CheckRunning = parse_ps_output(string:tokens(Str, " ")),
     erlamsa_logger:log(info, "logcat_monitor checking whether ~s app is running", [App]),
     handle_lc_session(exec, CheckRunning, App, Activity, _Param);
 handle_lc_session(exec, 0, _App, _Activity, ?START_MONITOR_ATTEMPTS) ->

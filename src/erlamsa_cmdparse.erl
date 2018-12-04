@@ -251,7 +251,7 @@ parse_logger_opt([LogOpt|T], Dict) ->
         ["csv", FName] ->
             parse_logger_opt(T, maps:put(logger_csv, FName, Dict));
         ["syslog", Uri] ->
-            [Host, SPort] = string:split(Uri, ":"),
+            [Host, SPort] = string:tokens(Uri, ":"),
             IP = inet:ntoa(Host),
             Port = list_to_integer(SPort),
             parse_logger_opt(T, maps:put(logger_syslog, {IP, Port}, Dict));
@@ -425,7 +425,8 @@ parse_opts([list|_T], Dict) ->
     halt(0);
 parse_opts([{monitor, MonitorSpec}|T], Dict) ->
     %%Syntax is monitor_name:params
-    Monitor = parse_monitor(string:split(MonitorSpec, ":", leading)),
+    %%TODO: In future replace with string:split(MonitorSpec, ":", leading)
+    Monitor = parse_monitor(string:tokens(MonitorSpec, ":")),
     parse_opts(T, maps:put(monitor, 
                             [Monitor | maps:get(monitor, Dict, erlamsa_monitor:default())], 
                             Dict));
@@ -458,7 +459,7 @@ parse_opts([{logger, LogOpts}|T], Dict) ->
 parse_opts([noiolog|T], Dict) ->
     parse_opts(T, maps:put(noiolog, true, Dict));
 parse_opts([{external, ModuleNames}|T], Dict) ->
-    parse_opts(T, parse_external(string:split(ModuleNames, ",", all), Dict));
+    parse_opts(T, parse_external(string:tokens(ModuleNames, ","), Dict));
 parse_opts([{proxyprob, ProxyProbOpts}|T], Dict) ->
     parse_opts(T, parse_proxyprob_opts(ProxyProbOpts, Dict));
 parse_opts([{input, InputOpts}|T], Dict) ->
