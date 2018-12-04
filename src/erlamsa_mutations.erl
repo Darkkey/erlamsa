@@ -708,7 +708,7 @@ rand_uri_mutate(T, Acc, 1) ->
 rand_uri_mutate(T, Acc, 2) ->
     {SSRFHost, SSRFPort} = get_ssrf_ep(), 
     AtAddr = lists:flatten(io_lib:format(" @~s:~p", [SSRFHost, SSRFPort])),
-    [Domain, Query] = string:split(T, "/"),
+    [Domain, Query] = string:tokens(T, "/"),
     Modified = lists:flatten([change_scheme(Acc), "://", Domain, AtAddr, $/, Query]),
     {Modified, 1, {uri, success}}.
 

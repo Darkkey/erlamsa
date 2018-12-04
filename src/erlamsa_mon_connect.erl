@@ -22,7 +22,7 @@ parse_params([], Acc) ->
     Acc.
 
 start(Params) ->
-    {GenericMonOpts, LeftParams} = erlamsa_monitor:parse_after(string:split(Params, ",", all)),
+    {GenericMonOpts, LeftParams} = erlamsa_monitor:parse_after(string:tokens(Params, ",")),
     MonOpts = parse_params(LeftParams, GenericMonOpts),
     Port = maps:get(port, MonOpts, 51234),
     ets:insert(global_config, [{cm_port, Port}]),

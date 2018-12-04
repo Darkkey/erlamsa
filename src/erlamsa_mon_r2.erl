@@ -58,7 +58,7 @@ start(Params) ->
    {ok, Pid}.
 
 init(Params) ->
-    {GenericMonOpts, LeftParams} = erlamsa_monitor:parse_after(string:split(Params, ",", all)),
+    {GenericMonOpts, LeftParams} = erlamsa_monitor:parse_after(string:tokens(Params, ",")),
     MonOpts = parse_params(LeftParams, GenericMonOpts),
     r2_start(MonOpts, 0).
 

@@ -49,7 +49,7 @@ start(Params) ->
     {ok, Pid}.
 
 init(Params) ->
-    {GenericMonOpts, LeftParams} = erlamsa_monitor:parse_after(string:split(Params, ",", all)),
+    {GenericMonOpts, LeftParams} = erlamsa_monitor:parse_after(string:tokens(Params, ",")),
     MonOpts = parse_params(LeftParams, GenericMonOpts),
     cdb_start(MonOpts, ?START_MONITOR_ATTEMPTS).
 

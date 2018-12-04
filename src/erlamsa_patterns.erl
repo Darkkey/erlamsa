@@ -240,7 +240,7 @@ mutate_once_compressed(deflate, Bin, Mutator, Meta, Ip, NextPat) ->
             zlib:close(ZD),
             {list_to_binary(NewBin), [{compressed, zlib}, NewMeta, {decompressed, zlib} | Meta]}
     catch 
-        error:data_error -> 
+        _Exception:_Reason -> 
             zlib:close(ZI),
             {Bin, Meta}
     end.

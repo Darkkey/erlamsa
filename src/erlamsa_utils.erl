@@ -99,6 +99,7 @@ sort_by_priority(L) ->
 %% last member find
 -spec last(any()) -> any().
 last(L) when is_list(L) -> last(lists:last(L));
+last(L) when is_function(L) -> last(L());
 last(X) -> X.
 
 %% check if pair
