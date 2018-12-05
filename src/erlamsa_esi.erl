@@ -41,7 +41,7 @@ parse_headers([{http_patterns, Patterns}|T], Acc) ->
 parse_headers([{http_blockscale, B}|T], Acc) ->
     parse_headers(T, maps:put(blockscale, list_to_float(B), Acc));
 parse_headers([{http_seed, Seed}|T], Acc) ->
-    parse_headers(T, maps:put(seed, erlamsa_cmdparse:parse_seed(Seed), Acc));
+    parse_headers(T, maps:put(seed, fun () -> erlamsa_cmdparse:parse_seed(Seed) end, Acc));
 parse_headers([{remote_addr, IP}|T], Acc) ->
     parse_headers(T, maps:put(remote_addr, IP, Acc));
 parse_headers([], Acc) ->
