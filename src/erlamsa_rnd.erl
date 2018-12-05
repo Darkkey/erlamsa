@@ -143,15 +143,12 @@ rand_elem(L) ->
 
 %% Generate "pseudo" random block of bytes.
 -spec fast_pseudorandom_block(non_neg_integer()) -> binary().
-fast_pseudorandom_block(N) when N < ?ABSMAXHALF_BINARY_BLOCK/5 ->
+fast_pseudorandom_block(N) when N < ?ABSMAXHALF_BINARY_BLOCK ->
     random_block(N, []);
 fast_pseudorandom_block(N) ->
-    random_block(?ABSMAXHALF_BINARY_BLOCK/5, fill_blocka(N - ?ABSMAXHALF_BINARY_BLOCK/5, [])).
-
--spec fill_blocka(non_neg_integer(), list(byte())) -> list(byte()).
-fill_blocka(0, Out) -> Out;
-fill_blocka(A, Out) ->
-    fill_blocka(A - 1, [41 | Out]).
+    RndBlk = random_block(?ABSMAXHALF_BINARY_BLOCK, []),
+    Z8L = N - ?ABSMAXHALF_BINARY_BLOCK,
+    <<42:Z8L, RndBlk/binary>>.
 
 %% Generate random block of bytes.
 %% TODO: check byte-stream magic here, Radamsa realization is MUCH differ

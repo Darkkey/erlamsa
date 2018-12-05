@@ -37,7 +37,7 @@
 -endif.
 
 %% API
--export([cons_revlst/2, uncons/2, extract_function/1, verb/2, forcell/1, last/1, get/3,
+-export([cons_revlst/2, uncons/2, extract_function/1, verb/2, forcell/1, get/3,
         merge/2, hd_bin/1, tl_bin/1, choose_pri/2, is_pair/1, safe_hd/1,
         flush_bvecs/2, applynth/3, sort_by_priority/1, binarish/1,
         check_empty/1, stderr_probe/2, halve/1, error/1,
@@ -95,12 +95,6 @@ sort_by_priority(L) ->
     SL = lists:sort(fun ({A, _}, {B, _}) -> A > B end, L),
     N = lists:foldl(fun ({A, _}, Acc) -> Acc + A end, 0, SL),
     {SL, N}.
-
-%% last member find
--spec last(any()) -> any().
-last(L) when is_list(L) -> last(lists:last(L));
-last(L) when is_function(L) -> last(L());
-last(X) -> X.
 
 %% check if pair
 -spec is_pair(any()) -> true | false.
