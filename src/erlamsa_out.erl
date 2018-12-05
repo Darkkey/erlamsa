@@ -43,6 +43,12 @@
 flush([]) -> <<>>;
 flush([H|T]) when is_binary(H) -> R = flush(T), <<H/binary, R/binary>>.
 
+%% last member find
+-spec last_output(any()) -> any().
+last_output(L) when is_list(L) -> last_output(lists:last(L));
+last_output(F) when is_function(F) -> last_output(F());
+last_output(X) -> X.
+
 -spec output(lazy_list_of_bins(), output_dest(), fun()) -> {fun(), meta(), integer(), binary()}.
 output([], _Fd, _Post) ->
     erlamsa_utils:error({fderror, "Something wrong happened with output FD."});
@@ -50,7 +56,7 @@ output(Ll, Fd, Post) ->
     {NLl, NewFd, Data, N} = blocks_port(Ll, Fd, Post),
     %% (ok? (and (pair? ll) (tuple? (car ll)))) ;; all written?
     %% ^-- do we really need to check this?
-    {Muta, Meta} = erlamsa_utils:last(NLl),
+    {Muta, Meta} = last_output(NLl),
     FlushedData = flush(Data),
     close_port(FlushedData, NewFd),
     {Muta, Meta, N, FlushedData}.
