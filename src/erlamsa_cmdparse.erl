@@ -320,6 +320,8 @@ parse_url([<<"tcp">>|T], _URL) ->
     parse_sock_addr(tcp, binary_to_list(hd(T)));
 parse_url([<<"http">>|_T], URL) ->
     parse_http_addr(URL);
+parse_url([<<"https">>|_T], URL) ->
+    parse_http_addr(URL);
 parse_url(_, URL) ->
     fail(io_lib:format("invalid URL specification: '~s'", [URL])).
 
