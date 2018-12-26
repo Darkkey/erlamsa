@@ -225,6 +225,14 @@ http_writer({Host, Port, Path, Query, ["GET", Param|T]}) ->
 http_writer({Host, Port, Path, Query, [Type | T]}) ->
     make_http_writer(Host, Port, Path, Query, Type, "", T).
 
+-spec https_writer(tuple()) -> fun().
+https_writer({Host, Port, Path, Query, []}) ->
+    make_https_writer(Host, Port, Path, Query, "GET", "", []);
+https_writer({Host, Port, Path, Query, ["GET", Param|T]}) ->
+    make_https_writer(Host, Port, Path, Query, "GET", Param, T);
+https_writer({Host, Port, Path, Query, [Type | T]}) ->
+    make_https_writer(Host, Port, Path, Query, Type, "", T).
+
 -spec make_host_header(string()) -> binary().
 make_host_header(Host) ->
     list_to_binary("Host: " ++ Host ++ [13, 10]).
@@ -278,6 +286,50 @@ make_http_writer(Host, Port, Path, Query, Type, Param, Options) ->
         [{output, http} | Meta]}
     end.
 
+%% TODO: FIXME: proper handling of content-type
+-spec prepare_httpc_options(list()) -> list().
+prepare_httpc_options(Options) ->
+    lists:map(fun(Hdr) ->  string:tokens(Hdr, "=") end, Options).
+
+-spec prepare_httpc_options(string(), string(), inet:port_number(), string(),
+                       string(), string(), list(string())) -> {string(), atom(), list()}.
+prepare_httpc_options(Host, Port, Path, Query, Method, [], Options) ->
+    Url = io_lib:format("https://~s:~p~s?~s", [Host, Port, Path, Query]),
+    {Url, list_to_atom(string:lowercase(Method)), prepare_httpc_options(Options)};
+prepare_httpc_options(Host, Port, Path, Query, Method, Param, Options) ->
+    Url = io_lib:format("https://~s:~p~s?~s&~s=", [Host, Port, Path, Query, Param]),
+    {Url, list_to_atom(string:lowercase(Method)), prepare_httpc_options(Options)}.
+
+%% TODO: FIXME: proper handling of content-type
+-spec make_httpc_request(atom(), string(), binary(), list()) -> httpc:request().
+make_httpc_request(post, Url, Data, Headers) ->
+    {Url, Headers, "application/octet-stream", Data};
+make_httpc_request(_Other, Url, Data, Headers) ->
+    NewData = lists:map(fun (10) -> "%0A"; (13) -> "%0D"; (C) when C > 128 -> "%20"; (C) -> C end, binary_to_list(http_uri:encode(Data))),
+    {lists:flatten(Url ++ NewData), Headers}.
+
+%% TODO: FIXME: check correct format of data (http domain name?)
+-spec make_https_writer(string(), inet:port_number(), string(),
+                       string(), string(), string(), list(string())) -> fun().
+make_https_writer(Host, Port, Path, Query, Type, Param, Options) ->
+    {Url, Method, Options} = prepare_httpc_options(Host, Port, Path, Query, Type, Param, Options),
+    inets:start(),
+    ssl:start(),
+    fun F(_N, Meta) ->
+        {F, {http,
+            fun (Data) ->   
+                Request = make_httpc_request(Method, Url, Data, Options),
+                try 
+                    _Res = httpc:request(Method, Request, [{ssl,[{verify,0}]}], [])
+                    %% FIXME: TODO: catch&report {error,{failed_connect, ...            
+                catch 
+                    _:_ -> ok
+                end
+            end
+        },
+        [{output, http} | Meta]}
+    end.
+
 -spec string_outputs(string()) -> fun().
 string_outputs(Str) ->
     case Str of
@@ -303,6 +355,7 @@ string_outputs(Str) ->
                                                 {type, raw}, {family, inet}]
                                               );
         {http, Params} -> http_writer(Params);
+        {https, Params} -> https_writer(Params);
         _Else -> file_writer(Str)
     end.
 
