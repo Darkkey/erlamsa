@@ -78,8 +78,14 @@ prepare_auxproc(Dict) ->
         ExtRnd(Dict)
     ].
 
+-spec create_pid_file(list() | nil) -> ok.
+create_pid_file(nil) -> ok;
+create_pid_file(FileName) ->
+    file:write_file(FileName, os:getpid()).
+
 -spec start_behaviour(options()) -> {list(supervisor:child_spec()), fun()}.
 start_behaviour(Dict) ->
+    create_pid_file(maps:get(pidfile, Dict, nil)),
     case maps:get(mode, Dict, stdio) of
         genfuzz -> %%TODO: make genfuzz supevisable
             {[], fun () -> erlamsa_gfcomms:start(Dict), sleep() end};
