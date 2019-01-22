@@ -1,0 +1,2 @@
+gcc clients/r2mon/tcpserver.cc -o clients/r2mon/tcpserver
+echo 'My name is Sergio' | ./erlamsa -L - -o tcp://localhost:10001 -O r2:app=clients/r2mon/tcpserver,after=exec,after_params=clients/r2mon/tcpserver_after.sh -n 10000 -S 100

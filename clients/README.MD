@@ -1,4 +1,4 @@
-# Examples on how to interact with erlamsa as a service
+# Examples on how to interact with erlamsa
 
 For advanced usage see https://github.com/Darkkey/erlamsa#using-as-a-service 
 
