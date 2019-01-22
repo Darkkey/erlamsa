@@ -21,4 +21,5 @@ clients/frida/example
 .vscode
 *.pid
 *.bak
+*.pem
 erlamsa

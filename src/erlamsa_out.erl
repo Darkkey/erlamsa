@@ -22,7 +22,7 @@
 %%%-------------------------------------------------------------------
 %%% @author dark_k3y
 %%% @doc
-%%% Output to real-world
+%%% Output to real world
 %%% @end
 %%%-------------------------------------------------------------------
 -module(erlamsa_out).
@@ -61,11 +61,23 @@ output(Ll, Fd, Post) ->
     close_port(FlushedData, NewFd),
     {Muta, Meta, N, FlushedData}.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% STDIO Streams
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 -spec stdout_stream(non_neg_integer(), meta()) -> {fun(), output_dest(), meta_list()}.
 stdout_stream(_, Meta) -> {fun stdout_stream/2, stdout, [{output, stdout} | Meta]}.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Internal return output
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 -spec return_stream(non_neg_integer(), meta()) -> {fun(), output_dest(), meta_list()}.
 return_stream(_, Meta) -> {fun return_stream/2, return, [{output, return} | Meta]}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% File(s) output
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 -spec build_name(list(binary()), integer(), list(list())) -> string().
 build_name([H], _N, Acc) ->
@@ -89,6 +101,10 @@ file_writer(Str) ->
         end
     end.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Rawsocket client output
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 -spec rawsock_writer(inet:ip_address(), list()) -> fun().
 rawsock_writer(Addr, Options) ->
     fun F(_N, Meta) ->
@@ -108,6 +124,9 @@ rawsock_writer(Addr, Options) ->
         end
     end.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% TCP Server Output
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 -spec tcplisten_writer(inet:port_number(), fun()) -> fun().
 tcplisten_writer(LocalPort, PostProcess) ->
@@ -121,9 +140,9 @@ tcplisten_writer(LocalPort, PostProcess) ->
             ok -> {F, {net,
                 fun (Data) ->
                     {ok, ClientSock} = gen_tcp:accept(ListenSock),
-                    {ok, {Ip, _}} = inet:sockname(ClientSock),
-                    ets:insert(global_config, [{cm_host, Ip}]),
-                    {ok, {Address, Port}} = inet:peername(ClientSock),
+                    {ok, {IP, _}} = inet:sockname(ClientSock), %% peername?
+                    ets:insert(global_config, [{cm_host, IP}]),
+                    {ok, {Address, Port}} = inet:peername(ClientSock), %% peername?
                     TmpRecv = gen_tcp:recv(ClientSock, 0, infinity),
                     erlamsa_logger:log(info, "tcp client connect from ~p:~p: ~p",
                                        [Address, Port, TmpRecv]),
@@ -141,14 +160,62 @@ tcplisten_writer(LocalPort, PostProcess) ->
         end
     end.
 
--spec tcpsock_writer(inet:ip_address(), inet:port_number()) -> fun().
-tcpsock_writer(Addr, Port) ->
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% TCP/TLS Server Output
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-spec make_tlslisten_writer(string(), string()) -> fun().
+make_tlslisten_writer(CertFile, KeyFile) ->
+    fun(LocalPort, PostProcess) ->
+        ssl:start(),
+        fun F(_N, Meta) ->
+            {Res, ListenSock} = ssl:listen(LocalPort, 
+                                            [{certfile, CertFile}, {keyfile, KeyFile},
+                                            {reuseaddr, true}, {send_timeout, 5000}, {active, false}]),
+            case Res of
+                ok -> {F, {net,
+                    fun (Data) ->
+                        {ok, TLSTransportSocket} = ssl:transport_accept(ListenSock),
+                        %% TODO: check that handshake has happened
+                        case ssl:handshake(TLSTransportSocket) of 
+                            {ok, ClientSock} ->
+                                {ok, {IP, _}} = ssl:sockname(ClientSock),
+                                ets:insert(global_config, [{cm_host, IP}]),
+                                {ok, {Address, Port}} = ssl:peername(ClientSock),
+                                TmpRecv = ssl:recv(ClientSock, 0, infinity),
+                                erlamsa_logger:log(info, "TLS client connect from ~p:~p: ~p",
+                                            [Address, Port, TmpRecv]),
+                                ssl:send(ClientSock, PostProcess(Data)), timer:sleep(1),
+                                ssl:close(ClientSock);
+                            {error, Error} ->
+                                erlamsa_logger:log(info, "TLS client connect error: ~p",
+                                            [Error])
+                        end
+                    end,
+                    %% TODO: ugly timeout before closing..., should be in another thread
+                    fun () -> ssl:close(ListenSock), ok end
+                    },
+                    [{output, tlssock} | Meta]};
+                Else ->
+                    Err = lists:flatten(io_lib:format("Error listening on tcp port ~p: '~s'",
+                                                    [LocalPort, Else])),
+                    erlamsa_utils:error({cantconnect, Err})
+            end
+        end
+    end.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% TCP Client output
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-spec tcpsock_writer(inet:ip_address(), inet:port_number(), fun()) -> fun().
+tcpsock_writer(Addr, Port, Maker) ->
     erlamsa_utils:set_routing_ip(tcp, Addr, Port),
     fun F(_N, Meta) ->
         {Res, Sock} = gen_tcp:connect(Addr, Port, [binary, {active, true}], ?TCP_TIMEOUT),
         case Res of
             ok -> {F, {net,
-                fun (Data) -> gen_tcp:send(Sock, Data) end,
+                fun (Data) -> Packet = Maker(Data), gen_tcp:send(Sock, Packet) end,
                 %% TODO: ugly timeout before closing..., should be in another thread
                 fun () -> timer:sleep(50), gen_tcp:close(Sock), ok end
                 }, [{output, tcpsock} | Meta]};
@@ -158,6 +225,32 @@ tcpsock_writer(Addr, Port) ->
                 erlamsa_utils:error({cantconnect, Err})
         end
     end.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% TCP/TLS Client output
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-spec tlssock_writer(inet:ip_address(), inet:port_number(), fun()) -> fun().
+tlssock_writer(Addr, Port, Maker) ->
+    ssl:start(),
+    erlamsa_utils:set_routing_ip(tcp, Addr, Port),
+    fun F(_N, Meta) ->
+        {Res, Sock} = ssl:connect(Addr, Port, [binary, {active, true}], ?TCP_TIMEOUT),
+        case Res of
+            ok -> {F, {net,
+                fun (Data) -> Packet = Maker(Data), ssl:send(Sock, Packet) end,
+                fun () -> timer:sleep(50), ssl:close(Sock), ok end
+                }, [{output, tcpsock} | Meta]};
+            _Else ->
+                Err = lists:flatten(io_lib:format("Error opening TLS connection to ~s:~p '~s'",
+                                                  [Addr, Port, Sock])),
+                erlamsa_utils:error({cantconnect, Err})
+        end
+    end.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% UDP Server Output
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 -spec udplisten_writer(inet:port_number()) -> fun().
 udplisten_writer(LocalPort) ->
@@ -183,6 +276,10 @@ udplisten_writer(LocalPort) ->
         end
     end.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% UDP Client Output
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 -spec udpsock_writer(inet:ip_address(), inet:port_number(), inet:port_number(), list()) -> fun().
 udpsock_writer(Addr, PortFrom, PortTo, Options) when PortFrom =:= PortTo ->
     udpsock_writer(Addr, 0, PortTo, Options);
@@ -201,6 +298,9 @@ udpsock_writer(Addr, PortFrom, PortTo, Options) ->
         end
     end.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% HTTP protocol helpers
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 -spec make_http_server_reply(string()) -> fun().
 make_http_server_reply(ContentType) ->
@@ -213,30 +313,27 @@ make_http_server_reply(ContentType) ->
         <<Headers/binary, Data/binary>>
     end.
 
--spec http_writer(tuple()) -> fun().
-http_writer({[], Port, _Path, _Query, []}) ->
-    http_writer({[], Port, _Path, _Query, "application/octet-stream"});
-http_writer({[], Port, _Path, _Query, ContentType}) ->
-    tcplisten_writer(Port, make_http_server_reply(ContentType));
-http_writer({Host, Port, Path, Query, []}) ->
-    make_http_writer(Host, Port, Path, Query, "GET", "", []);
-http_writer({Host, Port, Path, Query, ["GET", Param|T]}) ->
-    make_http_writer(Host, Port, Path, Query, "GET", Param, T);
-http_writer({Host, Port, Path, Query, [Type | T]}) ->
-    make_http_writer(Host, Port, Path, Query, Type, "", T).
+-spec make_http_writer(fun(), inet:ip_address(), inet:port_number(), string(),
+                       string(), string(), string(), list(string())) -> fun().
+make_http_writer(CommFunc, Host, Port, Path, Query, Type, Param, Options) ->
+    Maker = create_http_header(Host, Type, Param, Path, Query, http_headers(Options, [])),
+    CommFunc(Host, Port, Maker).
 
--spec https_writer(tuple()) -> fun().
-https_writer({Host, Port, Path, Query, []}) ->
-    make_https_writer(Host, Port, Path, Query, "GET", "", []);
-https_writer({Host, Port, Path, Query, ["GET", Param|T]}) ->
-    make_https_writer(Host, Port, Path, Query, "GET", Param, T);
-https_writer({Host, Port, Path, Query, [Type | T]}) ->
-    make_https_writer(Host, Port, Path, Query, Type, "", T).
+-spec http_writer(tuple(), fun(), fun()) -> fun().
+http_writer({[], Port, _Path, _Query, []}, Writer, Listener) ->
+    http_writer({[], Port, _Path, _Query, "application/octet-stream"}, Writer, Listener);
+http_writer({[], Port, _Path, _Query, ContentType}, _Writer, Listener) ->
+    Listener(Port, make_http_server_reply(ContentType));
+http_writer({Host, Port, Path, Query, []}, Writer, _Listener) ->
+    make_http_writer(Writer, Host, Port, Path, Query, "GET", "", []);
+http_writer({Host, Port, Path, Query, ["GET", Param|T]}, Writer, _Listener) ->
+    make_http_writer(Writer, Host, Port, Path, Query, "GET", Param, T);
+http_writer({Host, Port, Path, Query, [Type | T]}, Writer, _Listener) ->
+    make_http_writer(Writer, Host, Port, Path, Query, Type, "", T).
 
 -spec make_host_header(string()) -> binary().
 make_host_header(Host) ->
     list_to_binary("Host: " ++ Host ++ [13, 10]).
-
 
 -spec create_http_reply_headers(list(), binary(), binary()) -> fun().
 create_http_reply_headers(First, HostHeader, Headers) ->
@@ -269,95 +366,52 @@ http_headers([H|T], Acc) ->
 http_headers([], Acc) ->
     flush(Acc).
 
-%% TODO: FIXME: check correct format of data (http domain name?)
--spec make_http_writer(inet:ip_address(), inet:port_number(), string(),
-                       string(), string(), string(), list(string())) -> fun().
-make_http_writer(Host, Port, Path, Query, Type, Param, Options) ->
-    Maker = create_http_header(Host, Type, Param, Path, Query, http_headers(Options, [])),
-    fun F(_N, Meta) ->
-        {F, {http,
-            fun (Data) ->
-                Packet = Maker(Data),
-                {ok, Sock} = gen_tcp:connect(Host, Port, [binary, {active, true}], ?TCP_TIMEOUT),
-                gen_tcp:send(Sock, Packet),
-                gen_tcp:close(Sock)
-            end
-        },
-        [{output, http} | Meta]}
-    end.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Output specification parser
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% TODO: FIXME: proper handling of content-type
--spec prepare_httpc_options(list()) -> list().
-prepare_httpc_options(Options) ->
-    lists:map(fun(Hdr) ->  string:tokens(Hdr, "=") end, Options).
-
--spec prepare_httpc_options(string(), string(), inet:port_number(), string(),
-                       string(), string(), list(string())) -> {string(), atom(), list()}.
-prepare_httpc_options(Host, Port, Path, Query, Method, [], Options) ->
-    Url = io_lib:format("https://~s:~p~s?~s", [Host, Port, Path, Query]),
-    {Url, list_to_atom(string:lowercase(Method)), prepare_httpc_options(Options)};
-prepare_httpc_options(Host, Port, Path, Query, Method, Param, Options) ->
-    Url = io_lib:format("https://~s:~p~s?~s&~s=", [Host, Port, Path, Query, Param]),
-    {Url, list_to_atom(string:lowercase(Method)), prepare_httpc_options(Options)}.
-
-%% TODO: FIXME: proper handling of content-type
--spec make_httpc_request(atom(), string(), binary(), list()) -> httpc:request().
-make_httpc_request(post, Url, Data, Headers) ->
-    {Url, Headers, "application/octet-stream", Data};
-make_httpc_request(_Other, Url, Data, Headers) ->
-    NewData = lists:map(fun (10) -> "%0A"; (13) -> "%0D"; (C) when C > 128 -> "%20"; (C) -> C end, binary_to_list(http_uri:encode(Data))),
-    {lists:flatten(Url ++ NewData), Headers}.
-
-%% TODO: FIXME: check correct format of data (http domain name?)
--spec make_https_writer(string(), inet:port_number(), string(),
-                       string(), string(), string(), list(string())) -> fun().
-make_https_writer(Host, Port, Path, Query, Type, Param, Options) ->
-    {Url, Method, Options} = prepare_httpc_options(Host, Port, Path, Query, Type, Param, Options),
-    inets:start(),
-    ssl:start(),
-    fun F(_N, Meta) ->
-        {F, {http,
-            fun (Data) ->   
-                Request = make_httpc_request(Method, Url, Data, Options),
-                try 
-                    _Res = httpc:request(Method, Request, [{ssl,[{verify,0}]}], [])
-                    %% FIXME: TODO: catch&report {error,{failed_connect, ...            
-                catch 
-                    _:_ -> ok
-                end
-            end
-        },
-        [{output, http} | Meta]}
-    end.
-
+%% TODO: FIXME: using of cert and key file from cmd options
 -spec string_outputs(string()) -> fun().
 string_outputs(Str) ->
     case Str of
         "-" -> fun stdout_stream/2;
         return -> fun return_stream/2;
         {tcp, {Port}} -> tcplisten_writer(list_to_integer(Port), fun (A) -> A end);
+        {tls, {Port}} -> TLSListen_Writer = make_tlslisten_writer("cert.pem", "key.pem"),
+                         TLSListen_Writer(list_to_integer(Port), fun (A) -> A end);
         {udp, {Port}} -> udplisten_writer(list_to_integer(Port));
-        {tcp, {Addr, Port}} -> tcpsock_writer(Addr, list_to_integer(Port));
+        {tcp, {Addr, Port}} -> tcpsock_writer(Addr, list_to_integer(Port), fun (A) -> A  end);
+        {tls, {Addr, Port}} -> tlssock_writer(Addr, list_to_integer(Port), fun (A) -> A  end);
         {udp, {StrIfAddr, PortFrom, Addr = "255.255.255.255", PortTo}} -> 
-            {ok, IfAddr} = inet:getaddr(StrIfAddr, inet), %%TODO: ugly, refactor in distinc function
+            {ok, IfAddr} = inet:getaddr(StrIfAddr, inet), %%TODO: ugly, refactor in distinct function
             udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), [{broadcast, true}, {ip, IfAddr}]);
         {udp, {StrIfAddr, PortFrom, Addr, PortTo}} -> 
             {ok, IfAddr} = inet:getaddr(StrIfAddr, inet),
             udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), [{ip, IfAddr}]);
         {udp, {PortFrom, Addr, PortTo}} -> udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), []);
         {udp, {Addr, Port}} -> udpsock_writer(Addr, list_to_integer(Port), list_to_integer(Port), []);
+        %% RAW IP output <-- fuzzed packet is inside proper IP packet
         {ip, {Addr, Proto}} -> rawsock_writer(Addr,
                                               [{protocol, list_to_integer(Proto)},
                                                {type, raw}, {family, inet}]
                                              );
+        %% RAW output <-- fuzzed packet are on layer 3
         {raw, {Addr, Iface}} -> rawsock_writer(Addr,
                                                [{protocol, raw}, {interface, Iface},
                                                 {type, raw}, {family, inet}]
                                               );
-        {http, Params} -> http_writer(Params);
-        {https, Params} -> https_writer(Params);
+        {http, Params} -> 
+            http_writer(Params, fun tcpsock_writer/3, fun tcplisten_writer/2);
+        {https, Params} -> 
+            TLSListen_Writer = make_tlslisten_writer("cert.pem", "key.pem"),
+            http_writer(Params, fun tlssock_writer/3, TLSListen_Writer);
         _Else -> file_writer(Str)
     end.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% PORTS Operations
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% write blocks to port
 -spec blocks_port(lazy_list_of_bins(), output_dest(), fun())
@@ -377,7 +431,6 @@ blocks_port(Ll = [H|T], Fd, Data, N, Post) when is_binary(H) ->
     end;
 blocks_port(Ll, Fd, Data, N, _) -> {Ll, Fd, Data, N}.
 
-
 %% closes the port (and possibly writes the data in case of HTTP)
 -spec close_port(binary(), output_dest()) -> ok | {'error', file:posix() | badarg | terminated}.
 close_port(_, stdout) -> ok;
@@ -392,5 +445,6 @@ close_port(_, Fd) -> file:close(Fd).
 write_really(Data, return) -> {ok, Data};
 write_really(Data, stdout) -> {file:write(standard_io, Data), <<>>};
 write_really(Data, {http, _Final}) -> {ok, Data};
+write_really(Data, {https, _Final}) -> {ok, Data};
 write_really(Data, {net, Writer, _Closer}) -> {Writer(Data), <<>>};
 write_really(Data, Fd) -> {file:write(Fd, Data), <<>>}.
