@@ -117,12 +117,18 @@ wait_for_finished(N) ->
             wait_for_finished(N-1)
     end.
 
+-spec record_result(binary(), list()) -> list().
+record_result(<<>>, Acc) -> Acc;
+record_result(X, Acc) -> [X | Acc].
+
 -spec fuzzer(#{}) -> [binary()].
 fuzzer(Dict) ->
+    %% Getting All Data from options
     SeedFun = maps:get(seed, Dict, fun() -> erlamsa_rnd:gen_urandom_seed() end),
     CustomMutas = erlamsa_utils:make_mutas(maps:get(external_mutations, Dict, nil)),
     Mutas = maps:get(mutations, Dict, erlamsa_mutations:default(CustomMutas)),
-    N = maps:get(n, Dict, 1),
+    Cnt = maps:get(n, Dict, 1), 
+    MaxFails = maps:get(maxfails, Dict, ?TOO_MANY_FAILED_ATTEMPTS),
     Paths = maps:get(paths, Dict, ["-"]),
     Verbose = erlamsa_utils:verb(stderr, maps:get(verbose, Dict, 0)),
     Seed = SeedFun(),
@@ -135,11 +141,9 @@ fuzzer(Dict) ->
     Muta = erlamsa_mutations:make_mutator(Mutas, CustomMutas),
     DirectInput = maps:get(input, Dict, nil),
     BlockScale = maps:get(blockscale, Dict, 1.0),
-    %% TODO: FIXME: for mutithreaded output choose generator later?
-    {GenName, Gen} = erlamsa_gen:make_generator(maps:get(generators, Dict,
+    Generator = erlamsa_gen:make_generator(maps:get(generators, Dict,
                                         erlamsa_gen:default()), Paths,
-                                        DirectInput, BlockScale, Fail, N
-                                    ),
+                                        DirectInput, BlockScale, Fail, Cnt),
     RecordMeta = maybe_meta_logger( maps:get(metadata, Dict, nil), Fail),
     RecordMeta({seed, Seed}),
     PatList = maps:get(patterns, Dict, erlamsa_patterns:default()),
@@ -147,68 +151,66 @@ fuzzer(Dict) ->
     Out = erlamsa_out:string_outputs(maps:get(output, Dict, "-")),
     Post = erlamsa_utils:make_post(maps:get(external_post, Dict, nil)),
     Sleep = maps:get(sleep, Dict, 0),
-    {ThreadMode, Threads} = get_threading_mode(maps:get(output, Dict, "-"), N, maps:get(workers, Dict, 1)),
-    case ThreadMode of 
-        single ->
-            fuzzer_loop(Muta, Gen, Pat, Out, RecordMeta, Verbose, {1, 0}, N, Sleep, Post, []);
-        multi -> 
-            %% Selecting generator
-            %% For stdio we need to pre-read the data;
-            %% otherwise it could be some random that we should variate
-            MultiGen = case GenName of
-                stdin -> GenRes = Gen(), fun() -> GenRes end;
-                _Else -> Gen
-            end,
-            MainProcessPid = erlang:self(),
-            [spawn(fun() -> 
-                    erlamsa_logger:log(info, "fuzzing worker process ~p started, range {~p, ~p} + ~p additional", [W, A, B, R]),
-                    fuzzer_loop(Muta, MultiGen, Pat, Out, RecordMeta, Verbose, {A, 0}, B, Sleep, Post, []),
-                    fuzzer_loop(Muta, MultiGen, Pat, Out, RecordMeta, Verbose, {R, 0}, R, Sleep, Post, []),
-                    MainProcessPid ! {finished, W, erlang:self(), {{A, B, W}, R}}
-                end)  || {{A, B, W}, R} <- Threads],
-            wait_for_finished(length(Threads))
-    end.
-
--spec record_result(binary(), list()) -> list().
-record_result(<<>>, Acc) -> Acc;
-record_result(X, Acc) -> [X | Acc].
-
--spec fuzzer_loop(fun(), fun(), fun(), fun(), fun(), fun(), non_neg_integer(),
-                  non_neg_integer(), non_neg_integer() | inf, fun(), list()) -> [binary()].
-fuzzer_loop(_, _, _, _, _, _, {0, _}, 0, _, _, _) ->
-    [];
-fuzzer_loop(_, _, _, _, RecordMetaFun, _, {I, _}, N, _, _, Acc)
-                                                    when is_integer(N) andalso N < I ->
-    RecordMetaFun({close, ok}), lists:reverse(Acc);
-fuzzer_loop(_, _, _, _, RecordMetaFun, _, {_, FailedI}, _, _, _, Acc)
-                                                    when FailedI > ?TOO_MANY_FAILED_ATTEMPTS  ->
-    io:format(standard_error, "Too many failed output attempts (~p), stopping.~n", [FailedI]),
-    erlamsa_logger:log(error, "Too many failed output attempts (~p), stopping.~n", [FailedI]),
-    RecordMetaFun({status, toomanyfailedoutputs}), RecordMetaFun({close, ok}),
-    lists:reverse(Acc);
-fuzzer_loop(Muta, Gen, Pat, Out, RecordMetaFun, Verbose, {I, Fails}, N, Sleep, Post, Acc) ->
-    {Ll, GenMeta} = Gen(),
-    {NewOut, NewMuta, Data, NewFails} =
-        try
-            {CandidateOut, Fd, OutMeta} = Out(I, [{nth, I}, GenMeta]),
-            Tmp = Pat(Ll, Muta, OutMeta),
-            {CandidateMuta, Meta, Written, CandidateData} = erlamsa_out:output(Tmp, Fd, Post),
-            RecordMetaFun(lists:reverse(lists:flatten([{written, Written}| Meta]))),
-            Verbose(io_lib:format("output: ~p~n", [Written])),
-            erlamsa_logger:log(info, "fuzzing cycle ~p/~p finished, written ~p bytes", [I, N, Written]),
-            {CandidateOut, CandidateMuta, CandidateData, 0}
-        catch
-            {cantconnect, _Err} ->
-                timer:sleep(10*Fails),
-                {Out, Muta, <<>>, Fails + 1};
-            {fderror, _Err} ->
-                {Out, Muta, <<>>, Fails + 1}
+    %% Creating the Fuzzing Loop function
+    FuzzingLoop = 
+        fun 
+            FuzzingLoopFun(_, _, _, {0, _}, _N, _) -> [];
+            FuzzingLoopFun(_, _, _, {I, _}, N, Acc) when is_integer(N) andalso N < I ->
+                RecordMeta({close, ok}), lists:reverse(Acc);
+            FuzzingLoopFun(_, _, _, {_, FailedI}, N, Acc)
+                                                    when FailedI > MaxFails ->
+                io:format(standard_error, "Too many failed output attempts (~p), stopping.~n", [FailedI]),
+                erlamsa_logger:log(error, "Too many failed output attempts (~p), stopping.~n", [FailedI]),
+                RecordMeta({status, toomanyfailedoutputs}), RecordMeta({close, ok}),
+                lists:reverse(Acc);
+            FuzzingLoopFun(CurMuta, DataGen, CurOut, {I, Fails}, N, Acc) ->
+                {Ll, GenMeta} = DataGen(),
+                {NewOut, NewMuta, Data, NewFails} =
+                    try
+                        {CandidateOut, Fd, OutMeta} = CurOut(I, [{nth, I}, GenMeta]),
+                        Tmp = Pat(Ll, CurMuta, OutMeta),
+                        {CandidateMuta, Meta, Written, CandidateData} = erlamsa_out:output(Tmp, Fd, Post),
+                        RecordMeta(lists:reverse(lists:flatten([{written, Written}| Meta]))),
+                        Verbose(io_lib:format("output: ~p~n", [Written])),
+                        erlamsa_logger:log(info, "fuzzing cycle ~p/~p finished, written ~p bytes", [I, N, Written]),
+                        {CandidateOut, CandidateMuta, CandidateData, 0}
+                    catch
+                        {cantconnect, _Err} ->
+                            timer:sleep(10*Fails),
+                            {CurOut, CurMuta, <<>>, Fails + 1};
+                        {fderror, _Err} ->
+                            {CurOut, CurMuta, <<>>, Fails + 1}
+                    end,
+                timer:sleep(Sleep),
+                %%FIXME: record_result could lead to memory exhaustion on long loops, fix it
+                FuzzingLoopFun(NewMuta, DataGen, NewOut, {I + 1, NewFails}, N, record_result(Data, Acc))
         end,
-    timer:sleep(Sleep),
-    %%FIXME: record_result could lead to memory exhaustion on long loops, fix it
-    fuzzer_loop(NewMuta, Gen, Pat, NewOut, RecordMetaFun, Verbose, {I + 1, NewFails},
-                N, Sleep, Post, record_result(Data, Acc)
-               ).
+    %% Running in single- or multi- threaded mode
+    {ThreadMode, Threads} = get_threading_mode(maps:get(output, Dict, "-"), Cnt, maps:get(workers, Dict, 1)),
+    run_fuzzing_loop(ThreadMode, FuzzingLoop, Muta, Generator, Out, Cnt, Threads).
+
+-spec run_fuzzing_loop(atom(), fun(), fun(), {atom(), fun()}, fun(), non_neg_integer(), non_neg_integer()) -> ok.
+run_fuzzing_loop(single, FuzzingLoop, Muta, {_GenName, Gen}, Out, Cnt, _Threads) ->
+    FuzzingLoop(Muta, Gen, Out, {1, 0}, Cnt, []);
+run_fuzzing_loop(multi, FuzzingLoop, Muta, {GenName, Gen}, Out, _Cnt, Threads) ->
+    %% Selecting generator
+    %% For stdio we need to pre-read the data;
+    %% otherwise it could be some random that we should variate
+    MultiGen = case GenName of
+        stdin -> GenRes = Gen(), fun() -> GenRes end;
+        _Else -> Gen
+    end,
+    MainProcessPid = erlang:self(),
+    [spawn(fun() -> 
+            erlamsa_logger:log(info, "fuzzing worker process ~p started, range {~p, ~p} + ~p additional", [W, A, B, R]),
+            FuzzingLoop(Muta, MultiGen, Out, {A, 0}, B, []),
+            FuzzingLoop(Muta, MultiGen, Out, {R, 0}, R, []),
+            MainProcessPid ! {finished, W, erlang:self(), {{A, B, W}, R}}
+        end)  || {{A, B, W}, R} <- Threads],
+    wait_for_finished(length(Threads)).
+
+
+
 
 
 

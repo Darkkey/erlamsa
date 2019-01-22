@@ -94,8 +94,8 @@ cmdline_optsspec() ->
     %                     "keyfile",		string,			        "<arg>, key file for fuzzing TLS-based communications"},
     {list		, $l,	"list",			undefined,				"list i/o options, monitors, mutations, patterns and generators"},
     {logger		, $L,	"logger",		string,					"<arg>, logger options, e.g. level=critical..debug, file=filename, csv=filename.csv, mnesia=dir or stdout (-) or stderr (-err)"},
-    % {maxfails, undefined, 	
-    %                     "maxfails",		{integer, 10},		    "<arg>, maximum failed attempts to output data to the network before giving up"},
+    {maxfails, undefined, 	
+                        "maxfails",		{integer, 10},		    "<arg>, maximum failed attempts to output data to the network before giving up"},
     {meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"},
     {mutations  , $m,   "mutations",	{string, erlamsa_mutations:tostring(erlamsa_mutations:mutations())}, 
                                                                 "<arg>, which mutations to use"},
@@ -467,6 +467,8 @@ parse_opts([{pidfile, PidFile}|T], Dict) ->
     parse_opts(T, maps:put(pidfile, PidFile, Dict));
 parse_opts([{maxrunningtime, MT}|T], Dict) ->
     parse_opts(T, maps:put(maxrunningtime, MT, Dict));
+parse_opts([{maxfails, MT}|T], Dict) ->
+    parse_opts(T, maps:put(maxfails, MT, Dict));
 parse_opts([{blockscale, B}|T], Dict) ->
     parse_opts(T, maps:put(blockscale, B, Dict));
 parse_opts([{genfuzz, BP}|T], Dict) ->
