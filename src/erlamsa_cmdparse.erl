@@ -64,6 +64,7 @@ outputs() ->
         {"[tcp|udp]://:port", "listens on tcp or udp <port> and sends fuzzed data upon client connect/send message"},
         {"http://:port,[Content-Type]", "simple HTTP server on <port> that sends fuzzed data upon client's request"},
         {"http://addr[:port]/path?params,[GET|POST],header1,...", "send fuzzed date to remote http host located at addr"},
+        {"[https|tls]://...", "same as http and tcp, but data is TLS-wrapped"},
         {"ip://ipaddr:proto", "send fuzzed data to remote host located at <ipaddr> using protocol no. <proto> on top of IP (Linux & OS X)"},
         {"raw://ipaddr:iface", "send fuzzed data to remote host located at <ipaddr> raw protocol, outgoing interface is specified with <iface> (Linux only)"}
         ].
@@ -76,36 +77,48 @@ cmdline_optsspec() ->
     {about		, $a, 	"about", 		undefined, 				"what is this thing"},
     {blockscale , $b, 	"blockscale", 	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize multiplier"},
     {bypass		, $B,	"bypass",		{integer, 0},			"<arg>, fuzzing proxy: bypass first <arg> packets before start fuzzing (TCP/HTTP only)"},
+    % {certfile	, undefined,	
+    %                     "certfile",		string,			        "<arg>, certificate file for fuzzing TLS-based communications"},
     {debug		, $d,	"debug",		undefined,				"run in debug/profiler mode, activates verbose"},
     {detach	    , $D,	"detach",		undefined,			    "detach from console after start (service mode)"},
     {external	, $e,   "external", 	string,					"external pre/post/generation/mutation module"},
+    % {faildelay	, undefine,   
+    %                     "faildelay", 	{integer, 0},			"<arg>, additional delay (in ms.) after failed attempt to output data to the network"},
     {generators , $g,	"generators",	{string, erlamsa_gen:tostring(erlamsa_gen:generators())}, 
                                                                 "<arg>, which data generators to use"},
     {genfuzz	, $G,	"genfuzz",		float,					"<arg>, activate generation-based fuzzer, arg is base probablity"},
     {help		, $h, 	"help", 		undefined, 				"show this thing"},
     {httpsvc    , $H,   "httpservice",  string,				    "<arg>, run as HTTP service on <host:port>, e.g.: 127.0.0.1:17771"},
     {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or proto://:port, proto://host:port for data endpoint (generation mode)"},
+    % {keyfile	, undefined,	
+    %                     "keyfile",		string,			        "<arg>, key file for fuzzing TLS-based communications"},
     {list		, $l,	"list",			undefined,				"list i/o options, monitors, mutations, patterns and generators"},
     {logger		, $L,	"logger",		string,					"<arg>, logger options, e.g. level=critical..debug, file=filename, csv=filename.csv, mnesia=dir or stdout (-) or stderr (-err)"},
+    % {maxfails, undefined, 	
+    %                     "maxfails",		{integer, 10},		    "<arg>, maximum failed attempts to output data to the network before giving up"},
     {meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"},
     {mutations  , $m,   "mutations",	{string, erlamsa_mutations:tostring(erlamsa_mutations:mutations())}, 
                                                                 "<arg>, which mutations to use"},
     {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
-    {noiolog   	, $N,   "no-io-logging",undefined,				"disable logging of incoming and outgoing data"},
+    {noiolog   	, undefined,   
+                        "no-io-logging",undefined,				"disable logging of incoming and outgoing data"},
     {monitor	, $O,   "monitor",      string,					"+-<arg>, add/remove monitor (use additional -O for each monitor"},
     {output		, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, [proto]://192.168.0.1:80 or [proto]://:80 [-]"},
     {patterns	, $p,	"patterns",		{string, erlamsa_patterns:tostring(erlamsa_patterns:patterns())},	
                                                                 "<arg>, which mutation patterns to use"},
+    % {pidfile	, undefined,	
+    %                     "pidfile",		string,                 "<arg>, PID file name"},
     {proxyprob	, $P,	"proxy",		string,					"<arg>, activate fuzzing proxy mode, param is fuzzing probability in form of s->c,c->s e.g.: 0.5,0.5"},
-%	 {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},
+    % {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},
     {seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int or source:device for an external source of entropy (e.g. binary file)"},
     {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},
     {maxrunningtime
-                , $t, 	"maxrunningtime",
+                , undefined, "maxrunningtime",
                                         {integer, 30}, 		    "<arg>, maximum running time for fuzzing instance (service/proxy modes only)"},
     {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose, show some progress during generation"},
     {version	, $V, 	"version",		undefined, 				"show program version"},
     {workers	, $w, 	"workers",		integer,    			"<arg>, number of working threads (1 for standalone, 10 for proxy/fass)"}
+    % ,{heXinput	, $X, 	"hexinput",		undefined,    			"treat input data as a hex string"},
 ].
 
 usage() ->
@@ -318,12 +331,16 @@ parse_url([<<"raw">>|T], _URL) ->
     parse_sock_addr(raw, binary_to_list(hd(T)));
 parse_url([<<"tcp">>|T], _URL) ->
     parse_sock_addr(tcp, binary_to_list(hd(T)));
+parse_url([<<"tls">>|T], _URL) ->
+    parse_sock_addr(tls, binary_to_list(hd(T)));
 parse_url([<<"http">>|_T], URL) ->
     parse_http_addr(URL);
 parse_url([<<"https">>|_T], URL) ->
     parse_http_addr(URL);
+%parse_url([<<"exec">>|_T], URL) ->
+%    parse_exec(URL);
 parse_url(_, URL) ->
-    fail(io_lib:format("invalid URL specification: '~s'", [URL])).
+    fail(io_lib:format("invalid output URL specification: '~s'", [URL])).
 
 parse_output(Output) ->
     {ok, SRe} = re:compile(":\\/\\/"),
