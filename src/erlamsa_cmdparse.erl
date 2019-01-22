@@ -106,8 +106,8 @@ cmdline_optsspec() ->
     {output		, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, [proto]://192.168.0.1:80 or [proto]://:80 [-]"},
     {patterns	, $p,	"patterns",		{string, erlamsa_patterns:tostring(erlamsa_patterns:patterns())},	
                                                                 "<arg>, which mutation patterns to use"},
-    % {pidfile	, undefined,	
-    %                     "pidfile",		string,                 "<arg>, PID file name"},
+    {pidfile	, undefined,	
+                        "pidfile",		string,                 "<arg>, PID file name"},
     {proxyprob	, $P,	"proxy",		string,					"<arg>, activate fuzzing proxy mode, param is fuzzing probability in form of s->c,c->s e.g.: 0.5,0.5"},
     % {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},
     {seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int or source:device for an external source of entropy (e.g. binary file)"},
@@ -463,6 +463,8 @@ parse_opts([recursive|T], Dict) ->
     parse_opts(T, maps:put(recursive, 1, Dict));
 parse_opts([{count, N}|T], Dict) ->
     parse_opts(T, maps:put(n, N, Dict));
+parse_opts([{pidfile, PidFile}|T], Dict) ->
+    parse_opts(T, maps:put(pidfile, PidFile, Dict));
 parse_opts([{maxrunningtime, MT}|T], Dict) ->
     parse_opts(T, maps:put(maxrunningtime, MT, Dict));
 parse_opts([{blockscale, B}|T], Dict) ->
