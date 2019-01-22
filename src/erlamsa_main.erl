@@ -86,12 +86,12 @@ test(Seed) -> fuzzer(
                         maps:put(output, "-",
                             maps:put(seed, Seed, maps:new()))))).
 
--spec get_threading_mode(any(), integer(), integer()) -> {single | multi, integer()}. 
-get_threading_mode(_, N, Workers) when N =:= 1; Workers =:= 1 ->  {single, 1};
-get_threading_mode("-", _N, _Workers) ->  {single, 1};
-get_threading_mode(return, _N, _Workers) ->  {single, 1};
-get_threading_mode(stdout, _N, _Workers) ->  {single, 1};
-get_threading_mode(stderr, _N, _Workers) ->  {single, 1};
+-spec get_threading_mode(any(), integer(), integer()) -> integer() | list. 
+get_threading_mode(_, N, Workers) when N =:= 1; Workers =:= 1 -> 1;
+get_threading_mode("-", _N, _Workers) ->  1;
+get_threading_mode(return, _N, _Workers) ->  1;
+get_threading_mode(stdout, _N, _Workers) ->  1;
+get_threading_mode(stderr, _N, _Workers) ->  1;
 get_threading_mode(_Mode, N, Workers) ->  
     Div = N div Workers,
     Rem = N rem Workers,
@@ -105,7 +105,7 @@ get_threading_mode(_Mode, N, Workers) ->
             MergeRem([], [], Acc) -> Acc
         end)(Tasks, lists:seq(0, Rem), []),
     [{{0, FirstB, FirstW}, FirstRem}|FT] = lists:reverse([{{LastA, min(LastB, N), WNum}, LastRem}|T]),
-    {multi, [{{1, FirstB, FirstW}, FirstRem}|FT]}.
+    [{{1, FirstB, FirstW}, FirstRem}|FT].
 
 -spec wait_for_finished(integer()) -> ok.
 wait_for_finished(0) -> ok;
@@ -157,7 +157,7 @@ fuzzer(Dict) ->
             FuzzingLoopFun(_, _, _, {0, _}, _N, _) -> [];
             FuzzingLoopFun(_, _, _, {I, _}, N, Acc) when is_integer(N) andalso N < I ->
                 RecordMeta({close, ok}), lists:reverse(Acc);
-            FuzzingLoopFun(_, _, _, {_, FailedI}, N, Acc)
+            FuzzingLoopFun(_, _, _, {_, FailedI}, _N, Acc)
                                                     when FailedI > MaxFails ->
                 io:format(standard_error, "Too many failed output attempts (~p), stopping.~n", [FailedI]),
                 erlamsa_logger:log(error, "Too many failed output attempts (~p), stopping.~n", [FailedI]),
@@ -186,13 +186,15 @@ fuzzer(Dict) ->
                 FuzzingLoopFun(NewMuta, DataGen, NewOut, {I + 1, NewFails}, N, record_result(Data, Acc))
         end,
     %% Running in single- or multi- threaded mode
-    {ThreadMode, Threads} = get_threading_mode(maps:get(output, Dict, "-"), Cnt, maps:get(workers, Dict, 1)),
-    run_fuzzing_loop(ThreadMode, FuzzingLoop, Muta, Generator, Out, Cnt, Threads).
+    Threads = get_threading_mode(maps:get(output, Dict, "-"), Cnt, maps:get(workers, Dict, 1)),
+    run_fuzzing_loop(Threads, FuzzingLoop, Muta, Generator, Out, Cnt).
 
--spec run_fuzzing_loop(atom(), fun(), fun(), {atom(), fun()}, fun(), non_neg_integer(), non_neg_integer()) -> ok.
-run_fuzzing_loop(single, FuzzingLoop, Muta, {_GenName, Gen}, Out, Cnt, _Threads) ->
+-spec run_fuzzing_loop(integer() | list(), fun(), fun(), {atom(), fun()}, fun(), non_neg_integer()) -> ok.
+%% single- threaded mode
+run_fuzzing_loop(1, FuzzingLoop, Muta, {_GenName, Gen}, Out, Cnt) ->
     FuzzingLoop(Muta, Gen, Out, {1, 0}, Cnt, []);
-run_fuzzing_loop(multi, FuzzingLoop, Muta, {GenName, Gen}, Out, _Cnt, Threads) ->
+%% multi- threaded mode
+run_fuzzing_loop(Threads, FuzzingLoop, Muta, {GenName, Gen}, Out, _Cnt) ->
     %% Selecting generator
     %% For stdio we need to pre-read the data;
     %% otherwise it could be some random that we should variate
