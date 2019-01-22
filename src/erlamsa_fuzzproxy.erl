@@ -280,8 +280,4 @@ fuzz_rnd(_Proto, Prob, _Rnd, Opts, Data) ->
     {ok, call_fuzzer(Prob, Opts, Data)}.
 
 call_fuzzer(_Prob, Opts, Data) ->
-    NewOpts = maps:put(paths, [direct],
-               maps:put(output, return,
-                maps:put(input, Data,
-                  Opts))),
-    erlamsa_fsupervisor:get_fuzzing_output(NewOpts).
+    erlamsa_fsupervisor:get_fuzzing_output(erlamsa_utils:get_direct_fuzzing_opts(Data, Opts)).

@@ -140,9 +140,10 @@ fuzzer(Dict) ->
     Fail = fun(Why) -> io:write(Why), throw(Why) end,
     Muta = erlamsa_mutations:make_mutator(Mutas, CustomMutas),
     DirectInput = maps:get(input, Dict, nil),
-    RecordFun = case DirectInput of 
-                    nil -> fun (_, _) -> [] end;
-                    _Else -> fun record_result/2
+    OutputStr = maps:get(output, Dict, "-"),
+    RecordFun = case OutputStr of 
+                    return -> fun record_result/2;
+                    _Else -> fun (_, _) -> [] end
                 end,
     BlockScale = maps:get(blockscale, Dict, 1.0),
     Generator = erlamsa_gen:make_generator(maps:get(generators, Dict,
@@ -152,7 +153,7 @@ fuzzer(Dict) ->
     RecordMeta({seed, Seed}),
     PatList = maps:get(patterns, Dict, erlamsa_patterns:default()),
     Pat = erlamsa_patterns:make_pattern(PatList),
-    Out = erlamsa_out:string_outputs(maps:get(output, Dict, "-")),
+    Out = erlamsa_out:string_outputs(OutputStr),
     Post = erlamsa_utils:make_post(maps:get(external_post, Dict, nil)),
     Sleep = maps:get(sleep, Dict, 0),
     %% Creating the Fuzzing Loop function
@@ -186,7 +187,6 @@ fuzzer(Dict) ->
                             {CurOut, CurMuta, <<>>, Fails + 1}
                     end,
                 timer:sleep(Sleep),
-                %%FIXME: record_result could lead to memory exhaustion on long loops, fix it
                 FuzzingLoopFun(NewMuta, DataGen, NewOut, {I + 1, NewFails}, N, RecordFun(Data, Acc))
         end,
     %% Running in single- or multi- threaded mode
