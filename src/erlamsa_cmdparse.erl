@@ -66,7 +66,8 @@ outputs() ->
         {"http://addr[:port]/path?params,[GET|POST],header1,...", "send fuzzed date to remote http host located at addr"},
         {"[https|tls]://...", "same as http and tcp, but data is TLS-wrapped"},
         {"ip://ipaddr:proto", "send fuzzed data to remote host located at <ipaddr> using protocol no. <proto> on top of IP (Linux & OS X)"},
-        {"raw://ipaddr:iface", "send fuzzed data to remote host located at <ipaddr> raw protocol, outgoing interface is specified with <iface> (Linux only)"}
+        {"raw://ipaddr:iface", "send fuzzed data to remote host located at <ipaddr> raw protocol, outgoing interface is specified with <iface> (Linux only)"},
+        {"serial://device,baud", "send fuzzed date to serial <device> (e.g. /dev/ttyUSB0) using <baud> (e.g. 57600) (Linux & OS X)"}
         ].
 
 %% GF-base modes:
@@ -82,7 +83,7 @@ cmdline_optsspec() ->
     {debug		, $d,	"debug",		undefined,				"run in debug/profiler mode, activates verbose"},
     {detach	    , $D,	"detach",		undefined,			    "detach from console after start (service mode)"},
     {external	, $e,   "external", 	string,					"external pre/post/generation/mutation module"},
-    {faildelay	, undefine,   
+    {faildelay	, undefined,   
                         "faildelay", 	{integer, 0},			"<arg>, additional delay (in ms.) after failed attempt to output data to the network"},
     {generators , $g,	"generators",	{string, erlamsa_gen:tostring(erlamsa_gen:generators())}, 
                                                                 "<arg>, which data generators to use"},
@@ -94,7 +95,7 @@ cmdline_optsspec() ->
                         "keyfile",		string,			        "<arg>, key file for fuzzing TLS-based communications"},
     {list		, $l,	"list",			undefined,				"list i/o options, monitors, mutations, patterns and generators"},
     {logger		, $L,	"logger",		string,					"<arg>, logger options, e.g. level=critical..debug, file=filename, csv=filename.csv, mnesia=dir or stdout (-) or stderr (-err)"},
-    {maxfails, undefined, 	
+    {maxfails,    undefined, 	
                         "maxfails",		{integer, 10},		    "<arg>, maximum failed attempts to output data to the network before giving up"},
     {maxrunningtime
                 , undefined, "maxrunningtime",
