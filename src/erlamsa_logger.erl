@@ -102,9 +102,12 @@ append_to_io(FileName, TimeStamp, Pid, Type, LogMsg, Data) when is_list(FileName
 %% by default, data logging is now enabled --> none is default value
 build_logger_io(IO, none) ->
     fun
-        (TimeStamp, Pid, Type, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 ->
+        (TimeStamp, Pid, Type, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0, byte_size(Data) < ?MAX_LOG_DATA ->
             append_to_io(IO, TimeStamp, Pid, Type, LogMsg,
                          io_lib:format(" [data(len = ~p) = ~p]", [byte_size(Data), Data]));
+        (TimeStamp, Pid, Type, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 ->
+            append_to_io(IO, TimeStamp, Pid, Type, LogMsg,
+                         io_lib:format(" [skipping large output, data len = ~p]", [byte_size(Data)]));
         (TimeStamp, Pid, Type, LogMsg, _Data) ->
             append_to_io(IO, TimeStamp, Pid, Type, LogMsg, [])
     end;
@@ -158,15 +161,19 @@ append_to_csv(FileName, TimeStamp, Pid, Type, LogMsg, Data) when is_list(FileNam
     file:write_file(FileName,
                     io_lib:format("~s,~p,~p,\"~s\",~s~n", [TimeStamp, Pid, Type, LogMsg, Data]), [append]).
 
+%% FIXME: TODO: output data len if >= ?MAX_LOG_DATA
 %% by default, data logging is now enabled --> none is default value
 build_logger_csv(none, _None) ->
     [];
 build_logger_csv(FName, none) ->
     fun
-        (TimeStamp, Pid, Type, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 ->
+        (TimeStamp, Pid, Type, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0, byte_size(Data) < ?MAX_LOG_DATA ->
             append_to_csv(FName, TimeStamp, Pid, Type, LogMsg,
                           io_lib:format("~p,\"~s\"", [byte_size(Data),
                                         remove_newlines_from_data(Data)]));
+        (TimeStamp, Pid, Type, LogMsg, Data) when is_binary(Data), byte_size(Data) > 0 ->
+            append_to_csv(FName, TimeStamp, Pid, Type, LogMsg,
+                          io_lib:format("\"~p\"", [byte_size(Data)]));                                
         (TimeStamp, Pid, Type, LogMsg, _Data) ->
             append_to_csv(FName, TimeStamp, Pid, Type, LogMsg, ",")
     end;

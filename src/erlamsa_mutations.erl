@@ -1,5 +1,5 @@
 % Copyright (c) 2011-2014 Aki Helin
-% Copyright (c) 2014-2015 Alexander Bolshev aka dark_k3y
+% Copyright (c) 2014-2019 Alexander Bolshev aka dark_k3y
 %
 % Permission is hereby granted, free of charge, to any person obtaining a copy
 % of this software and associated documentation files (the "Software"), to deal
@@ -1182,7 +1182,7 @@ mutations(CustomMutas) ->
                         {?MAX_SCORE, 1, construct_ascii_delimeter_mutator(), ad, "play with delimeters in ASCII string data"},
                         {?MAX_SCORE, 1, sed_tree_dup(), tr2, "duplicate a node"},
                         {?MAX_SCORE, 1, sed_tree_del(), td, "delete a node"},
-                        {?MAX_SCORE, 2, fun sed_num/2, num, "try to modify a textual number"},                        
+                        {?MAX_SCORE, 3, fun sed_num/2, num, "try to modify a textual number"},                        
                         {?MAX_SCORE, 2, construct_sed_tree_swap(fun sed_tree_swap_one/2, tree_swap_one), ts1, "swap one node with another one"},
                         {?MAX_SCORE, 2, fun sed_tree_stutter/2, tr, "repeat a path of the parse tree"},
                         {?MAX_SCORE, 2, construct_sed_tree_swap(fun sed_tree_swap_two/2, tree_swap_two), ts2, "swap two nodes pairwise"},
