@@ -1,5 +1,5 @@
 % Copyright (c) 2011-2014 Aki Helin
-% Copyright (c) 2014-2015 Alexander Bolshev aka dark_k3y
+% Copyright (c) 2014-2019 Alexander Bolshev aka dark_k3y
 %
 % Permission is hereby granted, free of charge, to any person obtaining a copy
 % of this software and associated documentation files (the "Software"), to deal
@@ -42,11 +42,10 @@
         flush_bvecs/2, applynth/3, sort_by_priority/1, binarish/1,
         check_empty/1, stderr_probe/2, halve/1, error/1,
         resolve_addr/1, make_post/1, make_fuzzer/1, make_mutas/1,
-        load_deps/1, get_direct_fuzzing_opts/2, get_deps_dirs/1,
-        set_routing_ip/3]).
+        load_deps/1, get_direct_fuzzing_opts/2, get_deps_dirs/1]).
 
 load_deps(RuntimeDir) ->
-    true and ?LOAD_PROCKET(RuntimeDir).
+    true and ?LOAD_PROCKET(RuntimeDir) and ?LOAD_SERIAL(RuntimeDir).
 
 get_deps_dirs(RuntimeDir) ->
     [RuntimeDir ++ ?PROCKET_DIR].
@@ -225,23 +224,3 @@ binarish(<<>>, _) -> false;
 binarish(<<H:8,_/binary>>, _) when H =:= 0 -> true;
 binarish(<<H:8,_/binary>>, _) when H band 128 =/= 0 -> true;
 binarish(<<_:8,T/binary>>, P) -> binarish(T, P+1).
-
-
--spec get_routing_ip(tcp, inet:ip_address(), integer()) -> {inet:ip_address(), integer()} | {}.
-get_routing_ip(tcp, Host, Port) ->
-    case gen_tcp:connect(Host, Port, [binary, {packet, 0}]) of
-        {ok, Sock} -> 
-            {ok, {SIp, _}} = inet:sockname(Sock), gen_tcp:close(Sock), SIp;
-        _Else -> 
-            {ok, IFs} = inet:getif(),
-            {Ip, _, _} = hd(IFs),
-            Ip
-    end.
-
--spec set_routing_ip(tcp, inet:ip_address(), integer()) -> ok.
-set_routing_ip(Proto, Host, Port) ->
-    spawn(fun() -> 
-        IP = get_routing_ip(Proto, Host, Port),
-        ets:insert(global_config, [{cm_host, IP}]) 
-    end),
-    ok.

@@ -1,5 +1,5 @@
 % Copyright (c) 2011-2014 Aki Helin
-% Copyright (c) 2014-2018 Alexander Bolshev aka dark_k3y
+% Copyright (c) 2014-2019 Alexander Bolshev aka dark_k3y
 %
 % Permission is hereby granted, free of charge, to any person obtaining a copy
 % of this software and associated documentation files (the "Software"), to deal
@@ -140,9 +140,10 @@ fuzzer(Dict) ->
     Fail = fun(Why) -> io:write(Why), throw(Why) end,
     Muta = erlamsa_mutations:make_mutator(Mutas, CustomMutas),
     DirectInput = maps:get(input, Dict, nil),
-    OutputStr = maps:get(output, Dict, "-"),
-    RecordFun = case OutputStr of 
-                    return -> fun record_result/2;
+    %%TODO: FIXME: should be maps:get(output, Dict, "-") instead 
+    %% However now direct == return, so interexchanging with input should be ok
+    RecordFun = case DirectInput of  
+                    direct -> fun record_result/2;
                     _Else -> fun (_, _) -> [] end
                 end,
     BlockScale = maps:get(blockscale, Dict, 1.0),
@@ -153,9 +154,10 @@ fuzzer(Dict) ->
     RecordMeta({seed, Seed}),
     PatList = maps:get(patterns, Dict, erlamsa_patterns:default()),
     Pat = erlamsa_patterns:make_pattern(PatList),
-    Out = erlamsa_out:string_outputs(OutputStr),
+    Out = erlamsa_out:string_outputs(Dict),
     Post = erlamsa_utils:make_post(maps:get(external_post, Dict, nil)),
     Sleep = maps:get(sleep, Dict, 0),
+    FailDelay = maps:get(faildelay, Dict, 0),
     %% Creating the Fuzzing Loop function
     FuzzingLoop = 
         fun 
@@ -181,7 +183,7 @@ fuzzer(Dict) ->
                         {CandidateOut, CandidateMuta, CandidateData, 0}
                     catch
                         {cantconnect, _Err} ->
-                            timer:sleep(10*Fails),
+                            timer:sleep(10*Fails + FailDelay),
                             {CurOut, CurMuta, <<>>, Fails + 1};
                         {fderror, _Err} ->
                             {CurOut, CurMuta, <<>>, Fails + 1}

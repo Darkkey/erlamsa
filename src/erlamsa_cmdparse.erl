@@ -1,5 +1,5 @@
 % Copyright (c) 2011-2014 Aki Helin
-% Copyright (c) 2014-2018 Alexander Bolshev aka dark_k3y
+% Copyright (c) 2014-2019 Alexander Bolshev aka dark_k3y
 %
 % Permission is hereby granted, free of charge, to any person obtaining a copy
 % of this software and associated documentation files (the "Software"), to deal
@@ -77,25 +77,28 @@ cmdline_optsspec() ->
     {about		, $a, 	"about", 		undefined, 				"what is this thing"},
     {blockscale , $b, 	"blockscale", 	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize multiplier"},
     {bypass		, $B,	"bypass",		{integer, 0},			"<arg>, fuzzing proxy: bypass first <arg> packets before start fuzzing (TCP/HTTP only)"},
-    % {certfile	, undefined,	
-    %                     "certfile",		string,			        "<arg>, certificate file for fuzzing TLS-based communications"},
+    {certfile	, undefined,	
+                        "certfile",		string,			        "<arg>, certificate file for fuzzing TLS-based communications"},
     {debug		, $d,	"debug",		undefined,				"run in debug/profiler mode, activates verbose"},
     {detach	    , $D,	"detach",		undefined,			    "detach from console after start (service mode)"},
     {external	, $e,   "external", 	string,					"external pre/post/generation/mutation module"},
-    % {faildelay	, undefine,   
-    %                     "faildelay", 	{integer, 0},			"<arg>, additional delay (in ms.) after failed attempt to output data to the network"},
+    {faildelay	, undefine,   
+                        "faildelay", 	{integer, 0},			"<arg>, additional delay (in ms.) after failed attempt to output data to the network"},
     {generators , $g,	"generators",	{string, erlamsa_gen:tostring(erlamsa_gen:generators())}, 
                                                                 "<arg>, which data generators to use"},
     {genfuzz	, $G,	"genfuzz",		float,					"<arg>, activate generation-based fuzzer, arg is base probablity"},
     {help		, $h, 	"help", 		undefined, 				"show this thing"},
     {httpsvc    , $H,   "httpservice",  string,				    "<arg>, run as HTTP service on <host:port>, e.g.: 127.0.0.1:17771"},
     {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or proto://:port, proto://host:port for data endpoint (generation mode)"},
-    % {keyfile	, undefined,	
-    %                     "keyfile",		string,			        "<arg>, key file for fuzzing TLS-based communications"},
+    {keyfile	, undefined,	
+                        "keyfile",		string,			        "<arg>, key file for fuzzing TLS-based communications"},
     {list		, $l,	"list",			undefined,				"list i/o options, monitors, mutations, patterns and generators"},
     {logger		, $L,	"logger",		string,					"<arg>, logger options, e.g. level=critical..debug, file=filename, csv=filename.csv, mnesia=dir or stdout (-) or stderr (-err)"},
     {maxfails, undefined, 	
                         "maxfails",		{integer, 10},		    "<arg>, maximum failed attempts to output data to the network before giving up"},
+    {maxrunningtime
+                , undefined, "maxrunningtime",
+                                        {integer, 30}, 		    "<arg>, maximum running time for fuzzing instance (service/proxy modes only)"},
     {meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"},
     {mutations  , $m,   "mutations",	{string, erlamsa_mutations:tostring(erlamsa_mutations:mutations())}, 
                                                                 "<arg>, which mutations to use"},
@@ -112,9 +115,6 @@ cmdline_optsspec() ->
     % {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},
     {seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int or source:device for an external source of entropy (e.g. binary file)"},
     {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},
-    {maxrunningtime
-                , undefined, "maxrunningtime",
-                                        {integer, 30}, 		    "<arg>, maximum running time for fuzzing instance (service/proxy modes only)"},
     {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose, show some progress during generation"},
     {version	, $V, 	"version",		undefined, 				"show program version"},
     {workers	, $w, 	"workers",		integer,    			"<arg>, number of working threads (1 for standalone, 10 for proxy/fass)"}
@@ -317,6 +317,15 @@ parse_sock_addr(SockType, Addr) ->
             fail(io_lib:format("invalid socket address specification: '~s'", [Addr]))
     end.
 
+parse_serial_addr(Addr) ->
+    Tokens = string:tokens(Addr, ","),
+    case length(Tokens) of
+        N when N > 1, N < 5 ->
+            {serial, list_to_tuple(Tokens)};
+        _Else ->
+            fail(io_lib:format("invalid serial address specification: '~s'", [Addr]))
+    end.
+
 %% TODO: catch exception in case of incorrect...
 parse_http_addr(URL) ->
     Tokens = string:tokens(URL, ","),
@@ -333,6 +342,8 @@ parse_url([<<"tcp">>|T], _URL) ->
     parse_sock_addr(tcp, binary_to_list(hd(T)));
 parse_url([<<"tls">>|T], _URL) ->
     parse_sock_addr(tls, binary_to_list(hd(T)));
+parse_url([<<"serial">>|T], _URL) ->
+    parse_serial_addr(binary_to_list(hd(T)));
 parse_url([<<"http">>|_T], URL) ->
     parse_http_addr(URL);
 parse_url([<<"https">>|_T], URL) ->
@@ -463,6 +474,10 @@ parse_opts([recursive|T], Dict) ->
     parse_opts(T, maps:put(recursive, 1, Dict));
 parse_opts([{count, N}|T], Dict) ->
     parse_opts(T, maps:put(n, N, Dict));
+parse_opts([{certfile, CertFile}|T], Dict) ->
+    parse_opts(T, maps:put(certfile, CertFile, Dict));
+parse_opts([{keyfile, KeyFile}|T], Dict) ->
+    parse_opts(T, maps:put(keyfile, KeyFile, Dict));
 parse_opts([{pidfile, PidFile}|T], Dict) ->
     parse_opts(T, maps:put(pidfile, PidFile, Dict));
 parse_opts([{maxrunningtime, MT}|T], Dict) ->
@@ -475,6 +490,8 @@ parse_opts([{genfuzz, BP}|T], Dict) ->
     parse_opts(T, maps:put(mode, genfuzz, maps:put(genfuzz, BP, Dict)));
 parse_opts([{workers, W}|T], Dict) ->
     parse_opts(T, maps:put(workers, W, Dict));
+parse_opts([{faildelay, FailDelay}|T], Dict) ->
+    parse_opts(T, maps:put(faildelay, FailDelay, Dict));
 parse_opts([{sleep, Sleep}|T], Dict) ->
     parse_opts(T, maps:put(sleep, Sleep, Dict));
 parse_opts([{logger, LogOpts}|T], Dict) ->

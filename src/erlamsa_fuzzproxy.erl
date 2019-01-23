@@ -1,6 +1,6 @@
 % idea and part of original code from http://beezari.livejournal.com/191194.html
 % Heavily updated and rewited:
-% Copyright (c) 2014-2018 Alexander Bolshev aka dark_k3y
+% Copyright (c) 2014-2019 Alexander Bolshev aka dark_k3y
 %
 % Permission is hereby granted, free of charge, to any person obtaining a copy
 % of this software and associated documentation files (the "Software"), to deal
@@ -37,7 +37,7 @@
 -include("erlamsa.hrl").
 
 % API
--export([get_supervisor_opts/1, start/1, start_fuzzproxy/1, server_tcp/4, loop_udp/7]).
+-export([get_supervisor_opts/1, start/1, start_fuzzproxy/1, server_stream/5, loop_udp/7]).
 
 get_supervisor_opts(Opts) ->
     #{id => ?MODULE,
@@ -51,14 +51,31 @@ start(Opts) ->
     Pid = spawn(?MODULE, start_fuzzproxy, [Opts]),
     {ok, Pid}.
 
-listen(http, LocalPort) ->
-    listen(tcp, LocalPort);
-listen(tcp, LocalPort) ->
-    gen_tcp:listen(LocalPort, [binary, {active, true}, {reuseaddr, true}, {packet, 0}]);
-listen(udp, LocalPort) ->
-    gen_udp:open(LocalPort, [binary, {active, true}, {reuseaddr, true}]);
-listen(_, _P) ->
-    {error, "Unsupported fuzzing layer."}.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Fuzzing probability helper functions:
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+get_proxy_probs(Opts) ->
+    maps:get(proxy_probs, Opts, {0.0, 0.0}).
+
+raise_prob(0.0, _) -> 0.0;
+raise_prob(Prob, 1.0) -> Prob;
+raise_prob(Prob, DC) ->
+    erlamsa_logger:log(decision, "increasing Prob from ~p to ~p", [Prob, Prob + Prob/DC]),
+    Prob + Prob/DC.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Proxy code:
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+proxy_listen(udp, Port, _Dict) -> erlamsa_netutils:listen(udp, Port,
+                            [binary, {active, true}, {reuseaddr, true}]);
+proxy_listen(ssl, Port, Dict) -> erlamsa_netutils:listen(ssl, Port, 
+                            [binary, {reuseaddr, true}, {active, true}, {packet, 0},
+                            {certfile, maps:get(certfile, Dict, "cert.pem")}, 
+                            {keyfile, maps:get(keyfile, Dict, "key.pem")}]);
+proxy_listen(tcp, Port, _Dict) -> erlamsa_netutils:listen(tcp, Port, 
+                            [binary, {reuseaddr, true}, {active, true}, {packet, 0}]).
 
 start_fuzzproxy(Opts) ->
     Workers = maps:get(workers, Opts, 10),
@@ -67,58 +84,56 @@ start_fuzzproxy(Opts) ->
     lists:map(
         fun(L) ->
             {StrProto, LocalPort, _, DHost, DPort} = L,
-            erlamsa_utils:set_routing_ip(tcp, DHost, DPort),
+            erlamsa_netutils:set_routing_ip(tcp, DHost, DPort),
             Proto = list_to_atom(StrProto),
-            case listen(Proto, LocalPort) of
+            ProtoTransport = erlamsa_netutils:transport(Proto),
+            erlamsa_netutils:netserver_start(ProtoTransport),
+            case proxy_listen(ProtoTransport, LocalPort, Opts) of
                 {ok, ListenSock} ->
-                    {ok, Port} = inet:port(ListenSock),
-                    start_servers(transport(Proto), Workers, ListenSock, L, Opts, Verbose),
+                    {ok, Port} = erlamsa_netutils:port(ProtoTransport, ListenSock),
+                    start_servers(ProtoTransport, Workers, ListenSock, L, Opts, Verbose),
                     Port;
                 {error, Reason} ->
-                    io:format("~s", [Reason]),
+                    io:format("Error: ~s", [Reason]),
                     {error, Reason}
             end
         end, ProxyAddrList),
     timer:sleep(infinity).
 
-transport(http) -> tcp;
-transport(Tr) -> Tr.
+spawn_stream_worker(ProtoTransport, ListenSock, Endpoint, Opts, Verbose) ->
+    spawn(?MODULE, server_stream, [ProtoTransport, ListenSock, Endpoint, Opts, Verbose]).
 
-get_proxy_probs(Opts) ->
-    maps:get(proxy_probs, Opts, {0.0, 0.0}).
-
-spawn_tcp_worker(ListenSock, Endpoint, Opts, Verbose) ->
-    spawn(?MODULE, server_tcp, [ListenSock, Endpoint, Opts, Verbose]).
-
-start_servers(tcp, Workers, ListenSock, Endpoint, Opts, Verbose) ->
-    length([spawn_tcp_worker(ListenSock, Endpoint, Opts, Verbose) || _N <- lists:seq(1, Workers)]);
 start_servers(udp, _Workers, ListenSock, Endpoint, Opts, Verbose) ->
     erlamsa_logger:log(info, "udp proxy worker process started, socket id ~p",
                         [ListenSock]),
     Pid = spawn(?MODULE, loop_udp, [ListenSock, Endpoint, init_clientsocket, [], 0, Opts, Verbose]),
-    gen_udp:controlling_process(ListenSock, Pid).
+    gen_udp:controlling_process(ListenSock, Pid);
+start_servers(ProtoTransport, Workers, ListenSock, Endpoint, Opts, Verbose) ->
+    length([spawn_stream_worker(ProtoTransport, ListenSock, Endpoint, Opts, Verbose) || _N <- lists:seq(1, Workers)]).
 
-server_tcp(ListenSock, Endpoint, Opts, Verbose) ->
+server_stream(ProtoTransport, ListenSock, Endpoint, Opts, Verbose) ->
     {Proto, LPort, _, DHost, DPort} = Endpoint,
     {ProbToClient, ProbToServer} = get_proxy_probs(Opts),
     ByPass = maps:get(bypass, Opts, 0),
     DescentCoeff = maps:get(descent_coeff, Opts, 1),
     erlamsa_logger:log(info, "tcp proxy worker process started, listening on ~p (port :~p)",
-                        [ListenSock, LPort]),
+                        [erlamsa_netutils:socknum(ProtoTransport, ListenSock), LPort]),
     erlamsa_rnd:seed(now()),
-    case gen_tcp:accept(ListenSock) of
+    case erlamsa_netutils:accept(ProtoTransport, ListenSock) of
         {ok, ClientSocket} ->
             erlamsa_logger:log(info,
                                 "initiating new connection to ~s:~p(c->s), sockets: l:~p/c:~p",
-                                [inet:ntoa(DHost), DPort, ListenSock, ClientSocket]),
-            case gen_tcp:connect(DHost, DPort,
-                 [binary, {packet, 0}, {active, true}]) of
+                                [inet:ntoa(DHost), DPort, 
+                                 erlamsa_netutils:socknum(ProtoTransport, ListenSock), 
+                                 erlamsa_netutils:socknum(ProtoTransport, ClientSocket)]),
+            case erlamsa_netutils:connect(ProtoTransport, DHost, DPort, 
+                                          [binary, {packet, 0}, {active, true}]) of
                   {ok, ServerSocket} ->
-                      loop_tcp(list_to_atom(Proto), ClientSocket, ServerSocket,
+                      loop_stream(list_to_atom(Proto), ProtoTransport, ClientSocket, ServerSocket,
                         {ProbToClient/DescentCoeff, ProbToServer/DescentCoeff, DescentCoeff},
                         {ByPass, 0, 0},
                         Opts, Verbose),
-                      spawn_tcp_worker(ListenSock, Endpoint, Opts, Verbose);
+                      spawn_stream_worker(ProtoTransport, ListenSock, Endpoint, Opts, Verbose);
                   E ->
                       io:format("Error: connect to server failed!~n"),
                       erlamsa_logger:log(info, "error: worker connect to server ~s:~p failed!",
@@ -131,16 +146,10 @@ server_tcp(ListenSock, Endpoint, Opts, Verbose) ->
             ok
     end.
 
-raise_prob(0.0, _) -> 0.0;
-raise_prob(Prob, 1.0) -> Prob;
-raise_prob(Prob, DC) ->
-    erlamsa_logger:log(decision, "increasing Prob from ~p to ~p", [Prob, Prob + Prob/DC]),
-    Prob + Prob/DC.
-
 loop_udp(SrvSocket, Endpoint, init_clientsocket, ClientHost, ClientPort, Opts, Verbose) ->
     erlamsa_rnd:seed(now()),
     {"udp", _LPort, ClSocketPort, _, _} = Endpoint,
-    {ok, ClSocket} = listen(udp, ClSocketPort),
+    {ok, ClSocket} = proxy_listen(udp, ClSocketPort, Opts),
     gen_udp:controlling_process(ClSocket, self()),
     loop_udp(SrvSocket, ClSocket, Endpoint, ClientHost, ClientPort, Opts, Verbose);
 loop_udp(SrvSocket, ClSocket, Endpoint, ClientHost, ClientPort, Opts, Verbose) ->
@@ -170,37 +179,43 @@ loop_udp(SrvSocket, ClSocket, Endpoint, ClientHost, ClientPort, Opts, Verbose) -
         end,
     loop_udp(SrvSocket, ClSocket, Endpoint, NewHost, NewPort, Opts, Verbose).
 
-loop_tcp(Proto, ClientSocket, ServerSocket, {ProbToClient, ProbToServer, DescentCoeff},
+loop_stream(Proto, ProtoTransport, ClientSocket, ServerSocket, {ProbToClient, ProbToServer, DescentCoeff},
         {ByPass, NC, NS}, Opts, Verbose) ->
-    inet:setopts(ClientSocket, [{active, once}]),
+    erlamsa_netutils:setopts(ProtoTransport, ClientSocket, [{active, once}]),
+    ProtoTansportClosed = erlamsa_netutils:closed(ProtoTransport), 
     receive
-        {tcp, ClientSocket, Data} ->
+        {ProtoTransport, ClientSocket, Data} ->
             erlamsa_logger:log_data(info, "from client(c->s)", [], Data),
             {Res, Ret} = fuzz(Proto, ProbToServer, ByPass, NC, Opts, Data),
-            gen_tcp:send(ServerSocket, Ret),
+            erlamsa_netutils:send(ProtoTransport, ServerSocket, Ret),
             erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]", [Res], Ret),
-            loop_tcp(Proto, ClientSocket, ServerSocket,
+            loop_stream(Proto, ProtoTransport, ClientSocket, ServerSocket,
                     {ProbToClient, raise_prob(ProbToServer, DescentCoeff),  DescentCoeff},
                     {ByPass, NC+1, NS}, Opts, Verbose);
-        {tcp, ServerSocket, Data} ->
+        {ProtoTransport, ServerSocket, Data} ->
             erlamsa_logger:log_data(info, "from server(s->c)", [], Data),
             {Res, Ret} = fuzz(Proto, ProbToClient, ByPass, NS, Opts, Data),
-            gen_tcp:send(ClientSocket, Ret),
+            erlamsa_netutils:send(ProtoTransport, ClientSocket, Ret),
             erlamsa_logger:log_data(info, "from fuzzer(s->c) [fuzzing = ~p]", [Res], Ret),
-            loop_tcp(Proto, ClientSocket, ServerSocket,
+            loop_stream(Proto, ProtoTransport, ClientSocket, ServerSocket,
                     {raise_prob(ProbToClient, DescentCoeff), ProbToServer, DescentCoeff},
                     {ByPass, NC, NS+1}, Opts, Verbose);
-        {tcp_closed, ClientSocket} ->
-            gen_tcp:close(ServerSocket),
-            erlamsa_logger:log(info, "client close (c->s), c:~p ", [ClientSocket]),
+        {ProtoTansportClosed, ClientSocket} ->
+            erlamsa_netutils:close(ProtoTransport, ServerSocket),
+            erlamsa_logger:log(info, "client close (c->s), c:~p ", 
+                                    [erlamsa_netutils:socknum(ProtoTransport, ClientSocket)]),
             ok;
-        {tcp_closed, ServerSocket}->
-            gen_tcp:close(ClientSocket),
+        {ProtoTansportClosed, ServerSocket} ->
+            erlamsa_netutils:close(ProtoTransport, ClientSocket),
             erlamsa_logger:log(info, "server close (s->c)m l:~p/c:~p ",
-                                [ServerSocket, ClientSocket]),
+                                [erlamsa_netutils:socknum(ProtoTransport, ServerSocket), 
+                                 erlamsa_netutils:socknum(ProtoTransport, ClientSocket)]),
             ok
     end.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% HTTP Helpers
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 extract_http(Data) ->
     case erlang:decode_packet(http, Data, []) of
@@ -256,6 +271,10 @@ pack_http_packet([{http_error, ErrHdr}|T], Data, Acc) ->
 pack_http_packet([], Data, Acc) ->
     Hdr = list_to_binary(Acc),
     <<Hdr/binary, Data/binary>>.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Fuzzing helpers
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 fuzz(_Proto, _Prob, ByPass, N, _Opts, Data) when N < ByPass ->
     erlamsa_logger:log(decision, "Packet No. ~p < ~p, bypassing data", [N, ByPass]),
