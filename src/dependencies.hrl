@@ -1,1 +1,3 @@
--define(USE_PROCKET, 1). %% UGLY hack to enable compile on Windows where there's no procket.
+%% UGLY hack to enable compile on Windows where there's no procket/serial.
+-define(USE_PROCKET, 1). 
+-define(USE_SERIAL, 1). 
