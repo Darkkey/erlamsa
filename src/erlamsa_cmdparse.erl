@@ -63,11 +63,11 @@ outputs() ->
         {"udp://[[ifaceip:]srcport:]ipaddr:port", "send fuzzed data to remote udp <port> located at <ipaddr> (listening on <ifaceip>:<srcport>)"},
         {"[tcp|udp]://:port", "listens on tcp or udp <port> and sends fuzzed data upon client connect/send message"},
         {"http://:port,[Content-Type]", "simple HTTP server on <port> that sends fuzzed data upon client's request"},
-        {"http://addr[:port]/path?params,[GET|POST],header1,...", "send fuzzed date to remote http host located at addr"},
+        {"http://addr[:port]/path?params,[GET|POST],header1,...", "send fuzzed data to remote http host located at addr"},
         {"[https|tls]://...", "same as http and tcp, but data is TLS-wrapped"},
         {"ip://ipaddr:proto", "send fuzzed data to remote host located at <ipaddr> using protocol no. <proto> on top of IP (Linux & OS X)"},
         {"raw://ipaddr:iface", "send fuzzed data to remote host located at <ipaddr> raw protocol, outgoing interface is specified with <iface> (Linux only)"},
-        {"serial://device,baud", "send fuzzed date to serial <device> (e.g. /dev/ttyUSB0) using <baud> (e.g. 57600) (Linux & OS X)"}
+        {"serial://device,baud", "send fuzzed data to serial <device> (e.g. /dev/ttyUSB0) using <baud> (e.g. 57600) (Linux & OS X)"}
         ].
 
 %% GF-base modes:
@@ -78,39 +78,39 @@ cmdline_optsspec() ->
     {about		, $a, 	"about", 		undefined, 				"what is this thing"},
     {blockscale , $b, 	"blockscale", 	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize multiplier"},
     {bypass		, $B,	"bypass",		{integer, 0},			"<arg>, fuzzing proxy: bypass first <arg> packets before start fuzzing (TCP/HTTP only)"},
-    {certfile	, undefined,	
+    {certfile	, undefined,
                         "certfile",		string,			        "<arg>, certificate file for fuzzing TLS-based communications"},
     {debug		, $d,	"debug",		undefined,				"run in debug/profiler mode, activates verbose"},
     {detach	    , $D,	"detach",		undefined,			    "detach from console after start (service mode)"},
     {external	, $e,   "external", 	string,					"external pre/post/generation/mutation module"},
-    {faildelay	, undefined,   
+    {faildelay	, undefined,
                         "faildelay", 	{integer, 0},			"<arg>, additional delay (in ms.) after failed attempt to output data to the network"},
-    {generators , $g,	"generators",	{string, erlamsa_gen:tostring(erlamsa_gen:generators())}, 
+    {generators , $g,	"generators",	{string, erlamsa_gen:tostring(erlamsa_gen:generators())},
                                                                 "<arg>, which data generators to use"},
     {genfuzz	, $G,	"genfuzz",		float,					"<arg>, activate generation-based fuzzer, arg is base probablity"},
     {help		, $h, 	"help", 		undefined, 				"show this thing"},
     {httpsvc    , $H,   "httpservice",  string,				    "<arg>, run as HTTP service on <host:port>, e.g.: 127.0.0.1:17771"},
     {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or proto://:port, proto://host:port for data endpoint (generation mode)"},
-    {keyfile	, undefined,	
+    {keyfile	, undefined,
                         "keyfile",		string,			        "<arg>, key file for fuzzing TLS-based communications"},
     {list		, $l,	"list",			undefined,				"list i/o options, monitors, mutations, patterns and generators"},
     {logger		, $L,	"logger",		string,					"<arg>, logger options, e.g. level=critical..debug, file=filename, csv=filename.csv, mnesia=dir or stdout (-) or stderr (-err)"},
-    {maxfails,    undefined, 	
+    {maxfails,    undefined,
                         "maxfails",		{integer, 10},		    "<arg>, maximum failed attempts to output data to the network before giving up"},
     {maxrunningtime
                 , undefined, "maxrunningtime",
                                         {integer, 30}, 		    "<arg>, maximum running time for fuzzing instance (service/proxy modes only)"},
     {meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"},
-    {mutations  , $m,   "mutations",	{string, erlamsa_mutations:tostring(erlamsa_mutations:mutations())}, 
+    {mutations  , $m,   "mutations",	{string, erlamsa_mutations:tostring(erlamsa_mutations:mutations())},
                                                                 "<arg>, which mutations to use"},
     {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
-    {noiolog   	, undefined,   
+    {noiolog   	, undefined,
                         "no-io-logging",undefined,				"disable logging of incoming and outgoing data"},
     {monitor	, $O,   "monitor",      string,					"+-<arg>, add/remove monitor (use additional -O for each monitor"},
     {output		, $o, 	"output",		{string, "-"}, 			"<arg>, output pattern, e.g. /tmp/fuzz-%n.foo, -, [proto]://192.168.0.1:80 or [proto]://:80 [-]"},
-    {patterns	, $p,	"patterns",		{string, erlamsa_patterns:tostring(erlamsa_patterns:patterns())},	
+    {patterns	, $p,	"patterns",		{string, erlamsa_patterns:tostring(erlamsa_patterns:patterns())},
                                                                 "<arg>, which mutation patterns to use"},
-    {pidfile	, undefined,	
+    {pidfile	, undefined,
                         "pidfile",		string,                 "<arg>, PID file name"},
     {proxyprob	, $P,	"proxy",		string,					"<arg>, activate fuzzing proxy mode, param is fuzzing probability in form of s->c,c->s e.g.: 0.5,0.5"},
     % {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},
@@ -172,9 +172,9 @@ set_defaults(Dict) ->
             faas 	->	10;
             _Else   ->	 1
         end,
-    
-    maps:put(workers, maps:get(workers, Dict, Workers), 
-        maps:put(monitor, maps:get(monitor, Dict, erlamsa_monitor:default()), 
+
+    maps:put(workers, maps:get(workers, Dict, Workers),
+        maps:put(monitor, maps:get(monitor, Dict, erlamsa_monitor:default()),
             Dict)).
 
 parse_actions(List, OptionName, Default, Dict) ->
@@ -188,9 +188,9 @@ parse_actions(List, OptionName, Default, Dict) ->
 -spec resolve_host(string()) -> inet:ip_address().
 resolve_host(Host) ->
     case inet:getaddr(Host, inet) of
-        {ok, Ip} -> 
+        {ok, Ip} ->
             Ip;
-        {error, Reason} -> 
+        {error, Reason} ->
             throw(Reason)
     end.
 
@@ -206,7 +206,7 @@ port_check(tcp, PortNum, Host) ->
         {error, Reason} ->
             io:format("Invalid host/port: ~s:~s, error: ~p~n", [Host, PortNum, Reason]),
             halt(1)
-    catch 
+    catch
         error:badarg ->
             io:format("Invalid port specifiction: '~s'~n", [PortNum]),
             halt(1);
@@ -258,7 +258,7 @@ parse_logger_opt([], Dict) ->
 parse_logger_opt([LogOpt|T], Dict) ->
     case string:tokens(LogOpt, "=") of
         ["level", Lvl] ->
-            parse_logger_opt(T, maps:put(logger_level, 
+            parse_logger_opt(T, maps:put(logger_level,
                                          list_to_atom(string:to_lower(Lvl)), Dict));
         ["file", FName] ->
             parse_logger_opt(T, maps:put(logger_file, FName, Dict));
@@ -377,8 +377,8 @@ parse_seed(Seed) ->
     list_to_tuple([list_to_integer(X) || X <- string:tokens(Seed, ",")]).
 
 parse_seed_opt("source:" ++ Source, Dict) ->
-        maps:put(seed, fun() -> erlamsa_rnd_ext:get_seed() end, 
-                maps:put(ext_rnd, fun(Opts) -> erlamsa_rnd_ext:get_supervisor_opts(Opts) end, 
+        maps:put(seed, fun() -> erlamsa_rnd_ext:get_seed() end,
+                maps:put(ext_rnd, fun(Opts) -> erlamsa_rnd_ext:get_supervisor_opts(Opts) end,
                         maps:put(ext_rnd_source, Source, Dict)));
 parse_seed_opt(Seed, Dict) ->
     try
@@ -397,7 +397,7 @@ parse_monitor(Lst) ->
         $- -> {minus, list_to_atom(MonitorName), ""};
         C -> {plus, list_to_atom([C | MonitorName]), MonitorParams}
     end,
-    case lists:foldl(fun ({N, _F}, Acc) when Name == N -> [Name | Acc]; (_, Acc) -> Acc end, 
+    case lists:foldl(fun ({N, _F}, Acc) when Name == N -> [Name | Acc]; (_, Acc) -> Acc end,
                 erlamsa_monitor:monitors(), []) of
         [] -> fail(io_lib:format("Unknown monitor name: ~p", [Name]));
         _Else -> {Action, Name, Params}
@@ -458,8 +458,8 @@ parse_opts([{monitor, MonitorSpec}|T], Dict) ->
     %%Syntax is monitor_name:params
     %%TODO: In future replace with string:split(MonitorSpec, ":", leading)
     Monitor = parse_monitor(string:tokens(MonitorSpec, ":")),
-    parse_opts(T, maps:put(monitor, 
-                            [Monitor | maps:get(monitor, Dict, erlamsa_monitor:default())], 
+    parse_opts(T, maps:put(monitor,
+                            [Monitor | maps:get(monitor, Dict, erlamsa_monitor:default())],
                             Dict));
 parse_opts([{ascent, DC}|T], Dict) ->
     parse_opts(T, maps:put(descent_coeff, DC, Dict));
