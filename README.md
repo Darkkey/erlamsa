@@ -81,10 +81,13 @@ Few examples/templates for a quick start:
 ```
 $ echo 'Hello erlamsa' | ./erlamsa
 Hello erlmo erlamsa
-$ erlamsa <<FILE TO FUZZ>>
-$ erlamsa <<FILE TO FUZZ>> -o erlamsa <<FILE TO FUZZ>>.fuzzed
-$ erlamsa <<FILE TO FUZZ>> -o tcp://:<<LISTEN_ON_PORT>>
+$ ./erlamsa <<FILE TO FUZZ>>
+$ ./erlamsa <<FILE TO FUZZ>> -o <<FILE TO FUZZ>>.fuzzed
+$ ./erlamsa <<FILE TO FUZZ>> -o tcp://:<<LISTEN_ON_PORT>>
 $ cat <<BINARY WITH PACKET>> | ./erlamsa -o udp://<<HOST>>:<<PORT>>
+$ cat <<FILE WITH POST QUERY>> | ./erlamsa -o https://<<SERVER>>:<<PORTS>>/script.jsp?param1=value,POST,<<Header1>>=<<Header1value>>
+$ ./erlamsa <<PACKET>> -o serial:///dev/ttyUSB0,9600
+$ echo '<<DATA>>' | ./erlamsa exec://<<APP_TO_FUZZ_FROM_STDIO>>
 ```
 
 For help try:
@@ -95,6 +98,8 @@ or
 ```
 escript erlamsa --help
 ```
+
+Also try `--list` option to show all possible inputs, outputs, mutators, patterns, loggers and monitors.
 
 ## Using as a service ##
 
@@ -152,7 +157,7 @@ $ curl -H "Content-Type: application/json" -X POST -d '{"data":"aGVsbG8=","seed"
 ```
 
 ## Using as fuzzing proxy
-Erlamsa could be used a fuzzing "MiTM" proxy for TCP and UDP protocols. This allow to fuzz the communication between server and client, modifying packets coming from server to client, from client to server, or in both cases.
+Erlamsa could be used a fuzzing "MiTM" proxy for HTTP(s), TCP (also TLS) and UDP protocols. This allow to fuzz the communication between server and client, modifying packets coming from server to client, from client to server, or in both cases.
 
 To use it as fuzzing proxy, run as:
 ```
