@@ -52,8 +52,8 @@ Erlamsa is written by Alexander Bolshev (@dark_k3y).~n".
 inputs() ->
     [
         {"filename1.txt filename2.txt ...", "data will be read from file(s) with specified name(s)"},
-        {"-i proto://lport:rhost:rport", "erlamsa will work in fuzzing proxy mode, listenting on lport and sending fuzzed data to rhost:port"},
-        {"-H host:port", "erlamsa will listen on <host:port> for HTTP POST queries with data, sending fuzzing result in reply, fuzzing options are passed via HTTP headers"}
+        {"-i proto://lport:rhost:rport", "erlamsa will work in fuzzing proxy mode, listenting on lport and sending fuzzed data to rhost:port; tcp,udp,tls,http(s) are supported"},
+        {"-H addr:port", "erlamsa will listen on <addr:port> for HTTP POST queries with data, sending fuzzing result in reply, fuzzing options are passed via HTTP headers"}
     ].
 
 outputs() ->
@@ -67,7 +67,8 @@ outputs() ->
         {"[https|tls]://...", "same as http and tcp, but data is TLS-wrapped"},
         {"ip://ipaddr:proto", "send fuzzed data to remote host located at <ipaddr> using protocol no. <proto> on top of IP (Linux & OS X)"},
         {"raw://ipaddr:iface", "send fuzzed data to remote host located at <ipaddr> raw protocol, outgoing interface is specified with <iface> (Linux only)"},
-        {"serial://device,baud", "send fuzzed data to serial <device> (e.g. /dev/ttyUSB0) using <baud> (e.g. 57600) (Linux & OS X)"}
+        {"serial://device,baud", "send fuzzed data to serial <device> (e.g. /dev/ttyUSB0) using <baud> (e.g. 57600) (Linux & OS X)"},
+        {"exec://apppathwithargs", "execute app from apppath and send fuzzed data to its stdin (Linux & OS X)"}
         ].
 
 %% GF-base modes:
@@ -327,6 +328,9 @@ parse_serial_addr(Addr) ->
             fail(io_lib:format("invalid serial address specification: '~s'", [Addr]))
     end.
 
+parse_exec(App) ->
+    {exec, App}.
+
 %% TODO: catch exception in case of incorrect...
 parse_http_addr(URL) ->
     Tokens = string:tokens(URL, ","),
@@ -345,6 +349,8 @@ parse_url([<<"tls">>|T], _URL) ->
     parse_sock_addr(tls, binary_to_list(hd(T)));
 parse_url([<<"serial">>|T], _URL) ->
     parse_serial_addr(binary_to_list(hd(T)));
+parse_url([<<"exec">>|T], _URL) ->
+    parse_exec(binary_to_list(hd(T)));
 parse_url([<<"http">>|_T], URL) ->
     parse_http_addr(URL);
 parse_url([<<"https">>|_T], URL) ->
