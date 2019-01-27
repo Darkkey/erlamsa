@@ -45,10 +45,10 @@
         load_deps/1, get_direct_fuzzing_opts/2, get_deps_dirs/1]).
 
 load_deps(RuntimeDir) ->
-    true and ?LOAD_PROCKET(RuntimeDir) and ?LOAD_SERIAL(RuntimeDir).
+    true and ?LOAD_PROCKET(RuntimeDir) and ?LOAD_SERIAL(RuntimeDir) and ?LOAD_ERLEXEC(RuntimeDir).
 
 get_deps_dirs(RuntimeDir) ->
-    [RuntimeDir ++ ?PROCKET_DIR].
+    [RuntimeDir ++ ?PROCKET_DIR ++ " " ++ RuntimeDir ++ ?SERIAL_DIR ++ " " ++ RuntimeDir ++ ?ERLEXEC_DIR].
 
 get_direct_fuzzing_opts(Data, Opts) ->
     maps:put(paths, [direct],

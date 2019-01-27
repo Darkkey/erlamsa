@@ -109,10 +109,47 @@ file_writer(Str) ->
 serial_writer(Options) ->
     SerialPort = serial:start(Options),          
     fun F(_N, Meta) ->
-        {F, {net,
-            fun (Data) -> SerialPort ! {send, Data} end,
-            fun () -> ok end %% Do nothing, since we should not close port for future uses [SerialPort ! {close}]
-        }, [{output, serialsock} | Meta]}
+        {F, {serial,
+            fun (Data) -> SerialPort ! {send, Data} end
+        }, [{output, serial} | Meta]}
+    end.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Exec output
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-spec exec_writer(string()) -> fun().
+exec_writer(App) ->
+    exec:start([]),
+    Watcher = spawn(fun W() -> 
+                        receive 
+                            {Stream, Pid, Data} -> 
+                                erlamsa_logger:log_data(info, "received from ~p on ~p", [Pid, Stream], Data);
+                            Unknown -> 
+                                erlamsa_logger:log(info, "received: ~p", [Unknown])                                
+                        end, W()
+                    end),  
+    fun F(_N, Meta) ->
+        {ok, Pid, OsPid} = exec:run(App, [stdin, monitor, {stdout, Watcher}, {stderr, Watcher}]),
+        erlamsa_logger:log(info, "new process is executed [OS Pid = ~p]", [OsPid]),
+        {F, {exec,
+            fun (Data) -> 
+                exec:send(Pid, Data)
+            end,
+            fun () -> 
+                exec:send(Pid, eof), %% close stdin                  
+                receive
+                    {'DOWN', OsPid, process, Pid, Reason} ->
+                        {LogStatus, LogLevel} = case Reason of 
+                            normal -> {ok, info}; 
+                            {exit_status, Status} -> {exec:status(Status), finding} 
+                        end,
+                        erlamsa_logger:log(LogLevel, "process ~p exit with reason ~p", [OsPid, LogStatus])
+                after ?EXEC_SLEEP -> 
+                    exec:stop(Pid)               
+                end
+            end
+        }, [{output, exec} | Meta]}
     end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -374,6 +411,8 @@ string_outputs(Opts) ->
                                       maps:get(keyfile, Opts, "key.pem")});
         {serial, {Port, Speed}} ->
             serial_writer([{open, Port}, {speed, list_to_integer(Speed)}]);
+        {exec, App} ->
+            exec_writer(App);
         Str -> file_writer(Str)
     end.
 
@@ -405,6 +444,7 @@ blocks_port(Ll, Fd, Data, N, _) -> {Ll, Fd, Data, N}.
 close_port(_, stdout) -> ok;
 close_port(_, return) -> ok;
 close_port(_, {net, _Writer, Closer}) -> Closer();
+close_port(_, {exec, _Writer, Closer}) -> Closer();
 close_port(Data, {http, Final}) -> Final(Data);
 close_port(_, Fd) -> file:close(Fd).
 
@@ -416,4 +456,6 @@ write_really(Data, stdout) -> {file:write(standard_io, Data), <<>>};
 write_really(Data, {http, _Final}) -> {ok, Data};
 write_really(Data, {https, _Final}) -> {ok, Data};
 write_really(Data, {net, Writer, _Closer}) -> {Writer(Data), <<>>};
+write_really(Data, {exec, Writer, _Closer}) -> {Writer(Data), <<>>};
+write_really(Data, {serial, Writer}) -> {Writer(Data), <<>>};
 write_really(Data, Fd) -> {file:write(Fd, Data), <<>>}.

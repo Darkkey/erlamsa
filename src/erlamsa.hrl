@@ -48,8 +48,10 @@
 -define(SIZER_MAX_FIRST_BYTES, 512).
 -define(PREAMBLE_MAX_BYTES, 32).
 -define(START_MONITOR_ATTEMPTS, 5).
+-define(EXEC_SLEEP, 5000).
 -define(PROCKET_DIR, "/deps/procket/ebin").
 -define(SERIAL_DIR, "/deps/erlserial/ebin").
+-define(ERLEXEC_DIR, "/deps/erlexec/ebin").
 
 %% log levels:
 %% crit, error, warning, issue, info, decision, meta, debug
@@ -72,6 +74,12 @@
 -define(LOAD_SERIAL(R), code:add_pathz(R ++ ?SERIAL_DIR)).
 -else.
 -define(LOAD_SERIAL(R), true).
+-endif.
+
+-ifdef(USE_ERLEXEC).
+-define(LOAD_ERLEXEC(R), code:add_pathz(R ++ ?ERLEXEC_DIR)).
+-else.
+-define(LOAD_ERLEXEC(R), true).
 -endif.
 
 %% Logging table structure
