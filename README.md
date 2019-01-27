@@ -12,7 +12,7 @@ $ echo 'Hello erlamsa!' | ./erlamsa
 ## Features
 
 - mutational-based fuzzing engine based on radamsa;
-- support for fuzzing protocols over HTTP, TCP, UDP, and raw IP/network;
+- support for fuzzing protocols over HTTP, TCP, UDP, and raw IP/network, support of fuzzing over TLS;
 - built-in fuzzing proxy for MitMing and fuzzing connection(s) between target's client and server;
 - FaaS (fuzzing-as-a-service) mode, plain HTTP and HTTP/json queries are supported;
 - Examples on how to call erlamsa from C#, Node.js, Go, Python2/3 are available (see clients/);
@@ -85,8 +85,8 @@ $ ./erlamsa <<FILE TO FUZZ>>
 $ ./erlamsa <<FILE TO FUZZ>> -o <<FILE TO FUZZ>>.fuzzed
 $ ./erlamsa <<FILE TO FUZZ>> -o tcp://:<<LISTEN_ON_PORT>>
 $ cat <<BINARY WITH PACKET>> | ./erlamsa -o udp://<<HOST>>:<<PORT>>
-$ cat <<FILE WITH POST QUERY>> | ./erlamsa -o https://<<SERVER>>:<<PORTS>>/script.jsp?param1=value,POST,<<Header1>>=<<Header1value>>
-$ ./erlamsa <<PACKET>> -o serial:///dev/ttyUSB0,9600
+$ cat <<FILE WITH POST QUERY>> | ./erlamsa -o https://<<SERVER>>:<<PORT>>/script.jsp?param1=value,POST,<<Header1>>=<<Header1value>>
+$ ./erlamsa <<BINARY WITH PACKET>> -o serial:///dev/ttyUSB0,9600
 $ echo '<<DATA>>' | ./erlamsa exec://<<APP_TO_FUZZ_FROM_STDIO>>
 ```
 
@@ -266,7 +266,7 @@ Below, it could be found all currently supported by erlamsa monitors and corresp
 ## Platform limitations
 
 * on unix platforms (Linux, OS X, ...) erlamsa could not be launched in background mode using standard `&` shell symbol due to erlang VM limitations; `-D` option is intended for it. E.g., instead of `./erlamsa -H 127.0.0.1:17771 &` use `./erlamsa -H 127.0.0.1:17771 -D`
-* `ip://` and `raw://` outputs are not working on Windows, `raw://` output is not working on OS X
+* `exec://`, `serial://`, `ip://` and `raw://` outputs are not supported on Windows, `raw://` output is not supported on OS X
 * minimum recommended RAM to run on Windows OS is 4Gb
 * erlamsa spawns separate process upon startup, to avoid this behaviour (and save some performance) you could use `eerlamsa`/`eerlamsa.bat` scripts.
 
