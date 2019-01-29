@@ -45,7 +45,11 @@ flush([H|T]) when is_binary(H) -> R = flush(T), <<H/binary, R/binary>>.
 
 %% last member find
 -spec last_output(any()) -> any().
-last_output(L) when is_list(L) -> last_output(lists:last(L));
+%% TODO: FIXME: ugly fix to avoid crashes on [<< >> | { .. }] <-- need to be fixed somewhere upper
+last_output([B|L]) when is_list(L), is_binary(B) ->
+    last_output(L);
+last_output(L) when is_list(L) -> 
+    last_output(lists:last(L));
 last_output(F) when is_function(F) -> last_output(F());
 last_output(X) -> X.
 
@@ -110,7 +114,8 @@ serial_writer(Options) ->
     SerialPort = serial:start(Options),          
     fun F(_N, Meta) ->
         {F, {serial,
-            fun (Data) -> SerialPort ! {send, Data} end
+            fun (Data) -> SerialPort ! {send, Data}, ok end,
+            fun () -> ok end
         }, [{output, serial} | Meta]}
     end.
 
@@ -445,6 +450,7 @@ close_port(_, stdout) -> ok;
 close_port(_, return) -> ok;
 close_port(_, {net, _Writer, Closer}) -> Closer();
 close_port(_, {exec, _Writer, Closer}) -> Closer();
+close_port(_, {serial, _Writer, Closer}) -> Closer();
 close_port(Data, {http, Final}) -> Final(Data);
 close_port(_, Fd) -> file:close(Fd).
 
@@ -457,5 +463,5 @@ write_really(Data, {http, _Final}) -> {ok, Data};
 write_really(Data, {https, _Final}) -> {ok, Data};
 write_really(Data, {net, Writer, _Closer}) -> {Writer(Data), <<>>};
 write_really(Data, {exec, Writer, _Closer}) -> {Writer(Data), <<>>};
-write_really(Data, {serial, Writer}) -> {Writer(Data), <<>>};
+write_really(Data, {serial, Writer, _Closer}) -> {Writer(Data), <<>>};
 write_really(Data, Fd) -> {file:write(Fd, Data), <<>>}.
