@@ -109,12 +109,12 @@ file_writer(Str) ->
 %% Serial output
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--spec serial_writer(string(), list()) -> fun().
-serial_writer(Device, Options) ->
-    SerialPort = gen_serial:open(Device, Options),  
+-spec serial_writer(list()) -> fun().
+serial_writer(Options) ->
+    SerialPort = serial:start(Options),  
     fun F(_N, Meta) ->
         {F, {serial,
-            fun (Data) -> gen_serial:send(SerialPort, Data), gen_serial:flush(SerialPort, 1000), ok end,
+            fun (Data) -> SerialPort ! {send, Data}, ok end,
             fun () -> ok end
         }, [{output, serial} | Meta]}
     end.
@@ -415,7 +415,7 @@ string_outputs(Opts) ->
             http_writer(ssl, Params, {maps:get(certfile, Opts, "cert.pem"), 
                                       maps:get(keyfile, Opts, "key.pem")});
         {serial, {Port, Speed}} ->
-            serial_writer(Port, [{baud, list_to_integer(Speed)}]);
+            serial_writer([{open, Port}, {speed, list_to_integer(Speed)}]);
         {exec, App} ->
             exec_writer(App);
         Str -> file_writer(Str)
