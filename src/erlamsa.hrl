@@ -50,7 +50,7 @@
 -define(START_MONITOR_ATTEMPTS, 5).
 -define(EXEC_SLEEP, 5000).
 -define(PROCKET_DIR, "/deps/procket/ebin").
--define(SERIAL_DIR, "/deps/gen_serial/ebin").
+-define(SERIAL_DIR, "/deps/erlserial/ebin").
 -define(ERLEXEC_DIR, "/deps/erlexec/ebin").
 
 %% log levels:
