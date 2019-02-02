@@ -142,8 +142,8 @@ fuzzer(Dict) ->
     DirectInput = maps:get(input, Dict, nil),
     %%TODO: FIXME: should be maps:get(output, Dict, "-") instead 
     %% However now direct == return, so interexchanging with input should be ok
-    RecordFun = case DirectInput of  
-                    direct -> fun record_result/2;
+    RecordFun = case Paths of  
+                    [direct] -> fun record_result/2;
                     _Else -> fun (_, _) -> [] end
                 end,
     BlockScale = maps:get(blockscale, Dict, 1.0),
