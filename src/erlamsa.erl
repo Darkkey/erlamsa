@@ -5,6 +5,9 @@
 main(Args) ->
     RuntimeDir = filename:dirname(escript:script_name()),
     true = code:add_pathz(RuntimeDir ++ "/ebin"),
+    %% Better way?
+    %%true = code:add_path("ebin"),
+    %%ok = code:add_paths(filelib:wildcard("deps/*/ebin")),
     main(Args, RuntimeDir).
     
 main(Args, RuntimeDir) ->    
