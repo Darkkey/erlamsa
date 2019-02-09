@@ -35,9 +35,10 @@ default() -> [{plus,cm,"timeout=5000"}].
 monitors() ->
     [
      {cdb, erlamsa_mon_cdb, "CDB debugging monitor (windows targets only)"},
-     {cm, erlamsa_mon_connect, "TCP connection monitor (run by default)"},
+     {cm, erlamsa_mon_connect, "TCP connection listener monitor (run by default)"},
      {lc, erlamsa_mon_logcat, "Logcat/ADB crash monitor"},
-     {r2, erlamsa_mon_r2, "Radare2 debugging monitor"}
+     {r2, erlamsa_mon_r2, "Radare2 debugging monitor"},
+     {probe, erlamsa_mon_network, "Network probe monitor"}
     ].
 
 get_monitors([]) ->

@@ -288,6 +288,7 @@ udplisten_writer(LocalPort) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 -spec udpsock_writer(inet:ip_address(), inet:port_number(), inet:port_number(), list()) -> fun().
+%% TODO: FIXME: whether this is correct?
 udpsock_writer(Addr, PortFrom, PortTo, Options) when PortFrom =:= PortTo ->
     udpsock_writer(Addr, 0, PortTo, Options);
 udpsock_writer(Addr, PortFrom, PortTo, Options) ->
