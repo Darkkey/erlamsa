@@ -59,7 +59,7 @@ start(Params) ->
  
 network_monitor(MonOpts, Delay) ->
     case send_probe(maps:get(url, MonOpts, 1000), 
-                    maps:get(hello, MonOpts, <<>>),
+                    maps:get(hello, MonOpts, []),
                     maps:get(timeout, MonOpts, 5000)
                     ) of
         {ok, Data} -> erlamsa_logger:log_data(info, "network monitor: probe ok, target still alive :(, returned ", [], Data);
@@ -68,6 +68,7 @@ network_monitor(MonOpts, Delay) ->
     timer:sleep(Delay),
     network_monitor(MonOpts, Delay).
 
+%%TODO: FIXME: add http and icmp?
 send_probe({udp, _Auth, Addr, Port, _Query}, Data, Timeout) ->
     erlamsa_logger:log(info, "network monitor: sending probe...", []),
     {_Res, Sock} = gen_udp:open(0, [binary, {active, false}, {reuseaddr, true}]),
@@ -75,7 +76,17 @@ send_probe({udp, _Auth, Addr, Port, _Query}, Data, Timeout) ->
     gen_udp:send(Sock, hexstr_to_bin(Data)),
     Res = gen_udp:recv(Sock, 0, Timeout),
     gen_udp:close(Sock),
-    Res.
+    Res;
+send_probe({tcp, _Auth, Addr, Port, _Query}, Data, Timeout) ->
+    erlamsa_logger:log(info, "network monitor: sending probe...", []),
+    case gen_tcp:connect(Addr, Port, [binary, {active, false}], Timeout) of 
+        {ok, Sock} ->
+            gen_tcp:send(Sock, hexstr_to_bin(Data)),
+            Res = gen_tcp:recv(Sock, 0, Timeout),
+            gen_tcp:close(Sock), Res;
+        Err -> 
+            Err
+    end.
 
 try_report(econnrefused, timeout) ->
     erlamsa_logger:log(info, "network monitor: probe timeout, but that's ok", []);
