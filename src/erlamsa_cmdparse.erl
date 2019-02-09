@@ -394,6 +394,8 @@ parse_seed_opt(Seed, Dict) ->
             fail("Invalid seed format! Usage: int,int,int")
     end.
 
+parse_monitor(Lst = [H | T]) when length(Lst) > 2 ->
+    parse_monitor([H, string:join(T, ":")]);
 parse_monitor(Lst) when length(Lst) =/= 2 ->
     fail("Incorrect monitor specification! Usage: +/-monitor:params");
 parse_monitor(Lst) ->
