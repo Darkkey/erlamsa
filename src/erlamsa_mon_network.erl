@@ -63,7 +63,7 @@ network_monitor(MonOpts, Delay) ->
                     maps:get(timeout, MonOpts, 5000)
                     ) of
         {ok, Data} -> erlamsa_logger:log_data(info, "network monitor: probe ok, target still alive :(, returned ", [], Data);
-        {error, Reason} -> try_report(maps:get(report, MonOpts, all), Reason)
+        {error, Reason} -> try_report(maps:get(report, MonOpts, all), Reason, MonOpts)
     end,
     timer:sleep(Delay),
     network_monitor(MonOpts, Delay).
@@ -88,10 +88,11 @@ send_probe({tcp, _Auth, Addr, Port, _Query}, Data, Timeout) ->
             Err
     end.
 
-try_report(econnrefused, timeout) ->
+try_report(econnrefused, timeout, _) ->
     erlamsa_logger:log(info, "network monitor: probe timeout, but that's ok", []);
-try_report(timeout, econnrefused) ->
+try_report(timeout, econnrefused, _) ->
     erlamsa_logger:log(info, "network monitor: connection refused, but that's ok", []);
-try_report(Filter, Reason) ->
-    erlamsa_logger:log(finding, "network monitor: probe failed, target seems down: ~p (filter = ~p) ", [Reason, Filter]).
+try_report(Filter, Reason, MonOpts) ->
+    erlamsa_logger:log(finding, "network monitor: probe failed, target seems down: ~p (filter = ~p) ", [Reason, Filter]),
+    erlamsa_monitor:do_after(MonOpts).
         
