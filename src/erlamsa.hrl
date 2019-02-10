@@ -29,8 +29,13 @@
 -author("dark_k3y").
 
 -include("dependencies.hrl").
+-include("version.hrl").
 
 -define(VERSION, "0.1.5").
+
+-ifndef(GITVER).
+-define(GITVER, "").
+-endif.
 
 -define(INITIAL_IP,24).              %% initial max 1/n for basic patterns)
 -define(REMUTATE_PROBABILITY, {4, 5}).

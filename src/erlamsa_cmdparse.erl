@@ -456,7 +456,7 @@ parse_opts([{httpsvc, HostPort}|T], Dict) ->
         _ -> fail("Invalid listen endpoint format, usage host:port")
     end;
 parse_opts([version|_T], _Dict) ->
-    io:format("Erlamsa ~s~n", [?VERSION]),
+    io:format("Erlamsa ~s ~s~n", [?VERSION, ?GITVER]),
     halt(0);
 parse_opts([about|_T], _Dict) ->
     io:format(about(), []),
