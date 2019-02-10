@@ -8,18 +8,6 @@
 
 -export([start/1]).
 
-%% From https://github.com/b/hex/blob/master/src/hex.erl
-hexstr_to_bin(S) ->
-  hexstr_to_bin(S, []).
-hexstr_to_bin([], Acc) ->
-  list_to_binary(lists:reverse(Acc));
-hexstr_to_bin([X,Y|T], Acc) ->
-  {ok, [V], []} = io_lib:fread("~16u", [X,Y]),
-  hexstr_to_bin(T, [V | Acc]);
-hexstr_to_bin([X|T], Acc) ->
-  {ok, [V], []} = io_lib:fread("~16u", lists:flatten([X,"0"])),
-  hexstr_to_bin(T, [V | Acc]).
-
 parse_params(["url=" ++ URL|T], Acc) ->
     case http_uri:parse(URL) of
         {ok, {Proto, Auth, Host, Port, Path, Query}} -> 
@@ -73,7 +61,7 @@ send_probe({udp, _Auth, Addr, Port, _Query}, Data, Timeout) ->
     erlamsa_logger:log(info, "network monitor: sending probe...", []),
     {_Res, Sock} = gen_udp:open(0, [binary, {active, false}, {reuseaddr, true}]),
     gen_udp:connect(Sock, Addr, Port),
-    gen_udp:send(Sock, hexstr_to_bin(Data)),
+    gen_udp:send(Sock, erlamsa_utils:hexstr_to_bin(Data)),
     Res = gen_udp:recv(Sock, 0, Timeout),
     gen_udp:close(Sock),
     Res;
@@ -81,7 +69,7 @@ send_probe({tcp, _Auth, Addr, Port, _Query}, Data, Timeout) ->
     erlamsa_logger:log(info, "network monitor: sending probe...", []),
     case gen_tcp:connect(Addr, Port, [binary, {active, false}], Timeout) of 
         {ok, Sock} ->
-            gen_tcp:send(Sock, hexstr_to_bin(Data)),
+            gen_tcp:send(Sock, erlamsa_utils:hexstr_to_bin(Data)),
             Res = gen_tcp:recv(Sock, 0, Timeout),
             gen_tcp:close(Sock), Res;
         Err -> 

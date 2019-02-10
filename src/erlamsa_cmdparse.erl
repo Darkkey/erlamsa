@@ -90,6 +90,9 @@ cmdline_optsspec() ->
                                                                 "<arg>, which data generators to use"},
     {genfuzz	, $G,	"genfuzz",		float,					"<arg>, activate generation-based fuzzer, arg is base probablity"},
     {help		, $h, 	"help", 		undefined, 				"show this thing"},
+    % ,{heXinput	, $X, 	"hexinput",		undefined,    			"treat input data as a hex string"},
+    {hexoutput	, undefined, 	
+                        "hexoutput",	undefined,    			"output data in logs as hex"},
     {httpsvc    , $H,   "httpservice",  string,				    "<arg>, run as HTTP service on <host:port>, e.g.: 127.0.0.1:17771"},
     {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or proto://:port, proto://host:port for data endpoint (generation mode)"},
     {keyfile	, undefined,
@@ -120,7 +123,6 @@ cmdline_optsspec() ->
     {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose, show some progress during generation"},
     {version	, $V, 	"version",		undefined, 				"show program version"},
     {workers	, $w, 	"workers",		integer,    			"<arg>, number of working threads (1 for standalone, 10 for proxy/fass)"}
-    % ,{heXinput	, $X, 	"hexinput",		undefined,    			"treat input data as a hex string"},
 ].
 
 usage() ->
@@ -483,6 +485,8 @@ parse_opts([recursive|T], Dict) ->
     parse_opts(T, maps:put(recursive, 1, Dict));
 parse_opts([{count, N}|T], Dict) ->
     parse_opts(T, maps:put(n, N, Dict));
+parse_opts([hexoutput|T], Dict) ->
+    parse_opts(T, maps:put(hexoutput, true, Dict));
 parse_opts([{certfile, CertFile}|T], Dict) ->
     parse_opts(T, maps:put(certfile, CertFile, Dict));
 parse_opts([{keyfile, KeyFile}|T], Dict) ->
