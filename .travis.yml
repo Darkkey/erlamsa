@@ -6,3 +6,4 @@ otp_release:
   - 19.3
   - 18.1
   - 18.0
+script: make
