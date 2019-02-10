@@ -42,7 +42,8 @@
         flush_bvecs/2, applynth/3, sort_by_priority/1, binarish/1,
         check_empty/1, stderr_probe/2, halve/1, error/1,
         resolve_addr/1, make_post/1, make_fuzzer/1, make_mutas/1,
-        load_deps/1, get_direct_fuzzing_opts/2, get_deps_dirs/1]).
+        load_deps/1, get_direct_fuzzing_opts/2, get_deps_dirs/1,
+        hexstr_to_bin/1, bin_to_hexstr/1]).
 
 load_deps(RuntimeDir) ->
     true and ?LOAD_PROCKET(RuntimeDir) and ?LOAD_SERIAL(RuntimeDir) and ?LOAD_ERLEXEC(RuntimeDir).
@@ -224,3 +225,19 @@ binarish(<<>>, _) -> false;
 binarish(<<H:8,_/binary>>, _) when H =:= 0 -> true;
 binarish(<<H:8,_/binary>>, _) when H band 128 =/= 0 -> true;
 binarish(<<_:8,T/binary>>, P) -> binarish(T, P+1).
+
+%% From https://github.com/b/hex/blob/master/src/hex.erl
+hexstr_to_bin(S) ->
+  hexstr_to_bin(S, []).
+hexstr_to_bin([], Acc) ->
+  list_to_binary(lists:reverse(Acc));
+hexstr_to_bin([X,Y|T], Acc) ->
+  {ok, [V], []} = io_lib:fread("~16u", [X,Y]),
+  hexstr_to_bin(T, [V | Acc]);
+hexstr_to_bin([X|T], Acc) ->
+  {ok, [V], []} = io_lib:fread("~16u", lists:flatten([X,"0"])),
+  hexstr_to_bin(T, [V | Acc]).
+
+bin_to_hexstr(Bin) ->
+  lists:flatten([io_lib:format("~2.16.0B", [X]) ||
+    X <- binary_to_list(Bin)]).
