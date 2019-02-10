@@ -43,7 +43,7 @@
         check_empty/1, stderr_probe/2, halve/1, error/1,
         resolve_addr/1, make_post/1, make_fuzzer/1, make_mutas/1,
         load_deps/1, get_direct_fuzzing_opts/2, get_deps_dirs/1,
-        hexstr_to_bin/1, bin_to_hexstr/1]).
+        hexstr_to_bin/1, bin_to_hexstr/1, build_recursive_paths/1]).
 
 load_deps(RuntimeDir) ->
     true and ?LOAD_PROCKET(RuntimeDir) and ?LOAD_SERIAL(RuntimeDir) and ?LOAD_ERLEXEC(RuntimeDir).
@@ -241,3 +241,22 @@ hexstr_to_bin([X|T], Acc) ->
 bin_to_hexstr(Bin) ->
   lists:flatten([io_lib:format("~2.16.0B", [X]) ||
     X <- binary_to_list(Bin)]).
+
+-spec build_recursive_paths(list()) -> list().
+build_recursive_paths(Names) -> build_recursive_paths("", Names, []).
+
+-spec build_recursive_paths(list(), list(), list()) -> list().
+build_recursive_paths(Prefix, [H|T], Acc) ->
+    FullPath =  case Prefix of
+                    "" -> H;
+                    _Prefix -> filename:join([Prefix, H])
+                end,
+    case filelib:is_dir(FullPath) of
+        true -> 
+            {ok, Names} = file:list_dir(FullPath),
+            SubAcc = build_recursive_paths(FullPath, Names, []),
+            build_recursive_paths(Prefix, T, SubAcc ++ Acc);
+        _Else -> build_recursive_paths(Prefix, T, [FullPath | Acc])
+    end;
+build_recursive_paths(_, [], Acc) ->
+    Acc.

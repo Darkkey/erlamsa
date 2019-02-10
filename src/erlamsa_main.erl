@@ -147,9 +147,12 @@ fuzzer(Dict) ->
                     _Else -> fun (_, _) -> [] end
                 end,
     BlockScale = maps:get(blockscale, Dict, 1.0),
-    Generator = erlamsa_gen:make_generator(maps:get(generators, Dict,
-                                        erlamsa_gen:default()), Paths,
-                                        DirectInput, BlockScale, Fail, Cnt),
+    Generator = erlamsa_gen:make_generator(
+                                            maps:get(generators, Dict, erlamsa_gen:default()), 
+                                            Paths,
+                                            DirectInput, BlockScale, Fail, Cnt,
+                                            maps:get(recursive, Dict, false)
+                                          ),
     RecordMeta = maybe_meta_logger( maps:get(metadata, Dict, nil), Fail),
     RecordMeta({seed, Seed}),
     PatList = maps:get(patterns, Dict, erlamsa_patterns:default()),
