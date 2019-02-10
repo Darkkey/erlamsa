@@ -36,7 +36,7 @@
 -endif.
 
 %% API
--export([make_generator/6, generators/0, default/0, tostring/1]).
+-export([make_generator/7, generators/0, default/0, tostring/1]).
 
 %% fill the rest of the stream with padding random bytes
 -spec finish(non_neg_integer()) -> [binary()].
@@ -192,8 +192,8 @@ mux_generators(Generators, _) ->
     {Name, fun () -> F() end}.
 
 %% create a lambda-generator function based on the array
--spec make_generator_fun(list(), binary() | nil, float(), fun(), non_neg_integer()) -> fun().
-make_generator_fun(Args, Inp, BlockScale, Fail, N) ->
+-spec make_generator_fun(list(), binary() | nil, float(), fun(), non_neg_integer(), atom()) -> fun().
+make_generator_fun(Args, Inp, BlockScale, Fail, N, Recursive) ->
     fun (false) -> Fail("Bad generator priority!");
         ({Name, Pri}) ->
             case Name of
@@ -202,11 +202,13 @@ make_generator_fun(Args, Inp, BlockScale, Fail, N) ->
                 stdin ->
                     false;
                 file when Args =/= [] andalso Args =/= ["-"] andalso Args =/= [direct] ->
-                    {Pri, {Name, file_streamer(Args, BlockScale)}};
+                    Paths = case Recursive of true -> erlamsa_utils:build_recursive_paths(Args); _Else -> Args end,
+                    {Pri, {Name, file_streamer(Paths, BlockScale)}};
                 file ->
                     false;
                 jump when length(Args) > 1 ->
-                    {Pri, {Name, jump_streamer(Args, BlockScale)}};
+                    Paths = case Recursive of true -> erlamsa_utils:build_recursive_paths(Args); _Else -> Args end,
+                    {Pri, {Name, jump_streamer(Paths, BlockScale)}};
                 jump ->
                     false;
                 direct when Inp =:= nil ->
@@ -222,10 +224,10 @@ make_generator_fun(Args, Inp, BlockScale, Fail, N) ->
     end.
 
 %% get a list of {GenAtom, Pri} and output the list of {Pri, Gen}
--spec make_generator(list(), list(), binary() | nil, float(), fun(), non_neg_integer())
+-spec make_generator(list(), list(), binary() | nil, float(), fun(), non_neg_integer(), atom())
         -> fun() | false.
-make_generator(Pris, Args, Inp, BlockScale, Fail, N) ->
-    Gs = [ A || A <- [(make_generator_fun(Args, Inp, BlockScale, Fail, N))(V1)
+make_generator(Pris, Args, Inp, BlockScale, Fail, N, Recursive) ->
+    Gs = [ A || A <- [(make_generator_fun(Args, Inp, BlockScale, Fail, N, Recursive))(V1)
                       || V1 <- Pris], A =/= false],
     mux_generators(Gs, Fail).
 

@@ -117,7 +117,7 @@ cmdline_optsspec() ->
     {pidfile	, undefined,
                         "pidfile",		string,                 "<arg>, PID file name"},
     {proxyprob	, $P,	"proxy",		string,					"<arg>, activate fuzzing proxy mode, param is fuzzing probability in form of s->c,c->s e.g.: 0.5,0.5"},
-    % {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},
+    {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},
     {seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int or source:device for an external source of entropy (e.g. binary file)"},
     {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},
     {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose, show some progress during generation"},
@@ -482,7 +482,7 @@ parse_opts([debug|T], Dict) ->
 parse_opts([{meta, Path}|T], Dict) ->
     parse_opts(T, maps:put(metadata, convert_metapath(Path), Dict));
 parse_opts([recursive|T], Dict) ->
-    parse_opts(T, maps:put(recursive, 1, Dict));
+    parse_opts(T, maps:put(recursive, true, Dict));
 parse_opts([{count, N}|T], Dict) ->
     parse_opts(T, maps:put(n, N, Dict));
 parse_opts([hexoutput|T], Dict) ->
