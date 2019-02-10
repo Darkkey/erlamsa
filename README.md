@@ -56,13 +56,9 @@ git clone https://github.com/Darkkey/erlamsa
 cd erlamsa
 ```
 
-On Linux/OS X:
+On Linux/OS X/BSD:
 ```
 make 
-```
-or 
-```
-escript rebar co
 ```
 
 On Windows (`escript.exe` and `erlc.exe` should be in `%PATH%`):
