@@ -46,7 +46,7 @@ start(Params) ->
     end.
  
 network_monitor(MonOpts, Delay) ->
-    case send_probe(maps:get(url, MonOpts, 1000), 
+    case send_probe(maps:get(url, MonOpts), 
                     maps:get(hello, MonOpts, []),
                     maps:get(timeout, MonOpts, 5000)
                     ) of
