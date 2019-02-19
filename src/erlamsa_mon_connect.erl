@@ -43,12 +43,21 @@ server_tcp(ListenSocket, MonOpts) ->
     erlamsa_logger:log(finding, "connection monitor got new connection from ~s:~p, socket ~p", 
                              [inet:ntoa(Host), Port, Socket]),
     loop_tcp(Socket, Timeout, MonOpts).
+
+check_event(_Socket, <<${,$e,$v,$e,$n,$t,$},Rest/binary>>) ->
+    process_event(binary_to_list(Rest));
+check_event(Socket, Data) -> 
+    erlamsa_logger:log_data(finding, "connection monitor got data on ~p:", [Socket], Data).
+
+%% TODO: Add more events in future
+process_event(Event) ->
+     erlamsa_logger:log(finding, "event monitor new message: ~s", [string:trim(Event)]).
  
 loop_tcp(Socket, Timeout, MonOpts) ->
     inet:setopts(Socket, [{active, once}]),
     receive
         {tcp, Socket, Data} ->
-            erlamsa_logger:log_data(finding, "connection monitor got data on ~p:", [Socket], Data),
+            check_event(Socket, Data),
             loop_tcp(Socket, Timeout, MonOpts);
         {tcp_closed, Socket} ->
             erlamsa_logger:log(finding, "connection monitor socket ~p closed by client", [Socket]),
