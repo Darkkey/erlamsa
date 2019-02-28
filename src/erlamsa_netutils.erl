@@ -91,7 +91,7 @@ connect(ssl, DHost, DPort, Opts) -> ssl:connect(DHost, DPort, Opts).
 connect(tcp, DHost, DPort, Opts, Timeout) -> gen_tcp:connect(DHost, DPort, Opts, Timeout);
 connect(ssl, DHost, DPort, Opts, Timeout) -> ssl:connect(DHost, DPort, Opts, Timeout).
 
-setopts(tcp, ClientSocket, Opts) -> gen_tcp:setopts(ClientSocket, Opts);
+setopts(tcp, ClientSocket, Opts) -> inet:setopts(ClientSocket, Opts);
 setopts(ssl, ClientSocket, Opts) -> ssl:setopts(ClientSocket, Opts).
 
 send(tcp, Sock, Data) -> gen_tcp:send(Sock, Data);
