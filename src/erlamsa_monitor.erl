@@ -25,7 +25,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(erlamsa_monitor).
--export([get_supervisor_opts/1, monitors/0, default/0, parse_after/1, do_after/1]).
+-export([get_supervisor_opts/1, monitors/0, send_pid/1, default/0, parse_after/1, do_after/1]).
 
 get_supervisor_opts(Opts) ->
     get_monitors(maps:get(monitor, Opts, [])).
@@ -40,6 +40,19 @@ monitors() ->
      {r2, erlamsa_mon_r2, "Radare2 debugging monitor"},
      {probe, erlamsa_mon_network, "Network probe monitor"}
     ].
+
+send_pid(Pid) ->
+    lists:map(
+        fun ({_, P,_}) -> 
+            case global:whereis_name(P) of
+                undefined ->
+                    ok;
+                MonPid ->
+                    MonPid ! {executed, Pid} 
+            end
+        end, 
+        monitors()), 
+    ok.
 
 get_monitors([]) ->
     [];

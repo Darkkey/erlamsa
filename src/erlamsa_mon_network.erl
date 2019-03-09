@@ -58,7 +58,7 @@ network_monitor(MonOpts, Delay) ->
 
 %%TODO: FIXME: add http and icmp?
 send_probe({udp, _Auth, Addr, Port, _Query}, Data, Timeout) ->
-    erlamsa_logger:log(info, "network monitor: sending probe...", []),
+    erlamsa_logger:log(info, "network monitor: sending UDP probe...", []),
     {_Res, Sock} = gen_udp:open(0, [binary, {active, false}, {reuseaddr, true}]),
     gen_udp:connect(Sock, Addr, Port),
     gen_udp:send(Sock, erlamsa_utils:hexstr_to_bin(Data)),
@@ -66,7 +66,7 @@ send_probe({udp, _Auth, Addr, Port, _Query}, Data, Timeout) ->
     gen_udp:close(Sock),
     Res;
 send_probe({tcp, _Auth, Addr, Port, _Query}, Data, Timeout) ->
-    erlamsa_logger:log(info, "network monitor: sending probe...", []),
+    erlamsa_logger:log(info, "network monitor: sending TCP connect probe...", []),
     case gen_tcp:connect(Addr, Port, [binary, {active, false}], Timeout) of 
         {ok, Sock} ->
             gen_tcp:send(Sock, erlamsa_utils:hexstr_to_bin(Data)),

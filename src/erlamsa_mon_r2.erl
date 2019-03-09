@@ -4,6 +4,11 @@
 
 -export([start/1, init/1]).
 
+parse_params(["app={EXEC}"|T], Acc) ->
+    receive
+        {executed, Pid} ->
+            parse_params(T, maps:put(app, io_lib:format("~p", [Pid]), Acc))
+    end;
 parse_params(["app=" ++ App|T], Acc) ->
     parse_params(T, maps:put(app, App, Acc));
 parse_params(["r2path=" ++ R2Path|T], Acc) ->
@@ -55,6 +60,7 @@ handle_r2_session(continue, R2Pid, CrashMsg) ->
 
 start(Params) -> 
    Pid = spawn(?MODULE, init, [Params]),
+   global:register_name(?MODULE, Pid),
    {ok, Pid}.
 
 init(Params) ->
