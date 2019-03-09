@@ -24,3 +24,4 @@ clients/frida/example
 *.pem
 erlamsa
 src/version.hrl
+priv/
