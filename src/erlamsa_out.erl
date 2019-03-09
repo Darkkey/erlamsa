@@ -289,8 +289,6 @@ udplisten_writer(LocalPort) ->
 
 -spec udpsock_writer(inet:ip_address(), inet:port_number(), inet:port_number(), list()) -> fun().
 %% TODO: FIXME: whether this is correct?
-udpsock_writer(Addr, PortFrom, PortTo, Options) when PortFrom =:= PortTo ->
-    udpsock_writer(Addr, 0, PortTo, Options);
 udpsock_writer(Addr, PortFrom, PortTo, Options) ->
     fun F(_N, Meta) ->
         {Res, Sock} = gen_udp:open(PortFrom, [binary, {active, true}, {reuseaddr, true} | Options]),
@@ -399,7 +397,7 @@ string_outputs(Opts) ->
             {ok, IfAddr} = inet:getaddr(StrIfAddr, inet),
             udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), [{ip, IfAddr}]);
         {udp, {PortFrom, Addr, PortTo}} -> udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), []);
-        {udp, {Addr, Port}} -> udpsock_writer(Addr, list_to_integer(Port), list_to_integer(Port), []);
+        {udp, {Addr, Port}} -> udpsock_writer(Addr, 0, list_to_integer(Port), []);
         %% RAW IP output <-- fuzzed packet is inside proper IP packet
         {ip, {Addr, Proto}} -> rawsock_writer(Addr,
                                               [{protocol, list_to_integer(Proto)},
