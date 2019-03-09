@@ -31,6 +31,11 @@
 -export([init/1, start/1, init_port/3]).
 
 %%TODO:add launch in addition to attach
+parse_params(["pid={EXEC}"|T], Acc) ->
+    receive
+        {executed, Pid} ->
+            parse_params(T, maps:put(run, Pid, Acc))
+    end;
 parse_params(["pid=" ++ App|T], Acc) ->
     parse_params(T, maps:put(run, io_lib:format("-p ~s", [App]), Acc));
 parse_params(["attach=" ++ App|T], Acc) ->
@@ -46,6 +51,7 @@ parse_params([], Acc) ->
 
 start(Params) ->
     Pid = spawn(?MODULE, init, [Params]),
+    global:register_name(?MODULE, Pid),
     {ok, Pid}.
 
 init(Params) ->

@@ -125,7 +125,8 @@ serial_writer(Options) ->
 
 -spec exec_writer(string()) -> fun().
 exec_writer(App) ->
-    exec:start([]),
+    %%TODO: FIXME: select correct path
+    exec:start([{portexe, "priv/exec-port"}]),
     Watcher = spawn(fun W() -> 
                         receive 
                             {Stream, Pid, Data} -> 
@@ -137,6 +138,7 @@ exec_writer(App) ->
     fun F(_N, Meta) ->
         {ok, Pid, OsPid} = exec:run(App, [stdin, monitor, {stdout, Watcher}, {stderr, Watcher}]),
         erlamsa_logger:log(info, "new process is executed [OS Pid = ~p]", [OsPid]),
+        erlamsa_monitor:send_pid(OsPid),
         {F, {exec,
             fun (Data) -> 
                 exec:send(Pid, Data)

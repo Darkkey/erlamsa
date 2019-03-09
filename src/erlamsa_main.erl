@@ -182,7 +182,7 @@ fuzzer(Dict) ->
                         {CandidateMuta, Meta, Written, CandidateData} = erlamsa_out:output(Tmp, Fd, Post),
                         RecordMeta(lists:reverse(lists:flatten([{written, Written}| Meta]))),
                         Verbose(io_lib:format("output: ~p~n", [Written])),
-                        erlamsa_logger:log(info, "fuzzing cycle ~p/~p finished, written ~p bytes", [I, N, Written]),
+                        erlamsa_logger:log(info, "fuzzing cycle ~p (<= ~p) finished, written ~p bytes", [I, N, Written]),
                         {CandidateOut, CandidateMuta, CandidateData, 0}
                     catch
                         {cantconnect, _Err} ->
@@ -203,7 +203,7 @@ fuzzer(Dict) ->
 run_fuzzing_loop(1, FuzzingLoop, Muta, {_GenName, Gen}, Out, Cnt) ->
     FuzzingLoop(Muta, Gen, Out, {1, 0}, Cnt, []);
 %% multi- threaded mode
-run_fuzzing_loop(Threads, FuzzingLoop, Muta, {GenName, Gen}, Out, _Cnt) ->
+run_fuzzing_loop(Threads, FuzzingLoop, Muta, {GenName, Gen}, Out, Cnt) ->
     %% Selecting generator
     %% For stdio we need to pre-read the data;
     %% otherwise it could be some random that we should variate
@@ -213,7 +213,7 @@ run_fuzzing_loop(Threads, FuzzingLoop, Muta, {GenName, Gen}, Out, _Cnt) ->
     end,
     MainProcessPid = erlang:self(),
     [spawn(fun() -> 
-            erlamsa_logger:log(info, "fuzzing worker process ~p started, range {~p, ~p} + ~p additional", [W, A, B, R]),
+            erlamsa_logger:log(info, "fuzzing worker process ~p started, range {~p, ~p} + ~p additional", [W, A, B, floor(R/Cnt)]),
             FuzzingLoop(Muta, MultiGen, Out, {A, 0}, B, []),
             FuzzingLoop(Muta, MultiGen, Out, {R, 0}, R, []),
             MainProcessPid ! {finished, W, erlang:self(), {{A, B, W}, R}}
