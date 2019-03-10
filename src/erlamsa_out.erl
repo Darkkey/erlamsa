@@ -111,7 +111,7 @@ file_writer(Str) ->
 
 -spec serial_writer(list()) -> fun().
 serial_writer(Options) ->
-    SerialPort = serial:start(Options),  
+    SerialPort = serial:start([{serialexe, "priv/serial"} | Options]),  
     fun F(_N, Meta) ->
         {F, {serial,
             fun (Data) -> SerialPort ! {send, Data}, ok end,

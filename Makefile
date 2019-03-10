@@ -9,6 +9,7 @@ compile:
 	./rebar get-deps
 	./rebar compile
 	cp deps/erlexec/priv/*/exec-port priv/
+	cp deps/erlserial/priv/*/serial priv/
 	./rebar escriptize
 
 fast:
