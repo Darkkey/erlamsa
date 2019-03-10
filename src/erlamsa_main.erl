@@ -213,7 +213,7 @@ run_fuzzing_loop(Threads, FuzzingLoop, Muta, {GenName, Gen}, Out, Cnt) ->
     end,
     MainProcessPid = erlang:self(),
     [spawn(fun() -> 
-            erlamsa_logger:log(info, "fuzzing worker process ~p started, range {~p, ~p} + ~p additional", [W, A, B, floor(R/Cnt)]),
+            erlamsa_logger:log(info, "fuzzing worker process ~p started, range {~p, ~p} + ~p additional", [W, A, B, trunc(R/Cnt)]),
             FuzzingLoop(Muta, MultiGen, Out, {A, 0}, B, []),
             FuzzingLoop(Muta, MultiGen, Out, {R, 0}, R, []),
             MainProcessPid ! {finished, W, erlang:self(), {{A, B, W}, R}}
