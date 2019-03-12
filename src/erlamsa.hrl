@@ -37,6 +37,10 @@
 -define(GITVER, "").
 -endif.
 
+-ifndef(PREFIXDIR).
+-define(PREFIXDIR, "/usr/local").
+-endif.
+
 -define(INITIAL_IP,24).              %% initial max 1/n for basic patterns)
 -define(REMUTATE_PROBABILITY, {4, 5}).
 -define(MAX_BURST_MUTATIONS, 16).

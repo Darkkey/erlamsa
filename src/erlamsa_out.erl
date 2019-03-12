@@ -111,7 +111,7 @@ file_writer(Str) ->
 
 -spec serial_writer(list()) -> fun().
 serial_writer(Options) ->
-    SerialPort = serial:start([{serialexe, "priv/serial"} | Options]),  
+    SerialPort = serial:start([{serialexe, erlamsa_utils:get_portsdir() ++ "erlserial"} | Options]),  
     fun F(_N, Meta) ->
         {F, {serial,
             fun (Data) -> SerialPort ! {send, Data}, ok end,
@@ -126,7 +126,7 @@ serial_writer(Options) ->
 -spec exec_writer(string()) -> fun().
 exec_writer(App) ->
     %%TODO: FIXME: select correct path
-    exec:start([{portexe, "priv/exec-port"}]),
+    exec:start([{portexe, erlamsa_utils:get_portsdir() ++ "exec-port"}]),
     Watcher = spawn(fun W() -> 
                         receive 
                             {Stream, Pid, Data} -> 
@@ -166,6 +166,7 @@ exec_writer(App) ->
 -spec rawsock_writer(inet:ip_address(), list()) -> fun().
 rawsock_writer(Addr, Options) ->
     fun F(_N, Meta) ->
+        erlamsa_utils:init_procket(),
         {Res, FD} = procket:open(0, Options),
         case Res of
             ok ->

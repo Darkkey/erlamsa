@@ -42,7 +42,7 @@
         flush_bvecs/2, applynth/3, sort_by_priority/1, binarish/1,
         check_empty/1, stderr_probe/2, halve/1, error/1,
         resolve_addr/1, make_post/1, make_fuzzer/1, make_mutas/1,
-        load_deps/1, get_direct_fuzzing_opts/2, get_deps_dirs/1,
+        load_deps/1, get_direct_fuzzing_opts/2, get_deps_dirs/1, init_procket/0, get_portsdir/0,
         hexstr_to_bin/1, bin_to_hexstr/1, build_recursive_paths/1]).
 
 load_deps(RuntimeDir) ->
@@ -55,6 +55,25 @@ get_direct_fuzzing_opts(Data, Opts) ->
     maps:put(paths, [direct],
         maps:put(output, return,
             maps:put(input, Data, Opts))).
+
+init_procket() -> 
+    RuntimeDir = filename:dirname(escript:script_name()),
+    PrivDir = filename:join([RuntimeDir, "priv"]),
+    case filelib:is_dir(PrivDir) of
+        false ->
+            application:set_env(procket, port_executable, filename:join([?PREFIXDIR, "lib/erlamsa/procket"]));
+        true -> ok
+    end.
+
+get_portsdir() -> 
+    RuntimeDir = filename:dirname(escript:script_name()),
+    PrivDir = filename:join([RuntimeDir, "priv"]),
+    case filelib:is_dir(PrivDir) of
+        false ->
+            filename:join([?PREFIXDIR, "bin"]) ++ "/";
+        true -> 
+            PrivDir ++ "/"
+    end.
 
 cons_revlst([H|T], L) ->
     cons_revlst(T, [H|L]);
