@@ -23,5 +23,6 @@ clients/frida/example
 *.bak
 *.pem
 erlamsa
+erlamsa_daemon
 src/version.hrl
 priv/

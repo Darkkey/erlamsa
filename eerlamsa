@@ -5,4 +5,8 @@
 main(Args) ->
     RuntimeDir = filename:dirname(escript:script_name()),
     true = code:add_pathz(RuntimeDir ++ "/ebin"),
-    erlamsa:main(Args, RuntimeDir).
+    true = erlamsa_utils:load_deps(RuntimeDir),
+    case length([Z || Z <- Args, Z =:= "-D"]) of
+        1 -> io:format("Service mode not supported for the standalone script, use erlamsa instead!~n");
+        _Else -> erlamsa:main(Args)
+    end.
