@@ -209,8 +209,8 @@ streamlisten_writer(Transport, LocalPort, {CertFile, KeyFile}, PostProcess) ->
                             ets:insert(global_config, [{cm_host, IP}]),
                             {ok, {Address, Port}} = erlamsa_netutils:peername(Transport, ClientSock), 
                             TmpRecv = erlamsa_netutils:recv(Transport, ClientSock, 0, infinity),
-                            erlamsa_logger:log(info, "~p client connect from ~p:~p: ~p",
-                                            [Transport, Address, Port, TmpRecv]),
+                            erlamsa_logger:log_data(info, "~p client connect from ~p:~p, received:",
+                                            [Transport, Address, Port], TmpRecv),
                             erlamsa_netutils:send(Transport, ClientSock, PostProcess(Data)), timer:sleep(1),
                             erlamsa_netutils:close(Transport, ClientSock),
                             %% FIXME: should we close listen socket here? is it ok?
