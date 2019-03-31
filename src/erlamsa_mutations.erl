@@ -672,8 +672,17 @@ base64_mutator([H|T], Meta) ->
 %% URI SSRF Mutator
 %%
 
+%% need this wrapper in case if ets process not started (erlamsa_app:start haven't called)
 -spec get_ssrf_ep() -> {string(), integer()}.
-get_ssrf_ep() -> 
+get_ssrf_ep() ->
+    try get_ssrf_ep_unsafe() of
+        {SSRFHost, SSRFPort} -> {SSRFHost, SSRFPort}
+    catch
+        _:_ -> {"localhost", 51234}
+    end.
+
+-spec get_ssrf_ep_unsafe() -> {string(), integer()}.
+get_ssrf_ep_unsafe() -> 
     SSRFPort = case ets:match(global_config, {cm_port, '$1'}) of
         [[Port]] -> Port;
         _ -> 51234
