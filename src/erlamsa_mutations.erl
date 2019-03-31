@@ -656,6 +656,8 @@ base64_mutator([H|T], Meta) ->
                     error:badarg ->
                         {{text, A}, Acc};
                     error:function_clause ->
+                        {{text, A}, Acc};
+                    _:_ -> 
                         {{text, A}, Acc}
                 end;
             (Lex, Acc) -> {Lex, Acc}
