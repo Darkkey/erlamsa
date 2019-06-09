@@ -129,6 +129,7 @@ start(_StartType, _StartArgs) ->
 -spec start(options()) -> {ok, pid()}.
 start(Opts) ->
     Pid = spawn(?MODULE, loop, [Opts]),
+    register(erlamsa, Pid),  
     global:register_name(erlamsa, Pid),
     {ok, Pid}.
 
@@ -138,7 +139,7 @@ loop(Opts) ->
         {fuzz, Client, Data} ->
             NewOpts = erlamsa_utils:get_direct_fuzzing_opts(Data, Opts),
             Client ! {fuzzing_ok, erlamsa_fsupervisor:get_fuzzing_output(NewOpts)};
-        {test, _Client} -> ok
+        {test, Client} -> Client ! {test, ok}
     end,
     loop(Opts).
 

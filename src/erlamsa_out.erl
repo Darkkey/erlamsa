@@ -463,7 +463,7 @@ write_really(Data, return) -> {ok, Data};
 write_really(Data, stdout) -> {file:write(standard_io, Data), <<>>};
 write_really(Data, {http, _Final}) -> {ok, Data};
 write_really(Data, {https, _Final}) -> {ok, Data};
-write_really(Data, {net, Writer, _Closer}) -> {Writer(Data), <<>>};
-write_really(Data, {exec, Writer, _Closer}) -> {Writer(Data), <<>>};
-write_really(Data, {serial, Writer, _Closer}) -> {Writer(Data), <<>>};
+write_really(Data, {net, Writer, _Closer}) -> {Writer(Data), Data};
+write_really(Data, {exec, Writer, _Closer}) -> {Writer(Data), Data};
+write_really(Data, {serial, Writer, _Closer}) -> {Writer(Data), Data};
 write_really(Data, Fd) -> {file:write(Fd, Data), <<>>}.
