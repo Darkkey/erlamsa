@@ -208,9 +208,10 @@ build_logger(Opts) ->
     ProcessData = 
         case maps:get(noiolog, Opts, none) of 
             none ->
+                %%TODO: FIXME: [[]] <-- not good, handle upper, ugly fix
                 case maps:get(hexoutput, Opts, none) of 
-                    true -> fun (Data) -> {erlamsa_utils:bin_to_hexstr(Data), byte_size(Data)} end;
-                    _Else -> fun (Data) -> {Data, byte_size(Data)} end
+                    true -> fun ([]) -> {<<>>, 0}; (Data) -> {erlamsa_utils:bin_to_hexstr(Data), byte_size(Data)}  end;
+                    _Else -> fun ([]) -> {<<>>, 0}; (Data) -> {Data, byte_size(Data)} end
                 end;
             _Else ->
                 fun (Data) -> {none, byte_size(Data)} end
