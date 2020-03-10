@@ -196,14 +196,14 @@ fuzzer(Dict) ->
         end,
     %% Running in single- or multi- threaded mode
     Threads = get_threading_mode(maps:get(output, Dict, "-"), Cnt, maps:get(workers, Dict, 1)),
-    run_fuzzing_loop(Threads, FuzzingLoop, Muta, Generator, Out, Cnt).
+    run_fuzzing_loop(Threads, FuzzingLoop, SeedFun, Muta, Generator, Out, Cnt).
 
--spec run_fuzzing_loop(integer() | list(), fun(), fun(), {atom(), fun()}, fun(), non_neg_integer()) -> ok.
+-spec run_fuzzing_loop(integer() | list(), fun(), fun(), fun(), {atom(), fun()}, fun(), non_neg_integer()) -> ok.
 %% single- threaded mode
-run_fuzzing_loop(1, FuzzingLoop, Muta, {_GenName, Gen}, Out, Cnt) ->
+run_fuzzing_loop(1, FuzzingLoop, Muta, _SeedFun, {_GenName, Gen}, Out, Cnt) ->
     FuzzingLoop(Muta, Gen, Out, {1, 0}, Cnt, []);
 %% multi- threaded mode
-run_fuzzing_loop(Threads, FuzzingLoop, Muta, {GenName, Gen}, Out, Cnt) ->
+run_fuzzing_loop(Threads, FuzzingLoop, Muta, SeedFun, {GenName, Gen}, Out, Cnt) ->
     %% Selecting generator
     %% For stdio we need to pre-read the data;
     %% otherwise it could be some random that we should variate
@@ -213,8 +213,9 @@ run_fuzzing_loop(Threads, FuzzingLoop, Muta, {GenName, Gen}, Out, Cnt) ->
     end,
     MainProcessPid = erlang:self(),
     [spawn(fun() -> 
-            erlamsa_rnd:seed(erlamsa_rnd:gen_urandom_seed()), %%TODO: output this seed properly
-            erlamsa_logger:log(info, "fuzzing worker process ~p started, range {~p, ~p} + ~p additional", [W, A, B, trunc(R/Cnt)]),
+            NewSeed = SeedFun(),
+            erlamsa_rnd:seed(NewSeed), 
+            erlamsa_logger:log(info, "fuzzing worker process ~p started, range {~p, ~p} + ~p additional, seed = ~p", [W, A, B, trunc(R/Cnt), NewSeed]),
             FuzzingLoop(Muta, MultiGen, Out, {A, 0}, B, []),
             FuzzingLoop(Muta, MultiGen, Out, {R, 0}, R, []),
             MainProcessPid ! {finished, W, erlang:self(), {{A, B, W}, R}}
