@@ -231,7 +231,7 @@ Adds post-processing procedure that will be applied to fuzzing result just befor
 ## Monitors
 
 Erlamsa is using monitors, special modules that are intended to detect various events, like application crashes, freezes, SSRFs, backconnects, e.t.c. Monitor is waiting for some event,
-and, upon receiving it, reports to the logs and execute specified after actions. Each monitor is a separate process, that could be initiated via passing `-O name:params` in the command line. By default, `cm` (connect monitor) is run. To disable monitors that are run by default, one could pass `-O -monitor_name:` in the command line. E.g., to disable connection monitor, pass `-O -cm:` as an command line option to erlamsa.
+and, upon receiving it, reports to the logs and execute specified after actions. Each monitor is a separate process, that could be initiated via passing `-O name:params` in the command line. By default, `cm` (connect monitor) is run. To disable monitors that are run by default, one could pass `-O !monitor_name:off` in the command line. E.g., to disable connection monitor, pass `-O !cm:off` as an command line option to erlamsa.
 
 ### Monitor parameters
 
