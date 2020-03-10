@@ -209,8 +209,9 @@ build_logger(Opts) ->
         case maps:get(noiolog, Opts, none) of 
             none ->
                 %%TODO: FIXME: [[]] <-- not good, handle upper, ugly fix
-                case maps:get(hexoutput, Opts, none) of 
-                    true -> fun ([]) -> {<<>>, 0}; (Data) -> {erlamsa_utils:bin_to_hexstr(Data), byte_size(Data)}  end;
+                case maps:get(dataoutput, Opts, none) of 
+                    hex -> fun ([]) -> {<<>>, 0}; (Data) -> {erlamsa_utils:bin_to_hexstr(Data), byte_size(Data)}  end;
+                    str -> fun ([]) -> {<<>>, 0}; (Data) -> {lists:flatten(io_lib:format("~s", [Data])), byte_size(Data)}  end;
                     _Else -> fun ([]) -> {<<>>, 0}; (Data) -> {Data, byte_size(Data)} end
                 end;
             _Else ->

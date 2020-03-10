@@ -120,6 +120,8 @@ cmdline_optsspec() ->
     {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},
     {seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int or source:device for an external source of entropy (e.g. binary file)"},
     {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},
+    {stroutput	, undefined, 	
+                        "stroutput",	undefined,    			"force output data in logs as ASCII-strings"},
     {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose, show some progress during generation"},
     {version	, $V, 	"version",		undefined, 				"show program version"},
     {workers	, $w, 	"workers",		integer,    			"<arg>, number of working threads (1 for standalone, 10 for proxy/fass)"}
@@ -404,7 +406,7 @@ parse_monitor(Lst) ->
     AddRemove = hd(hd(Lst)), MonitorName = tl(hd(Lst)), MonitorParams = hd(tl(Lst)),
     {Action, Name, Params} = case AddRemove of
         $+ -> {plus, list_to_atom(MonitorName), MonitorParams};
-        $- -> {minus, list_to_atom(MonitorName), ""};
+        $! -> {minus, list_to_atom(MonitorName), ""};
         C -> {plus, list_to_atom([C | MonitorName]), MonitorParams}
     end,
     case lists:foldl(fun ({N, _F}, Acc) when Name == N -> [Name | Acc]; (_, Acc) -> Acc end,
@@ -486,7 +488,9 @@ parse_opts([recursive|T], Dict) ->
 parse_opts([{count, N}|T], Dict) ->
     parse_opts(T, maps:put(n, N, Dict));
 parse_opts([hexoutput|T], Dict) ->
-    parse_opts(T, maps:put(hexoutput, true, Dict));
+    parse_opts(T, maps:put(dataoutput, hex, Dict));
+parse_opts([stroutput|T], Dict) ->
+    parse_opts(T, maps:put(dataoutput, str, Dict));
 parse_opts([{certfile, CertFile}|T], Dict) ->
     parse_opts(T, maps:put(certfile, CertFile, Dict));
 parse_opts([{keyfile, KeyFile}|T], Dict) ->

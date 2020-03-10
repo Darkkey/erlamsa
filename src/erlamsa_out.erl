@@ -247,9 +247,17 @@ streamsock_writer(Transport, Addr, Port, Maker) ->
         {Res, Sock} = erlamsa_netutils:connect(Transport, Addr, Port, [binary, {active, true}], ?TCP_TIMEOUT),
         case Res of
             ok -> {F, {net,
-                fun (Data) -> Packet = Maker(Data), erlamsa_netutils:send(Transport, Sock, Packet) end,
+                fun (Data) -> Packet = Maker(Data), 
+                              erlamsa_netutils:send(Transport, Sock, Packet), 
+                              receive %%TODO: print to logs?
+                                 {_ProtoTransport, _ClientSocket, RecvData} -> erlamsa_logger:log_data(debug, "reply from target",
+                                             [], RecvData)
+                              after 
+                                 25 -> ok
+                              end
+                        end,
                 %% TODO: ugly timeout before closing..., should be in another thread
-                fun () -> timer:sleep(50), erlamsa_netutils:close(Transport, Sock), ok end
+                fun () -> timer:sleep(25), erlamsa_netutils:close(Transport, Sock), ok end
                 }, [{output, Transport} | Meta]};
             _Else ->
                 Err = lists:flatten(io_lib:format("Error opening ~p socket to ~s:~p '~s'",

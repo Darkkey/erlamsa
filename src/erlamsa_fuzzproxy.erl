@@ -119,7 +119,8 @@ server_stream(ProtoTransport, ListenSock, Endpoint, Opts, Verbose) ->
     erlamsa_logger:log(info, "tcp proxy worker process started, listening on ~p (port :~p)",
                         [erlamsa_netutils:socknum(ProtoTransport, ListenSock), LPort]),
     erlamsa_rnd:seed(now()),
-    case erlamsa_netutils:accept(ProtoTransport, ListenSock) of
+    Res = erlamsa_netutils:accept(ProtoTransport, ListenSock),
+    case Res of
         {ok, ClientSocket} ->
             erlamsa_logger:log(info,
                                 "initiating new connection to ~s:~p(c->s), sockets: l:~p/c:~p",
@@ -146,6 +147,11 @@ server_stream(ProtoTransport, ListenSock, Endpoint, Opts, Verbose) ->
             ok
     end.
 
+report_fuzzing(nofuzz, Ret) ->
+    erlamsa_logger:log_data(debug, "from fuzzer(c->s) [fuzzing = nofuzz, skipped]", [], Ret);
+report_fuzzing(Res, Ret) ->
+    erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]", [Res], Ret).
+
 loop_udp(SrvSocket, Endpoint, init_clientsocket, ClientHost, ClientPort, Opts, Verbose) ->
     erlamsa_rnd:seed(now()),
     {"udp", _LPort, ClSocketPort, _, _} = Endpoint,
@@ -160,7 +166,8 @@ loop_udp(SrvSocket, ClSocket, Endpoint, ClientHost, ClientPort, Opts, Verbose) -
             {udp, SrvSocket, Host, Port, Data} ->
                 erlamsa_logger:log_data(info, "from udp client(c->s ~p:~p)", [Host, Port], Data),
                 {Res, Ret} = fuzz(udp, ProbToServer, Opts, Data),
-                erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]", [Res], Ret),
+                report_fuzzing(Res, Ret),
+                %% erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]", [Res], Ret),
                 gen_udp:send(ClSocket, ServerHost, ServerPort, Ret),
                 {Host, Port};
             {udp, ClSocket, ServerHost, ServerPort, Data} ->
@@ -172,8 +179,9 @@ loop_udp(SrvSocket, ClSocket, Endpoint, ClientHost, ClientPort, Opts, Verbose) -
                     _Else ->
                         {Res, Ret} = fuzz(udp, ProbToClient, Opts, Data),
                         gen_udp:send(SrvSocket, ClientHost, ClientPort, Ret),
-                        erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]",
-                                                [Res], Ret),
+                        report_fuzzing(Res, Ret),
+                        %%erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]",
+                        %%                        [Res], Ret),
                         {ClientHost, ClientPort}
                 end
         end,
@@ -188,7 +196,8 @@ loop_stream(Proto, ProtoTransport, ClientSocket, ServerSocket, {ProbToClient, Pr
             erlamsa_logger:log_data(info, "from client(c->s)", [], Data),
             {Res, Ret} = fuzz(Proto, ProbToServer, ByPass, NC, Opts, Data),
             erlamsa_netutils:send(ProtoTransport, ServerSocket, Ret),
-            erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]", [Res], Ret),
+            report_fuzzing(Res, Ret),
+            %% erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]", [Res], Ret),
             loop_stream(Proto, ProtoTransport, ClientSocket, ServerSocket,
                     {ProbToClient, raise_prob(ProbToServer, DescentCoeff),  DescentCoeff},
                     {ByPass, NC+1, NS}, Opts, Verbose);
@@ -196,7 +205,8 @@ loop_stream(Proto, ProtoTransport, ClientSocket, ServerSocket, {ProbToClient, Pr
             erlamsa_logger:log_data(info, "from server(s->c)", [], Data),
             {Res, Ret} = fuzz(Proto, ProbToClient, ByPass, NS, Opts, Data),
             erlamsa_netutils:send(ProtoTransport, ClientSocket, Ret),
-            erlamsa_logger:log_data(info, "from fuzzer(s->c) [fuzzing = ~p]", [Res], Ret),
+            report_fuzzing(Res, Ret),
+            %% erlamsa_logger:log_data(info, "from fuzzer(s->c) [fuzzing = ~p]", [Res], Ret),
             loop_stream(Proto, ProtoTransport, ClientSocket, ServerSocket,
                     {raise_prob(ProbToClient, DescentCoeff), ProbToServer, DescentCoeff},
                     {ByPass, NC, NS+1}, Opts, Verbose);

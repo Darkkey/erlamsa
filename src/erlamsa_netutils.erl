@@ -74,8 +74,13 @@ socknum(_ProtoTransport, ListenSock) -> ListenSock.
 
 accept(ssl, Sock) -> 
     case ssl:transport_accept(Sock) of 
-        {ok, TLSTransportSocket} -> ssl:handshake(TLSTransportSocket);
-        Else -> Else
+        {ok, TLSTransportSocket} -> 
+            case ssl:handshake(TLSTransportSocket) of
+                ok -> TLSTransportSocket;
+                Fail -> Fail
+            end;
+        Else -> 
+            Else
     end;
 accept(tcp, Sock) -> gen_tcp:accept(Sock).
 
@@ -98,7 +103,7 @@ send(tcp, Sock, Data) -> gen_tcp:send(Sock, Data);
 send(ssl, Sock, Data) -> ssl:send(Sock, Data).
 
 recv(tcp, Sock, Size, Timeout) -> gen_tcp:recv(Sock, Size, Timeout);
-recv(ssl, Sock, Size, Timeout) -> ssl:recv(Sock, Size, Timeout).
+recv(ssl, Sock, Size, Timeout) -> io:format("!!!!"), ssl:recv(Sock, Size, Timeout).
 
 closed(tcp) -> tcp_closed;
 closed(ssl) -> ssl_closed.
