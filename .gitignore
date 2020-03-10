@@ -18,7 +18,9 @@ clients/csharp/erlamsa_csharp_client/erlamsa_csharp_client/bin/*
 *.fuzzed
 tmp
 clients/frida/example
+examples
 .vscode
+.ionide
 *.pid
 *.bak
 *.pem
