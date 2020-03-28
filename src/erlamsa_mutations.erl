@@ -37,7 +37,7 @@
 
 %% API
 -export([make_mutator/2, mutators_mutator/1, mutations/0, mutations/1, default/1, tostring/1, 
-         get_max_score/0, inner_mutations/0, get_ssrf_uri/0]).
+         get_max_score/0, inner_mutations/0, get_ssrf_uri/0, basic_type_mutation/2]).
  
 
 -define(MIN_SCORE, 2.0).
@@ -79,6 +79,17 @@ interesting_numbers() ->
 sign(X) when X >= 0 -> 1;
 sign(_) -> -1.
 
+-spec mutate_float(float()) -> float().
+mutate_float(Num) -> mutate_float(Num, erlamsa_rnd:rand(7)).
+
+-spec mutate_float(float(), 0..7) -> float().
+mutate_float(Num, 0) -> -Num;
+mutate_float(_, 1) -> 0.0;
+mutate_float(_, 2) -> 1.0;
+mutate_float(_, 3) -> 1.0e-323;
+mutate_float(_, 4) -> 1.0e308;
+mutate_float(_, _) -> erlamsa_rnd:rand_float() * math:exp(100*erlamsa_rnd:rand_float()).
+
 -spec mutate_num(integer()) -> integer().
 mutate_num(Num) -> mutate_num(Num, erlamsa_rnd:rand(12)).
 
@@ -87,10 +98,11 @@ mutate_num(Num, 0) -> Num + 1;
 mutate_num(Num, 1) -> Num - 1; 
 mutate_num(_, 2) -> 0;
 mutate_num(_, 3) -> 1;
-mutate_num(_, N) when N > 2 andalso N < 7 -> erlamsa_rnd:rand_elem(interesting_numbers());
+mutate_num(_, N) when N > 3 andalso N < 6 -> erlamsa_rnd:rand_elem(interesting_numbers());
 mutate_num(Num, 7) -> Num + erlamsa_rnd:rand_elem(interesting_numbers());
 mutate_num(Num, 8) -> Num - erlamsa_rnd:rand_elem(interesting_numbers());
 mutate_num(Num, 9) -> Num - erlamsa_rnd:rand(erlang:abs(Num)*2) * sign(Num); 
+mutate_num(Num, 10) -> -Num; %% TODO: verify that this is useful
 mutate_num(Num, _) ->
     N = erlamsa_rnd:rand_range(1, 129),
     L = erlamsa_rnd:rand_log(N),
@@ -1127,6 +1139,77 @@ zip_path_traversal([H|T], Meta) ->
         _Else -> 
             {fun zip_path_traversal/2, [H|T], [{muta_zippath, -1}|Meta], -1}
     end.
+
+
+%%
+%%  Basic type mutations (for fuzzing record-related (e.g. protobuf, ASN.1, etc) data
+%%
+
+%% TODO: use them in SGML and JSON?
+
+-spec basic_mutate_binary(binary()) -> binary().
+basic_mutate_binary(Binary) -> 
+    Muta = erlamsa_mutations:mutators_mutator(erlamsa_mutations:inner_mutations()),
+    {_NewMuta, NewLstBin, _Meta} = Muta([Binary], []),
+    hd(NewLstBin).
+
+-spec basic_mutate_list(list()) -> list().
+basic_mutate_list(Lst) -> basic_mutate_list(Lst, erlamsa_rnd:rand(12)).
+
+-spec basic_mutate_list(list(), 0..12) -> list().
+basic_mutate_list(_Lst, 0) -> [];           %% replace with empty
+basic_mutate_list(Lst, 1) -> Lst ++ Lst;    %% dup a list
+basic_mutate_list(Lst, 2) ->                %% permute a list
+    erlamsa_rnd:random_permutation(Lst);
+basic_mutate_list(Lst, 3) ->                %% delete an element
+    erlamsa_generic:list_del(Lst, length(Lst));
+basic_mutate_list(Lst, 4) ->                %% delete an element
+    erlamsa_generic:list_del_seq(Lst, length(Lst));
+basic_mutate_list(Lst, 5) ->                %% swap two elements
+    erlamsa_generic:list_dup(Lst, length(Lst));
+basic_mutate_list(Lst, 6) ->                %% swap two elements
+    erlamsa_generic:list_repeat(Lst, length(Lst));
+basic_mutate_list(Lst, 7) ->                %% swap two elements
+    erlamsa_generic:list_clone(Lst, length(Lst));
+basic_mutate_list(Lst, 8) ->                %% swap two elements
+    erlamsa_generic:list_swap(Lst, length(Lst));
+basic_mutate_list([], _) -> [];  
+basic_mutate_list(Lst, _) ->                %% mutate an element
+    R = erlamsa_rnd:erand(length(Lst)),
+    erlamsa_utils:applynth(R, Lst, fun basic_type_mutation/1).
+
+-spec basic_mutate_string(list()) -> list().
+basic_mutate_string(Str) ->
+    L = length(Str),
+    Asciis = lists:foldl(fun (A, Acc) when A>31,A<127 -> Acc+1; (_,Acc) -> Acc end, 0, Str),
+    if 
+        Asciis / L >= 0.8 -> binary_to_list(basic_mutate_binary(list_to_binary(Str)));
+        true -> basic_mutate_list(Str)
+    end.
+
+
+-spec basic_type_mutation(any(), float()) -> any().
+basic_type_mutation(El, Prob) -> basic_type_mutation(El, erlamsa_rnd:rand_float(), Prob).
+
+-spec basic_type_mutation(any(), float(), float()) -> any().
+basic_type_mutation(El, Rnd, Prob) when Rnd >= Prob -> El;
+basic_type_mutation(El, _Rnd, _Prob) -> basic_type_mutation(El).
+
+-spec basic_type_mutation(any()) -> any().
+%% mutate boolean -- just NOT
+basic_type_mutation(true) -> false;
+basic_type_mutation(false) -> true;
+%% mutate a list
+basic_type_mutation(El = [H|_]) when is_list(El), is_integer(H) =/= true -> basic_mutate_list(El);
+%% mutate a string or list of integers
+basic_type_mutation(El) when is_list(El) -> basic_mutate_string(El);
+%% mutate a binary
+basic_type_mutation(El) when is_binary(El) -> basic_mutate_binary(El);
+%% mutate an integer
+basic_type_mutation(El) when is_integer(El) -> mutate_num(El);
+%% mutate a float
+basic_type_mutation(El) when is_float(El) -> mutate_float(El);
+basic_type_mutation(El) -> El.
 
 %%
 %%  Main Mutation Functions

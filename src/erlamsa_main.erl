@@ -135,11 +135,15 @@ fuzzer(Dict) ->
     erlamsa_rnd:seed(Seed),
     file:write_file("./last_seed.txt", io_lib:format("~p", [Seed])),
     Verbose(io_lib:format("Random seed: ~p~n", [Seed])),
-    erlamsa_logger:log(info, "starting fuzzer main (parent = ~p), random seed is: ~p",
+    DirectInput = maps:get(input, Dict, nil),
+    {Log, LogData} = case DirectInput of
+        nil -> {fun erlamsa_logger:log/3,  fun erlamsa_logger:log_data/4};
+        _DirectInput -> {fun (_,_,_) -> ok end, fun (_,_,_,_) -> ok end}
+    end,
+    Log(info, "starting fuzzer main (parent = ~p), random seed is: ~p",
                         [maps:get(parentpid, Dict, none), Seed]),
     Fail = fun(Why) -> io:write(Why), throw(Why) end,
     Muta = erlamsa_mutations:make_mutator(Mutas, CustomMutas),
-    DirectInput = maps:get(input, Dict, nil),
     %%TODO: FIXME: should be maps:get(output, Dict, "-") instead 
     %% However now direct == return, so interexchanging with input should be ok
     RecordFun = case Paths of  
@@ -182,7 +186,7 @@ fuzzer(Dict) ->
                         {CandidateMuta, Meta, Written, CandidateData} = erlamsa_out:output(Tmp, Fd, Post),
                         RecordMeta(lists:reverse(lists:flatten([{written, Written}| Meta]))),
                         Verbose(io_lib:format("output: ~p~n", [Written])),
-                        erlamsa_logger:log_data(info, "fuzzing cycle ~p (<= ~p) finished, written: ", [I, N], CandidateData),
+                        LogData(info, "fuzzing cycle ~p (<= ~p) finished, written: ", [I, N], CandidateData),
                         {CandidateOut, CandidateMuta, CandidateData, 0}
                     catch
                         {cantconnect, _Err} ->

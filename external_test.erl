@@ -6,7 +6,7 @@
 
 capabilities() -> {fuzzer, external}.
 
-fuzzer(_Proto, Data, _Opts) ->
+fuzzer(_Prob, Data, _Opts) ->
 	{ok, fuzz(Data, erlamsa_rnd:rand_float())}.
 
 fuzz(Data, _) when byte_size(Data) > 5 -> 

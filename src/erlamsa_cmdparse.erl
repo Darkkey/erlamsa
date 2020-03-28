@@ -357,6 +357,8 @@ parse_url([<<"exec">>|T], _URL) ->
     parse_exec(binary_to_list(hd(T)));
 parse_url([<<"http">>|_T], URL) ->
     parse_http_addr(URL);
+parse_url([<<"http2">>|_T], URL) ->
+    parse_http_addr(URL);
 parse_url([<<"https">>|_T], URL) ->
     parse_http_addr(URL);
 %parse_url([<<"exec">>|_T], URL) ->
