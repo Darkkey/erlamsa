@@ -194,7 +194,7 @@ loop_stream(Proto, ProtoTransport, ClientSocket, ServerSocket, {ProbToClient, Pr
     receive
         {ProtoTransport, ClientSocket, Data} ->
             erlamsa_logger:log_data(info, "from client(c->s)", [], Data),
-            {Res, Ret} = fuzz(Proto, ProbToServer, ByPass, NC, Opts, Data),
+            {Res, Ret} = fuzz(Proto, ProbToServer, ByPass, NC, maps:put(conndirection, ctos, Opts), Data),
             erlamsa_netutils:send(ProtoTransport, ServerSocket, Ret),
             report_fuzzing(Res, Ret),
             %% erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]", [Res], Ret),
@@ -203,7 +203,7 @@ loop_stream(Proto, ProtoTransport, ClientSocket, ServerSocket, {ProbToClient, Pr
                     {ByPass, NC+1, NS}, Opts, Verbose);
         {ProtoTransport, ServerSocket, Data} ->
             erlamsa_logger:log_data(info, "from server(s->c)", [], Data),
-            {Res, Ret} = fuzz(Proto, ProbToClient, ByPass, NS, Opts, Data),
+            {Res, Ret} = fuzz(Proto, ProbToClient, ByPass, NS, maps:put(conndirection, stoc, Opts), Data),
             erlamsa_netutils:send(ProtoTransport, ClientSocket, Ret),
             report_fuzzing(Res, Ret),
             %% erlamsa_logger:log_data(info, "from fuzzer(s->c) [fuzzing = ~p]", [Res], Ret),
@@ -222,69 +222,18 @@ loop_stream(Proto, ProtoTransport, ClientSocket, ServerSocket, {ProbToClient, Pr
                                  erlamsa_netutils:socknum(ProtoTransport, ClientSocket)]),
             ok
     end.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% HTTP Helpers
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-extract_http(Data) ->
-    case erlang:decode_packet(http, Data, []) of
-        {ok, Query, Rest} ->
-            extract_http_headers(Rest, [Query]);
-        Err ->
-            erlamsa_logger:log(warning, "Invalid HTTP query?: ~p~n", [Err]),
-            {ok, [], Data}
-    end.
-extract_http_headers(Data, Acc) ->
-    %%io:format("Incoming:~p~n", [Data]),
-    case erlang:decode_packet(httph, Data, []) of
-        {ok, http_eoh, Rest} ->
-            {ok, Acc, Rest};
-        {ok, Hdr, Rest} ->
-            extract_http_headers(Rest, [Hdr | Acc]);
-        {more, undefined} ->
-            {more, Acc, Data};
-        Err ->
-            erlamsa_logger:log(warning, "Error parsing HTTP header: ~p~n", [Err]),
-            {ok, Acc, Data}
-    end.
-
-pack_http(more, Headers, Data) ->
-    pack_http_packet(Headers, Data, []);
-pack_http(ok, Headers, Data) ->
-    pack_http_packet(Headers, Data, [[10, 13]]).
-
-pack_http_packet([{http_header, _, 'Content-Length', _, _}|T], Data, Acc) ->
-    Len = size(Data),
-    pack_http_packet(T, Data,
-                    [list_to_binary(io_lib:format("Content-Length: ~p~c~n", [Len, 13])) | Acc]);
-pack_http_packet([{http_header, _, HdrName, _, HdrValue}|T], Data, Acc) ->
-    pack_http_packet(T, Data,
-                    [list_to_binary(
-                        io_lib:format("~s: ~s~c~n",
-                                      [atom_to_list(HdrName), HdrValue, 13]))
-                    | Acc]);
-pack_http_packet([{http_request, Method, {abs_path, Path}, {VerMajor, VerMinor}}|T], Data, Acc) ->
-    pack_http_packet(T, Data,
-                    [list_to_binary(
-                        io_lib:format("~s ~s HTTP/~p.~p~p~n",
-                                        [Method, Path, VerMajor, VerMinor, 13]))
-                    | Acc]);
-pack_http_packet([{http_response, {VerMajor, VerMinor}, Code, Status}|T], Data, Acc) ->
-    pack_http_packet(T, Data,
-                    [list_to_binary(
-                        io_lib:format("HTTP/~p.~p ~p ~s~c~n",
-                                        [VerMajor, VerMinor, Code, Status, 13]))
-                    | Acc]);
-pack_http_packet([{http_error, ErrHdr}|T], Data, Acc) ->
-    pack_http_packet(T, Data, [ErrHdr | Acc]);
-pack_http_packet([], Data, Acc) ->
-    Hdr = list_to_binary(Acc),
-    <<Hdr/binary, Data/binary>>.
+        
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Fuzzing helpers
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+fuzz(Proto, Prob, Opts, Data) ->
+    CallFuzzer = case maps:get(external_fuzzer, Opts, nil) of
+        nil -> fun call_fuzzer/3;
+        Module -> fun (P, D, O) -> erlang:apply(list_to_atom(Module), fuzzer, [P, D, O]) end
+    end, 
+    fuzz_rnd(Proto, Prob, erlamsa_rnd:rand_float(), CallFuzzer, Opts, Data).
 
 fuzz(_Proto, _Prob, ByPass, N, _Opts, Data) when N < ByPass ->
     erlamsa_logger:log(decision, "Packet No. ~p < ~p, bypassing data", [N, ByPass]),
@@ -292,21 +241,16 @@ fuzz(_Proto, _Prob, ByPass, N, _Opts, Data) when N < ByPass ->
 fuzz(Proto, Prob, _ByPass, _N, Opts, Data) ->
     fuzz(Proto, Prob, Opts, Data).
 
-fuzz(Proto, Prob, Opts, Data) ->
-    case maps:get(external_fuzzer, Opts, nil) of
-        nil -> fuzz_rnd(Proto, Prob, erlamsa_rnd:rand_float(), Opts, Data);
-        Module ->
-            erlang:apply(
-                list_to_atom(Module), fuzzer, [Proto, Data, maps:put(fuzzprob, Prob, Opts)]
-            )
-    end.
-
-fuzz_rnd(_, Prob, Rnd, _Opts, Data) when Rnd >= Prob -> {nofuzz, Data};
-fuzz_rnd(http, Prob, _Rnd, Opts, Data) ->
-    {Status, HTTPHeaders, HTTPData} = extract_http(Data),
-    {ok, pack_http(Status, HTTPHeaders, call_fuzzer(Prob, Opts, HTTPData))};
-fuzz_rnd(_Proto, Prob, _Rnd, Opts, Data) ->
-    {ok, call_fuzzer(Prob, Opts, Data)}.
+fuzz_rnd(_, Prob, Rnd, _CallFuzzer, _Opts, Data) when Rnd >= Prob -> {nofuzz, Data};
+fuzz_rnd(http, Prob, _Rnd, CallFuzzer, Opts, Data) ->
+    {Status, HTTPHeaders, HTTPData} = erlamsa_netutils:extract_http(Data),
+    {ok, NewHTTPData} = CallFuzzer(Prob, Opts, HTTPData),
+    {ok, erlamsa_netutils:pack_http(Status, HTTPHeaders, NewHTTPData)};
+fuzz_rnd(http2, Prob, _Rnd, CallFuzzer, Opts, Data) ->
+    {ok, erlamsa_http2:fuzz_http2(Prob, CallFuzzer, Opts, Data)};
+    %%fuzz_http2(http2_fuzz_stream(fun (HTTPData) -> io:format("Fuzzing:~p~n", [HTTPData]), HTTPData end), Data);
+fuzz_rnd(_Proto, Prob, _Rnd, CallFuzzer, Opts, Data) ->
+    {ok, CallFuzzer(Prob, Opts, Data)}.
 
 call_fuzzer(_Prob, Opts, Data) ->
     erlamsa_fsupervisor:get_fuzzing_output(erlamsa_utils:get_direct_fuzzing_opts(Data, Opts)).

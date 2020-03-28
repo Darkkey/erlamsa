@@ -12,7 +12,7 @@ $ echo 'Hello erlamsa!' | ./erlamsa
 ## Features
 
 - mutational-based fuzzing engine based on radamsa;
-- support for fuzzing protocols over HTTP, TCP, UDP, and raw IP/network, support of fuzzing over TLS;
+- support for fuzzing protocols over HTTP, TCP, UDP, and raw IP/network, support of fuzzing over TLS, HTTP/2 fuzzing proxy mode;
 - built-in fuzzing proxy for MitMing and fuzzing connection(s) between target's client and server;
 - FaaS (fuzzing-as-a-service) mode, plain HTTP and HTTP/json queries are supported;
 - Examples on how to call erlamsa from C#, Node.js, Go, Python2/3 are available (see clients/);
@@ -218,7 +218,7 @@ $ echo -n 123 | ./erlamsa -e external_muta -m pan=1 -p od
 
 ### Custom fuzzing extension
 
-Could be using in fuzzing proxy mode, to replace standard fuzzing procedure with a custom one. See `external_test.erl` for example template.
+Could be used in fuzzing proxy mode, to replace standard fuzzing procedure with a custom one. See `external_test.erl` for example template.
 
 ### Custom mutation extension
 

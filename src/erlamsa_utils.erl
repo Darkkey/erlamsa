@@ -43,7 +43,8 @@
         check_empty/1, stderr_probe/2, halve/1, error/1,
         resolve_addr/1, make_post/1, make_fuzzer/1, make_mutas/1,
         load_deps/1, get_direct_fuzzing_opts/2, get_deps_dirs/1, init_procket/0, get_portsdir/0,
-        hexstr_to_bin/1, bin_to_hexstr/1, build_recursive_paths/1]).
+        hexstr_to_bin/1, bin_to_hexstr/1, build_recursive_paths/1, walk_tuple/2, tuple_length/1,
+        detect_type/1]).
 
 load_deps(RuntimeDir) ->
     true and ?LOAD_PROCKET(RuntimeDir) and ?LOAD_SERIAL(RuntimeDir) and ?LOAD_ERLEXEC(RuntimeDir).
@@ -279,3 +280,45 @@ build_recursive_paths(Prefix, [H|T], Acc) ->
     end;
 build_recursive_paths(_, [], Acc) ->
     Acc.
+
+-spec walk_tuple(tuple(), fun()) -> tuple().
+walk_tuple(T, F) ->
+    walk_tuple(T, 1, F, []).
+
+-spec walk_tuple(tuple(), integer(), fun(), list()) -> tuple().
+walk_tuple(T, N, _F, Acc) when N > tuple_size(T) -> list_to_tuple(lists:reverse(Acc));
+walk_tuple(T, N, F, Acc) when is_tuple(element(N,T)) ->
+    NewEl = walk_tuple(element(N,T), 1, F, []),
+    walk_tuple(T, N+1, F, [NewEl|Acc]);
+walk_tuple(T, N, F, Acc) when is_list(element(N,T)),is_tuple(hd(element(N,T))) ->
+    NewEl = lists:map(fun (E) -> walk_tuple(E,F) end, element(N,T)),
+    walk_tuple(T, N+1, F, [NewEl|Acc]);
+walk_tuple(T, N, F, Acc)  ->
+    walk_tuple(T, N+1, F, [F(element(N,T))|Acc]).
+
+
+-spec tuple_length(tuple()) -> integer().
+tuple_length(T) ->
+    tuple_length(T, 1, 0).
+
+-spec tuple_length(tuple(), integer(), integer()) -> integer().
+tuple_length(T, N, Acc) when N > tuple_size(T) -> Acc;
+tuple_length(T, N, Acc) when is_tuple(element(N,T)) ->
+    NewCnt = tuple_length(element(N,T), 1, 0),
+    tuple_length(T, N+1, NewCnt + Acc);
+tuple_length(T, N, Acc) when is_list(element(N,T)),is_tuple(hd(element(N,T))) ->
+    NewCnt = lists:foldl(fun (E, A) -> tuple_length(E,1,0) + A end, 0, element(N,T)),
+    tuple_length(T, N+1, NewCnt + Acc);
+tuple_length(T, N, Acc)  ->
+    tuple_length(T, N+1, 1+ Acc).
+
+-spec detect_type(any()) -> integer | boolean | list | string | atom | binary | float | unknown. 
+detect_type(true) -> boolean;
+detect_type(false) -> boolean;
+detect_type(El = [H|_]) when is_list(El), is_list(H) -> list;
+detect_type(El) when is_list(El) -> string;
+detect_type(El) when is_atom(El) -> atom;
+detect_type(El) when is_binary(El) -> binary;
+detect_type(El) when is_integer(El) -> integer;
+detect_type(El) when is_float(El) -> float;
+detect_type(_El) -> unknown.

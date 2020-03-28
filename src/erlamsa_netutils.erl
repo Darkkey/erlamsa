@@ -40,7 +40,7 @@
 -export([transport/1, netserver_start/1, listen/3, port/2, socknum/2, 
          accept/2, peername/2, sockname/2, connect/4, connect/5,
          setopts/3, send/3, recv/4, closed/1, close/2, 
-         set_routing_ip/3]).
+         set_routing_ip/3, extract_http/1, pack_http/3]).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -48,8 +48,10 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Erlang is using ssl abbrev. istead of tls, so convert.
+transport(http2s) -> ssl;
 transport(https) -> ssl;
 transport(http) -> tcp;
+transport(http2) -> tcp;
 transport(tls) -> ssl;
 transport(Tr) -> Tr.
 
@@ -133,3 +135,63 @@ set_routing_ip(Proto, Host, Port) ->
         ets:insert(global_config, [{cm_host, IP}]) 
     end),
     ok.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% HTTP Helpers
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+extract_http(Data) ->
+    case erlang:decode_packet(http, Data, []) of
+        {ok, Query, Rest} ->
+            extract_http_headers(Rest, [Query]);
+        Err ->
+            erlamsa_logger:log(warning, "Invalid HTTP query?: ~p~n", [Err]),
+            {ok, [], Data}
+    end.
+extract_http_headers(Data, Acc) ->
+    %%io:format("Incoming:~p~n", [Data]),
+    case erlang:decode_packet(httph, Data, []) of
+        {ok, http_eoh, Rest} ->
+            {ok, Acc, Rest};
+        {ok, Hdr, Rest} ->
+            extract_http_headers(Rest, [Hdr | Acc]);
+        {more, undefined} ->
+            {more, Acc, Data};
+        Err ->
+            erlamsa_logger:log(warning, "Error parsing HTTP header: ~p~n", [Err]),
+            {ok, Acc, Data}
+    end.
+
+pack_http(more, Headers, Data) ->
+    pack_http_packet(Headers, Data, []);
+pack_http(ok, Headers, Data) ->
+    pack_http_packet(Headers, Data, [[10, 13]]).
+
+pack_http_packet([{http_header, _, 'Content-Length', _, _}|T], Data, Acc) ->
+    Len = size(Data),
+    pack_http_packet(T, Data,
+                    [list_to_binary(io_lib:format("Content-Length: ~p~c~n", [Len, 13])) | Acc]);
+pack_http_packet([{http_header, _, HdrName, _, HdrValue}|T], Data, Acc) ->
+    pack_http_packet(T, Data,
+                    [list_to_binary(
+                        io_lib:format("~s: ~s~c~n",
+                                      [atom_to_list(HdrName), HdrValue, 13]))
+                    | Acc]);
+pack_http_packet([{http_request, Method, {abs_path, Path}, {VerMajor, VerMinor}}|T], Data, Acc) ->
+    pack_http_packet(T, Data,
+                    [list_to_binary(
+                        io_lib:format("~s ~s HTTP/~p.~p~p~n",
+                                        [Method, Path, VerMajor, VerMinor, 13]))
+                    | Acc]);
+pack_http_packet([{http_response, {VerMajor, VerMinor}, Code, Status}|T], Data, Acc) ->
+    pack_http_packet(T, Data,
+                    [list_to_binary(
+                        io_lib:format("HTTP/~p.~p ~p ~s~c~n",
+                                        [VerMajor, VerMinor, Code, Status, 13]))
+                    | Acc]);
+pack_http_packet([{http_error, ErrHdr}|T], Data, Acc) ->
+    pack_http_packet(T, Data, [ErrHdr | Acc]);
+pack_http_packet([], Data, Acc) ->
+    Hdr = list_to_binary(Acc),
+    <<Hdr/binary, Data/binary>>.
+
