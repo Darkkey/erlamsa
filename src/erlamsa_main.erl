@@ -204,10 +204,10 @@ fuzzer(Dict) ->
 
 -spec run_fuzzing_loop(integer() | list(), fun(), fun(), fun(), {atom(), fun()}, fun(), non_neg_integer()) -> ok.
 %% single- threaded mode
-run_fuzzing_loop(1, FuzzingLoop, Muta, _SeedFun, {_GenName, Gen}, Out, Cnt) ->
+run_fuzzing_loop(1, FuzzingLoop, _SeedFun, Muta, {_GenName, Gen}, Out, Cnt) ->
     FuzzingLoop(Muta, Gen, Out, {1, 0}, Cnt, []);
 %% multi- threaded mode
-run_fuzzing_loop(Threads, FuzzingLoop, Muta, SeedFun, {GenName, Gen}, Out, Cnt) ->
+run_fuzzing_loop(Threads, FuzzingLoop, SeedFun, Muta, {GenName, Gen}, Out, Cnt) ->
     %% Selecting generator
     %% For stdio we need to pre-read the data;
     %% otherwise it could be some random that we should variate
