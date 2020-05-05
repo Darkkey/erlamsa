@@ -44,6 +44,8 @@ parse_headers([{http_seed, Seed}|T], Acc) ->
     parse_headers(T, maps:put(seed, fun () -> erlamsa_cmdparse:parse_seed(Seed) end, Acc));
 parse_headers([{remote_addr, IP}|T], Acc) ->
     parse_headers(T, maps:put(remote_addr, IP, Acc));
+parse_headers([{http_x_real_ip, IP}|T], Acc) ->
+    parse_headers(T, maps:put(http_x_real_ip, IP, Acc));
 parse_headers([{http_erlamsa_token, IP}|T], Acc) ->
     parse_headers(T, maps:put(erlamsa_token, IP, Acc));
 parse_headers([{http_erlamsa_session, IP}|T], Acc) ->
@@ -84,7 +86,7 @@ parse_json(Env, Json) ->
 call_fuzzer(Sid, Opts, In) -> 
     Dict = erlamsa_utils:get_direct_fuzzing_opts(In, Opts),
     erlamsa_logger:log(info, "Request from IP ~s, session ~p",
-                        [maps:get(remote_addr, Dict, nil), Sid]),
+                        [maps:get(http_x_real_ip, Dict, maps:get(remote_addr, Dict, nil)), Sid]),
     erlamsa_logger:log_data(info, "Input data <session = ~p>", [Sid], In),
     Output = erlamsa_fsupervisor:get_fuzzing_output(Dict),
     erlamsa_logger:log_data(info, "Output data <session = ~p>", [Sid], Output),
@@ -171,7 +173,9 @@ manage(Sid, Env, In) ->
     try
         T1 = erlamsa_json:tokenize(list_to_binary(In)),
         Vars = hd(erlamsa_json:tokens_to_erlang(T1)),
-        %io:format("Vars: ~p~n", [Vars]),
+        Hdrs = maps:from_list(Env),
+        erlamsa_logger:log(info, "Managing request from IP ~s, session ~p",
+                        [maps:get(http_x_real_ip, Hdrs, maps:get(remote_addr, Hdrs, nil)), Sid]),
         {Res, Data} = case maps:get("command", Vars, nil) of 
             "insert_token" -> 
                 erlamsa_cmanager:insert_token(maps:get("authtoken", Vars, nil), maps:get("token", Vars, nil)); 
