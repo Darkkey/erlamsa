@@ -267,7 +267,7 @@ fold_ast(Binary) when is_binary(Binary) ->
     Binary;
 %% default
 fold_ast(Ast) ->
-    list_to_binary(fold_ast(Ast, [])).
+    list_to_binary(lists:flatten(fold_ast(Ast, []))).
 
 %%%
 %%% /JSON AST Folder
@@ -283,7 +283,22 @@ walk_reverse(L) -> L.
 walk_uncons1(L) when is_list(L), length(L) =:= 1 -> hd(L);
 walk_uncons1(L) -> L.
 
-walk(Ast, Fun, InitAcc) ->
+walk(WalkType, Ast, Fun, InitAcc) ->
+    WalkPairs = case WalkType of 
+        all -> 
+            fun (Walker, El1, El2, Acc, CountT, Count) ->
+                {ChildAcc1, ChildTagCnt1, ChildCnt1} = Walker(El1, {InitAcc, CountT, Count + 1}),
+                {ChildAcc2, ChildTagCnt2, ChildCnt2} = Walker(El2, {InitAcc, ChildTagCnt1, ChildCnt1}),
+                {Fun({pair, walk_uncons1(walk_reverse(ChildAcc1)), 
+                            walk_uncons1(walk_reverse(ChildAcc2))}, Acc, CountT, Count + 1), ChildTagCnt2, ChildCnt2}
+            end;
+        pairs ->
+            fun (Walker, El1, El2, Acc, CountT, Count) ->
+                {ChildAcc2, ChildTagCnt2, ChildCnt2} = Walker(El2, {InitAcc, CountT, Count + 1}),
+                {Fun({pair, El1, 
+                            walk_uncons1(walk_reverse(ChildAcc2))}, Acc, CountT, Count + 1), ChildTagCnt2, ChildCnt2}
+            end
+    end,            
     {Res, ResT, ResN} = lists:foldl(
         fun
             Walker({Type, Els}, {Acc, CountT, Count}) when Type =:= object; Type =:= array ->
@@ -292,10 +307,7 @@ walk(Ast, Fun, InitAcc) ->
                 {Fun({Type, walk_reverse(ChildAcc)}, Acc, CountT + 1, Count + 1), ChildTagCnt, ChildCnt};
             Walker({pair, El1, El2}, {Acc, CountT, Count}) ->
                 %io:format("Pair: ~p : ~p~n", [{pair, El1, El2}, {Acc, Count}]),
-                {ChildAcc1, ChildTagCnt1, ChildCnt1} = Walker(El1, {InitAcc, CountT, Count + 1}),
-                {ChildAcc2, ChildTagCnt2, ChildCnt2} = Walker(El2, {InitAcc, ChildTagCnt1, ChildCnt1}),
-                {Fun({pair, walk_uncons1(walk_reverse(ChildAcc1)), 
-                            walk_uncons1(walk_reverse(ChildAcc2))}, Acc, CountT, Count + 1), ChildTagCnt2, ChildCnt2};
+                WalkPairs(Walker, El1, El2, Acc, CountT, Count);
             Walker(El, {Acc, CountT, Count}) when is_list(El) ->
                 %io:format("List: ~p : ~p~n", [El, {Acc, Count}]),
                 lists:foldl(fun(A, B) -> Walker(A, B) end, {Acc, CountT, Count}, El);
@@ -331,7 +343,29 @@ walk2acc(Ast, Fun, InitAcc) ->
         InitAcc, Ast),
     {walk_reverse(Res), lists:reverse(lists:flatten(Res2))}.
 
-select(Ast, Fun) ->
+select(WalkType, Ast, Fun) ->
+    WalkPairs = case WalkType of 
+        all -> 
+            fun (Walker, El1, El2, Acc, CountT, Count) ->
+                case Walker(El1, {Acc, CountT, Count + 1}) of
+                    {false, ChildTagCnt1, ChildCnt1} ->
+                        case Walker(El2, {Acc, ChildTagCnt1, ChildCnt1}) of
+                            {false, ChildTagCnt2, ChildCnt2} -> 
+                                {Acc, ChildTagCnt2, ChildCnt2};
+                            Res2 -> Res2
+                        end;
+                    Res1 -> Res1
+                end
+            end;
+        values -> 
+            fun (Walker, _El1, El2, Acc, CountT, Count) ->
+                case Walker(El2, {Acc, CountT, Count + 1}) of
+                    {false, ChildTagCnt2, ChildCnt2} -> 
+                        {Acc, ChildTagCnt2, ChildCnt2};
+                    Res2 -> Res2
+                end
+            end
+    end, 
     lists:foldl(
         fun
             Walker(El = {Type, Els}, {Acc, CountT, Count}) when Type =:= object; Type =:= array ->
@@ -344,15 +378,7 @@ select(Ast, Fun) ->
             Walker(El = {pair, El1, El2}, {Acc, CountT, Count}) ->
                 case Fun(El, CountT, Count + 1) of
                     false ->
-                        case Walker(El1, {Acc, CountT, Count + 1}) of
-                            {false, ChildTagCnt1, ChildCnt1} ->
-                                case Walker(El2, {Acc, ChildTagCnt1, ChildCnt1}) of
-                                    {false, ChildTagCnt2, ChildCnt2} -> 
-                                        {Acc, ChildTagCnt2, ChildCnt2};
-                                    Res2 -> Res2
-                                end;
-                            Res1 -> Res1
-                        end;
+                        WalkPairs(Walker, El1, El2, Acc, CountT, Count);
                     Res -> {Res, CountT, Count + 1}
                 end;
             Walker(El, {Acc, CountT, Count}) when is_list(El) ->
@@ -366,7 +392,7 @@ select(Ast, Fun) ->
         {false, 0, 0}, Ast).
 
 test_walk(Ast) ->
-    walk(Ast,
+    walk(all, Ast,
         fun  (E, Acc, _, _N) ->
             %io:format("~p is ~w~n", [E, N]),
             [E|Acc] 
@@ -374,18 +400,18 @@ test_walk(Ast) ->
         []).
 
 count(Ast) ->
-    walk(Ast,
+    walk(all, Ast,
         fun
             ({Type, Els}, Acc, _, _N) when Type =:= object; Type =:= array ->
                 Els + Acc + 1;
-            ({pair, El1, El2}, Acc, _, _N) ->
-                El1 + El2 + Acc + 1;
+            ({pair, _El1, El2}, Acc, _, _N) ->
+                Acc + El2 + 1;
             (_E, Acc, _, _N) ->
                 Acc + 1
         end, 0).
 
-select_elem(Ast, N) ->
-    {Res, _, _} = select(Ast,
+select_elem(SelectType, Ast, N) ->
+    {Res, _, _} = select(SelectType, Ast,
             fun
                 (Elem, _, I) when I =:= N ->
                     {Elem, I};
@@ -394,8 +420,8 @@ select_elem(Ast, N) ->
             end),
     Res.
 
-select_tag(Ast, N) ->
-    {Res, _, _} = select(Ast,
+select_tag(SelectType, Ast, N) ->
+    {Res, _, _} = select(SelectType, Ast,
             fun
                 ({object, _} = Elem, I, C) when I =:= N ->
                     {Elem, I, C};                
@@ -406,8 +432,9 @@ select_tag(Ast, N) ->
             end),
     Res.
 
+
 replace_elem(Ast, R, El) ->
-    walk(Ast,
+    walk(all, Ast,
         fun
             (_Elem, Tree, _, I) when I == R ->
                 [El | Tree];
@@ -421,7 +448,7 @@ repeat_listhd([H | T], N) ->
     repeat_listhd([H, H | T], N - 1).
 
 repeat_elem(Ast, R, Times) ->
-    walk(Ast,
+    walk(pairs, Ast,
         fun
             (Elem, Tree, _, I) when I == R ->
                 repeat_listhd([Elem | Tree], Times);
@@ -430,7 +457,7 @@ repeat_elem(Ast, R, Times) ->
         end, []).
 
 insert_elem(Ast, R, NewElem) ->
-    walk(Ast,
+    walk(pairs, Ast,
         fun
             (Elem, Tree, _, I) when I == R ->
                 [NewElem, Elem | Tree];
@@ -506,7 +533,7 @@ pump_path(Start, _End, 0) -> Start;
 pump_path(Start, End, N) ->
     %io:format("Pumping... iter ~w start ~w I =  ~w~n", [N, Start, End]),
     {PumpedTag, _, _} = 
-        walk([Start],
+        walk(all, [Start],
             fun
                 (_Elem, Tree, _, I) when I =:= End ->
                     [Start | Tree];
@@ -522,7 +549,7 @@ json_pump(Ast, T) ->
     %io:format("Cnt: ~w ~w~n", [Ast, N]),
     R = erlamsa_rnd:erand(T),
     %io:format("R:!!!!!!!!!!!!!!!!!! ~w~n", [R]),
-    {Start, R, StartPlace} = select_tag(Ast, R),
+    {Start, R, StartPlace} = select_tag(all, Ast, R),
     %io:format("Start:!!!!!!!!!!!!!!!!!! ~w ~p ~p~n", [Res, T, R]),
     {_, _, SubElems} = count([Start]),
     %io:format("SubElems:!!!!!!!!!!!!!!!!!! ~w~n", [SubElems]),
@@ -548,9 +575,9 @@ json_repeat(Ast, N) ->
 json_swap(Ast, N) ->
     R1 = erlamsa_rnd:erand(N),
     R2 = erlamsa_rnd:erand(N),
-    {Elem1, R1} = select_elem(Ast, R1),
-    {Elem2, R2} = select_elem(Ast, R2),
-    walk(Ast,
+    {Elem1, R1} = select_elem(values, Ast, R1),
+    {Elem2, R2} = select_elem(values, Ast, R2),
+    walk(pairs, Ast,
         fun
             (_Elem, Tree, _, I) when I == R1 ->
                 [Elem2 | Tree];
@@ -563,7 +590,7 @@ json_swap(Ast, N) ->
 json_insert(Ast, N) ->
     R1 = erlamsa_rnd:erand(N),
     R2 = erlamsa_rnd:erand(N),
-    {NewElem, R1} = select_elem(Ast, R1),
+    {NewElem, R1} = select_elem(values, Ast, R1),
     insert_elem(Ast, R2, NewElem).
 
 %%%
@@ -605,39 +632,51 @@ mutate_innertext_prob(String, Muta, _Prob, _Rnd) ->
     %%io:format("res: ~p~n", [{NewLstBin, Meta}]),
     {Meta, binary_to_list(hd(NewLstBin))}.
 
+mutate_null(Rnd, Prob) when Rnd >= Prob -> {constant, null};
+mutate_null( _Rnd, _Prob) -> 
+    erlamsa_rnd:rand_elem([{number, "-1"}, {number, "1000000000"}, {constant, true}, {array, []}, {string, "%n%s"}, {number, "0"}, {string, "AAAAAAAAAAAA"}]).
+
 %% Prevent too much JSONish on non-JSON data
-json_mutation(Ast, {N, 0}) when N < 2 ->
+json_mutation(Ast, {N, 0, NV}) when N < 2 ->
     case {erlamsa_rnd:erand(7), N} of
-        {4, 1} -> json_mutation(Ast, {N, 0}, erlamsa_rnd:rand(8));
+        {4, 1} -> json_mutation(Ast, {N, 0, NV}, erlamsa_rnd:rand(8));
         _Else -> {[{failed, json}], Ast, -1}
     end;
-json_mutation(Ast, {N, NT}) ->
-    json_mutation(Ast, {N, NT}, erlamsa_rnd:rand(8)).
+json_mutation(Ast, {N, NT, NV}) ->
+    json_mutation(Ast, {N, NT, NV}, 6). %%erlamsa_rnd:rand(6)).
 
-json_mutation(Ast, {N, _NT}, 0) ->
-    {Res, _, _} = json_swap(Ast, N),
+json_mutation(Ast, {_N, _NT, NV}, 0) ->
+    {Res, _, _} = json_swap(Ast, NV),
     {[{json_swap, 1}], Res, 1};
-json_mutation(Ast, {N, _NT}, 1) ->
-    {Res, _, _} = json_dup(Ast, N),
+json_mutation(Ast, {_N, _NT, NV}, 1) ->
+    {Res, _, _} = json_dup(Ast, NV),
     {[{json_dup, 1}], Res, 1};
-json_mutation(Ast, {_N, NT}, 2) ->
+json_mutation(Ast, {_N, NT, _NV}, 2) ->
     {Res, _, _} = json_pump(Ast, NT),
     {[{json_pump, 1}], Res, -2}; %% don't allow too much pumps...
-json_mutation(Ast, {N, _NT}, 3) ->
-    {Res, _, _} = json_repeat(Ast, N),
+json_mutation(Ast, {_N, _NT, NV}, 3) ->
+    {Res, _, _} = json_repeat(Ast, NV),
     {[{json_repeat, 1}], Res, 1};
-json_mutation(Ast, {N, _NT}, 4) ->
-    {Res, _, _} = json_insert(Ast, N),
+json_mutation(Ast, {_N, _NT, NV}, 4) ->
+    {Res, _, _} = json_insert(Ast, NV),
     {[{json_insert, 1}], Res, 1};
-json_mutation(_Ast, {_N, _NT}, 5) ->
+json_mutation(_Ast, {_N, _NT, _NV}, 5) ->
     {[{json_unserialize, 1}], make_json_unserialize(), 1};
-json_mutation(Ast, {N, _NT}, _R) when N > 0 ->  %% Prob = 25% for inner mutation 
+json_mutation(Ast, {N, _NT, _NV}, _R) when N > 0 ->  
     Muta = erlamsa_mutations:mutators_mutator(erlamsa_mutations:inner_mutations()),
     {Res, Meta} = walk2acc(Ast,
                     fun
                         ({string, String}, Tree, InnerMeta) ->
                             {NewMeta, NewString} = mutate_innertext_prob(String, Muta, 3/N, erlamsa_rnd:rand_float()),
                             {[{string, NewString} | Tree], [NewMeta | InnerMeta]};
+                        ({constant, null}, Tree, InnerMeta) ->
+                            {[mutate_null(erlamsa_rnd:rand_float(), 0.99) | Tree], [{json_innertext, 1} | InnerMeta]};
+                        ({constant, Boolean}, Tree, InnerMeta) ->
+                            NewBoolean = erlamsa_mutations:basic_type_mutation(Boolean, 0.1),
+                            {[{constant, NewBoolean} | Tree], [{json_innertext, 1} | InnerMeta]};
+                        ({number, Number}, Tree, InnerMeta) ->
+                            NewNumber = erlamsa_mutations:basic_type_mutation(list_to_integer(Number), 0.2),
+                            {[{number, io_lib:format("~p", [NewNumber])} | Tree], [{json_innertext, 1} | InnerMeta]};
                         (El, Tree, InnerMeta) ->
                             {[El | Tree], InnerMeta}
                     end, {[], []}),
@@ -651,8 +690,10 @@ json_mutate(Ll = [H|T], Meta) ->
     %% FIXME: count tags while tokenizing?
     try tokenize(H) of
         Tokens ->
-            {N, NT, N} = count(Tokens),
-            {NewMeta, Res, D} = json_mutation(Tokens, {N, NT}),
+            %io:format("count:~p~n", [count(Tokens)]),
+            {NV, NT, N} = count(Tokens),
+            {NewMeta, Res, D} = json_mutation(Tokens, {N, NT, NV}),
+            %io:format("!~p~n", [Res]),
             NewBinStr = fold_ast(Res),
             if
                 NewBinStr =:= H ->
