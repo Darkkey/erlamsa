@@ -47,8 +47,10 @@ get_client_context(Token, Session) ->
     global:send(cloud_manager, {getcontext, self(), decode_token(Token), decode_token(Session)}),
     receive
         {ok, context, Data} -> 
-            {ok, {NewSession, Context}} = Data,
-            {ok, {encode_token(NewSession), Context}}
+            case Data of
+                {ok, {NewSession, Context}} -> {ok, {encode_token(NewSession), Context}};
+                _Else -> Data
+            end
     after 
         ?TCP_TIMEOUT -> {error, timeout}
     end.
