@@ -81,6 +81,8 @@ cmdline_optsspec() ->
     {bypass		, $B,	"bypass",		{integer, 0},			"<arg>, fuzzing proxy: bypass first <arg> packets before start fuzzing (TCP/HTTP only)"},
     {certfile	, undefined,
                         "certfile",		string,			        "<arg>, certificate file for fuzzing TLS-based communications"},
+    {cloudsvc	, undefined,
+                        "cloudsvc",		{string, "nil"},	    "<arg>, activate cloudservice with <arg> as a management token"},                        
     {debug		, $d,	"debug",		undefined,				"run in debug/profiler mode, activates verbose"},
     {detach	    , $D,	"detach",		undefined,			    "detach from console after start (service mode)"},
     {external	, $e,   "external", 	string,					"external pre/post/generation/mutation module"},
@@ -105,6 +107,8 @@ cmdline_optsspec() ->
                 , undefined, "maxrunningtime",
                                         {integer, 30}, 		    "<arg>, maximum running time for fuzzing instance (service/proxy modes only)"},
     {meta		, $M, 	"meta",			{string, "nil"},		"<arg>, save metadata about fuzzing process to this file or stdout (-) or stderr (-err)"},
+    {mnesia		, undefined, 	
+                        "mnesia",		{string, "./mnesia"},	"<arg>, mnesia directory for logging or cloud service"},
     {mutations  , $m,   "mutations",	{string, erlamsa_mutations:tostring(erlamsa_mutations:mutations())},
                                                                 "<arg>, which mutations to use"},
     {count		, $n, 	"count",		{integer, 1},			"<arg>, how many outputs to generate (number or inf)"},
@@ -274,8 +278,8 @@ parse_logger_opt([LogOpt|T], Dict) ->
             IP = inet:ntoa(Host),
             Port = list_to_integer(SPort),
             parse_logger_opt(T, maps:put(logger_syslog, {IP, Port}, Dict));
-        ["mnesia", FName] ->
-            parse_logger_opt(T, maps:put(logger_mnesia, FName, Dict));
+        ["mnesia"] ->
+            parse_logger_opt(T, maps:put(logger_mnesia, true, Dict));
         _Else -> fail(io_lib:format("invalid logger specification: '~s'", [LogOpt]))
     end.
 
@@ -385,6 +389,12 @@ convert_metapath("stderr") -> stderr;
 convert_metapath("-err") -> stderr;
 convert_metapath(Path) -> Path.
 
+% convert_possiblenil("nil") -> nil;
+% convert_possiblenil(Arg) -> Arg.
+
+convert_token("nil") -> nil;
+convert_token(Arg) -> erlamsa_cmanager:decode_token(Arg).
+
 parse_seed(Seed) ->
     list_to_tuple([list_to_integer(X) || X <- string:tokens(Seed, ",")]).
 
@@ -485,6 +495,8 @@ parse_opts([debug|T], Dict) ->
     parse_opts(T, maps:put(debug, debug, maps:put(verbose, 10, maps:put(logger_level, debug, Dict))));
 parse_opts([{meta, Path}|T], Dict) ->
     parse_opts(T, maps:put(metadata, convert_metapath(Path), Dict));
+parse_opts([{cloudsvc, Token}|T], Dict) ->
+    parse_opts(T, maps:put(cloudsvc, convert_token(Token), Dict));
 parse_opts([recursive|T], Dict) ->
     parse_opts(T, maps:put(recursive, true, Dict));
 parse_opts([{count, N}|T], Dict) ->
@@ -497,6 +509,8 @@ parse_opts([{certfile, CertFile}|T], Dict) ->
     parse_opts(T, maps:put(certfile, CertFile, Dict));
 parse_opts([{keyfile, KeyFile}|T], Dict) ->
     parse_opts(T, maps:put(keyfile, KeyFile, Dict));
+parse_opts([{mnesia, MnesiaDir}|T], Dict) ->
+    parse_opts(T, maps:put(mnesia_dir, MnesiaDir, Dict));
 parse_opts([{pidfile, PidFile}|T], Dict) ->
     parse_opts(T, maps:put(pidfile, PidFile, Dict));
 parse_opts([{maxrunningtime, MT}|T], Dict) ->

@@ -26,7 +26,7 @@
 %%%-------------------------------------------------------------------
 
 -module(erlamsa_esi).
--export([fuzz/3, json/3, parse_json/2]).
+-export([fuzz/3, json/3, manage/3, parse_json/2]).
 
 -include("erlamsa.hrl").
 
@@ -44,6 +44,10 @@ parse_headers([{http_seed, Seed}|T], Acc) ->
     parse_headers(T, maps:put(seed, fun () -> erlamsa_cmdparse:parse_seed(Seed) end, Acc));
 parse_headers([{remote_addr, IP}|T], Acc) ->
     parse_headers(T, maps:put(remote_addr, IP, Acc));
+parse_headers([{http_erlamsa_token, IP}|T], Acc) ->
+    parse_headers(T, maps:put(erlamsa_token, IP, Acc));
+parse_headers([{http_erlamsa_session, IP}|T], Acc) ->
+    parse_headers(T, maps:put(erlamsa_session, IP, Acc));
 parse_headers([], Acc) ->
     Acc;
 parse_headers([_H|T], Acc) ->
@@ -66,20 +70,18 @@ parse_json(Env, Json) ->
     T1 = erlamsa_json:tokenize(list_to_binary(Json)),
     %% TODO: handle tokens conversion errors
     JsonMap = hd(erlamsa_json:tokens_to_erlang(T1)),
-    Data = maps:get("data", JsonMap, ""),
-    %% TODO: handle base64 decode errors
-    In = base64:decode(Data),
+    In = case maps:get("data", JsonMap, "") of 
+        "" -> <<>>;
+        %% TODO: handle base64 decode errors
+        Data -> base64:decode(Data)
+    end,
     %% TODO: handle incorrent params errors
     NewEnv = maps:fold(fun parse_json_map_elem/3, Env, JsonMap),
     {NewEnv, In}.
 
--spec call(term(), mod_esi:env(), binary()) -> binary().
-call(Sid, Env, In) ->
-    InitOpts = case ets:match(global_config, {external_mutations, '$1'}) of
-        [[Mutations]] -> maps:put(external_mutations, Mutations, maps:new());
-        _ -> maps:new()
-    end,
-    Opts = parse_headers(Env, InitOpts),
+
+-spec call_fuzzer(term(), map(), binary()) -> binary().
+call_fuzzer(Sid, Opts, In) -> 
     Dict = erlamsa_utils:get_direct_fuzzing_opts(In, Opts),
     erlamsa_logger:log(info, "Request from IP ~s, session ~p",
                         [maps:get(remote_addr, Dict, nil), Sid]),
@@ -88,38 +90,113 @@ call(Sid, Env, In) ->
     erlamsa_logger:log_data(info, "Output data <session = ~p>", [Sid], Output),
     Output.
 
+-spec call(term(), mod_esi:env(), binary()) -> binary().
+call(Sid, Env, In) ->
+    InitOpts = case ets:match(global_config, {external_mutations, '$1'}) of
+        [[Mutations]] -> maps:put(external_mutations, Mutations, maps:new());
+        _ -> maps:new()
+    end,
+    Opts = parse_headers(Env, InitOpts),
+    AuthRes = erlamsa_cmanager:get_client_context(maps:get('erlamsa_token', Opts, nil), 
+                                                  maps:get('erlamsa_session', Opts, nil)),
+    case AuthRes of 
+        {ok, {Session, _CtxDict}} ->    
+            {Session, call_fuzzer(Sid, Opts, In)};
+        {error, timeout} ->
+            throw(error_timeout);
+        {error, unauth} ->
+            throw(error_unauth)
+    end.
+
+-spec make_headers(integer(), string()) -> no_return().
+make_headers(Status, nil) ->
+    lists:flatten(io_lib:format("erlamsa-status: ~p\r\n\r\n", [Status]));
+make_headers(Status, Session) ->
+    lists:flatten(io_lib:format("erlamsa-status: ~p\r\nerlamsa-session: ~s\r\n\r\n", 
+                                        [Status, Session])).
+
 -spec fuzz(term(), mod_esi:env(), binary()) -> ok | {error, any()}.
 fuzz(Sid, Env, In) ->
     try
         InBin = list_to_binary(In),
-        Output = call(Sid, Env, InBin),
+        {Session, Output} = call(Sid, Env, InBin),
+        mod_esi:deliver(Sid, [make_headers(0, Session)]),
         mod_esi:deliver(Sid, [Output])
     catch
         error:badarg ->
             erlamsa_logger:log(error, "Session ~p: invalid input options detected, ~p",
                                 [Sid, Env]),
-            mod_esi:deliver(Sid, ["Invalid header option(s) specification!"]);
+            mod_esi:deliver(Sid, make_headers(500, nil)),
+            mod_esi:deliver(Sid, "Invalid input parameters");
+        error_unauth ->
+            erlamsa_logger:log(error, "Session ~p: unauthenticated request, ~p",
+                                [Sid, Env]),
+            mod_esi:deliver(Sid, make_headers(401, nil)),
+            mod_esi:deliver(Sid, <<>>);
         UnknownError ->
             erlamsa_logger:log(error, "Session ~p: unknown error with code ~p",
                                 [Sid, UnknownError]),
-            mod_esi:deliver(Sid, ["Unknown unrecoverable error!"])
+            {error, unknown}
     end.
 
 -spec json(term(), mod_esi:env(), binary()) -> ok | {error, any()}.
 json(Sid, Env, In) ->
     try
-        %spawn(erlamsa_esi, parse_json, [Env, In]),
         {NewEnv, Data} = parse_json(Env, In),
-        Output = call(Sid, NewEnv, Data),
+        {Session, Output} = call(Sid, NewEnv, Data),
         Ret = io_lib:format("{\"data\": \"~s\"}", [base64:encode(Output)]),
+        mod_esi:deliver(Sid, make_headers(0, Session)),
         mod_esi:deliver(Sid, [Ret])
     catch
         error:badarg ->
             erlamsa_logger:log(error, "Session ~p: invalid JSON options detected.", [Sid]),
+            mod_esi:deliver(Sid, make_headers(500, nil)),
             mod_esi:deliver(Sid, ["{\"error\": \"Invalid JSON option(s) specification!\"}"]);
+        error_unauth ->
+            erlamsa_logger:log(error, "Session ~p: unauthenticated request, ~p",
+                                [Sid, Env]),
+            mod_esi:deliver(Sid, make_headers(401, nil)),
+            mod_esi:deliver(Sid, ["{\"error\": \"Invalid session or token id.\"}"]);
         UnknownError ->
             erlamsa_logger:log(error, "Session ~p: invalid JSON document provided, error code ~p",
                                 [Sid, UnknownError]),
+            mod_esi:deliver(Sid, "erlamsa-status: 500\r\n\r\n"),
+            mod_esi:deliver(Sid,
+                            ["{\"error\": \"Invalid or insufficient JSON document provided!\"}"])
+    end.
+
+
+-spec manage(term(), mod_esi:env(), binary()) -> binary().
+manage(Sid, Env, In) ->
+    try
+        T1 = erlamsa_json:tokenize(list_to_binary(In)),
+        Vars = hd(erlamsa_json:tokens_to_erlang(T1)),
+        %io:format("Vars: ~p~n", [Vars]),
+        {Res, Data} = case maps:get("command", Vars, nil) of 
+            "insert_token" -> 
+                erlamsa_cmanager:insert_token(maps:get("authtoken", Vars, nil), maps:get("token", Vars, nil)); 
+            "delete_token" -> 
+                erlamsa_cmanager:delete_token(maps:get("authtoken", Vars, nil), maps:get("token", Vars, nil)); 
+            "get_sessions" -> 
+                erlamsa_cmanager:get_sessions(maps:get("authtoken", Vars, nil)); 
+            _Else -> throw(badarg)
+        end, 
+        Ret = io_lib:format("{\"result\": \"~p\", \"data\": \"~p\"}", [Res, Data]),
+        mod_esi:deliver(Sid, [Ret])
+    catch
+        error:badarg ->
+            erlamsa_logger:log(error, "Session ~p: invalid JSON options detected.", [Sid]),
+            mod_esi:deliver(Sid, make_headers(500, nil)),
+            mod_esi:deliver(Sid, ["{\"error\": \"Invalid JSON option(s) specification!\"}"]);
+        error_unauth ->
+            erlamsa_logger:log(error, "Session ~p: unauthenticated request, ~p",
+                                [Sid, Env]),
+            mod_esi:deliver(Sid, make_headers(401, nil)),
+            mod_esi:deliver(Sid, ["{\"error\": \"Invalid session or token id.\"}"]);
+        UnknownError ->
+            erlamsa_logger:log(error, "Session ~p: invalid JSON document provided, error code ~p",
+                                [Sid, UnknownError]),
+            mod_esi:deliver(Sid, "erlamsa-status: 500\r\n\r\n"),
             mod_esi:deliver(Sid,
                             ["{\"error\": \"Invalid or insufficient JSON document provided!\"}"])
     end.
