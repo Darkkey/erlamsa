@@ -26,8 +26,9 @@
 %%%-------------------------------------------------------------------
 
 -module(erlamsa_fsupervisor).
--export([start/1, fsupervisor/2, get_supervisor_opts/1, get_fuzzing_output/1,
-        launch_fuzzing_process/2]).
+-export([start/1, start_node/1, fsupervisor/2, get_supervisor_opts/1, 
+         get_fuzzing_output/1, get_fuzzing_output/3,
+         launch_fuzzing_process/2]).
 
 -include("erlamsa.hrl").
 
@@ -47,18 +48,40 @@ get_supervisor_opts(Opts) ->
 launch_fuzzing_process(Dict, ParentPid) ->
     Output = erlamsa_utils:extract_function(
                 erlamsa_main:fuzzer(maps:put(parentpid, ParentPid, Dict))),
-    ParentPid ! {ok, self(), Output}.
+    ParentPid ! {fuzzing_ok, self(), Output}.
 
-%% TODO: return error when timeout?
+-spec notify_supervisor(pid(), tuple()) -> ok.
+notify_supervisor(fuzzing_supervisor, Msg) ->
+    global:send(fuzzing_supervisor, Msg);
+notify_supervisor(Pid, Msg) ->
+    Pid ! Msg.
+
 -spec get_fuzzing_output(options()) -> binary().
 get_fuzzing_output(Dict) ->
-    Pid = spawn(erlamsa_fsupervisor, launch_fuzzing_process, [Dict, self()]),
-    global:send(fuzzing_supervisor, {add, Pid}),
+    {FuzzNode, _} = erlamsa_app:get_free_node(),
+    get_fuzzing_output(FuzzNode, fuzzing_supervisor, Dict).
+
+%% TODO: return error when timeout?
+-spec get_fuzzing_output(list(), pid(), options()) -> binary().
+get_fuzzing_output(Node, SupervisorPid, Dict) ->
+    %io:format("In get_fuzzing_output: ~p ~p ~p~n", [{self(), Node}, SupervisorPid, Dict]),
+    AwaitPid = 
+        case Node of
+            local ->
+                Pid = spawn(erlamsa_fsupervisor, launch_fuzzing_process, [Dict, self()]),
+                notify_supervisor(SupervisorPid, {add, Pid}),
+                Pid;
+            RemotePid ->
+                RemotePid ! {fuzz_opts, self(), maps:put(parentpid, self(), Dict)},
+                RemotePid
+        end,
     receive
-        {ok, Pid, Output} ->
+        {fuzzing_ok, AwaitPid, Output} ->
+            Output;
+        {fuzzing_ok, Output} ->
             Output
     after
-        3600000 ->
+        60000 ->
             <<>>
     end.
 
@@ -96,6 +119,12 @@ start(Dict) ->
     Pid = spawn(erlamsa_fsupervisor, fsupervisor,
                     [maps:get(maxrunningtime, Dict, 30), []]),
     global:register_name(fuzzing_supervisor, Pid),
+    {ok, Pid}.
+
+-spec start_node(options()) -> {ok, pid()}.
+start_node(Dict) ->
+    Pid = spawn(erlamsa_fsupervisor, fsupervisor,
+                    [maps:get(maxrunningtime, Dict, 30), []]),
     {ok, Pid}.
 
 -spec fsupervisor(integer(), fsupervisor_queue()) -> no_return().

@@ -179,17 +179,13 @@ build_logger_csv(FName) ->
 
 build_logger_mnesia(none) ->
     [];
-build_logger_mnesia(Dir) ->
-    application_controller:set_env(mnesia, dir, Dir),
-    mnesia:create_schema([node()]),
-    mnesia:start(),
+build_logger_mnesia(_MnesiaEnabled) ->
     mnesia:create_table(log_entry, [{attributes, record_info(fields, log_entry)}]),
     fun
         (TimeStamp, Pid, Type, LogMsg, Data, _DataLen) ->
             mnesia:transaction(fun () ->
                 mnesia:write(#log_entry{date = TimeStamp, pid = Pid, type = Type,  message = LogMsg, data = Data})
-            end),
-            io:format("~p", [mnesia:info()])
+            end)
     end.
 
 %%

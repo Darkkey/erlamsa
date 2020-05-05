@@ -61,6 +61,14 @@
 -define(PROCKET_DIR, "/deps/procket/ebin").
 -define(SERIAL_DIR, "/deps/erlserial/ebin").
 -define(ERLEXEC_DIR, "/deps/erlexec/ebin").
+-define(NODE_ALIVE_DELTA, 17).
+-define(NODE_KEEPALIVE, 15000).
+-define(NODES_CHECKTIMER, 5000).
+
+%% Cloud service
+-define(SESSIONKEYBITS_LENGTH, 160).
+-define(SESSIONKEY_LENGTH, 20).
+-define(SESSION_EXPIRETIME, 600).
 
 %% log levels:
 %% crit, error, warning, issue, info, decision, meta, debug
@@ -94,6 +102,8 @@
 %% Logging table structure
 
 -record(log_entry, {date, type, pid, message, data}).
+-record(token, {tokenid, date, type}).
+-record(session, {sessionid, tokenid, lastaccess}).
 
 %% Common inter-module types.
 
