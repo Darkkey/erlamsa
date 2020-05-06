@@ -81,7 +81,7 @@ get_fuzzing_output(Node, SupervisorPid, Dict) ->
         {fuzzing_ok, Output} ->
             Output
     after
-        60000 ->
+        90000 ->
             <<>>
     end.
 
