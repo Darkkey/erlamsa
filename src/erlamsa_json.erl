@@ -643,7 +643,7 @@ json_mutation(Ast, {N, 0, NV}) when N < 2 ->
         _Else -> {[{failed, json}], Ast, -1}
     end;
 json_mutation(Ast, {N, NT, NV}) ->
-    json_mutation(Ast, {N, NT, NV}, 6). %%erlamsa_rnd:rand(6)).
+    json_mutation(Ast, {N, NT, NV}, erlamsa_rnd:rand(17)).
 
 json_mutation(Ast, {_N, _NT, NV}, 0) ->
     {Res, _, _} = json_swap(Ast, NV),
@@ -662,21 +662,29 @@ json_mutation(Ast, {_N, _NT, NV}, 4) ->
     {[{json_insert, 1}], Res, 1};
 json_mutation(_Ast, {_N, _NT, _NV}, 5) ->
     {[{json_unserialize, 1}], make_json_unserialize(), 1};
-json_mutation(Ast, {N, _NT, _NV}, _R) when N > 0 ->  
-    Muta = erlamsa_mutations:mutators_mutator(erlamsa_mutations:inner_mutations()),
+json_mutation(Ast, {N, _NT, _NV}, _R) ->  
+    Muta = erlamsa_mutations:mutators_mutator(erlamsa_mutations:inner_mutations(json)),
     {Res, Meta} = walk2acc(Ast,
                     fun
                         ({string, String}, Tree, InnerMeta) ->
-                            {NewMeta, NewString} = mutate_innertext_prob(String, Muta, 3/N, erlamsa_rnd:rand_float()),
+                            {NewMeta, NewString} = mutate_innertext_prob(String, Muta, 2/N, erlamsa_rnd:rand_float()),
                             {[{string, NewString} | Tree], [NewMeta | InnerMeta]};
-                        ({constant, null}, Tree, InnerMeta) ->
-                            {[mutate_null(erlamsa_rnd:rand_float(), 0.99) | Tree], [{json_innertext, 1} | InnerMeta]};
-                        ({constant, Boolean}, Tree, InnerMeta) ->
-                            NewBoolean = erlamsa_mutations:basic_type_mutation(Boolean, 0.1),
-                            {[{constant, NewBoolean} | Tree], [{json_innertext, 1} | InnerMeta]};
-                        ({number, Number}, Tree, InnerMeta) ->
-                            NewNumber = erlamsa_mutations:basic_type_mutation(list_to_integer(Number), 0.2),
-                            {[{number, io_lib:format("~p", [NewNumber])} | Tree], [{json_innertext, 1} | InnerMeta]};
+                        ({constant, null} = El, Tree, InnerMeta) ->
+                            case mutate_null(erlamsa_rnd:rand_float(), 0.1) of
+                                El -> {[El | Tree], InnerMeta};
+                                NewEl -> {[NewEl | Tree], [{json_innertext, null}, {json_innertext, 1} | InnerMeta]}
+                            end;                           
+                        ({constant, Boolean} = El, Tree, InnerMeta) ->
+                            case erlamsa_mutations:basic_type_mutation(Boolean, 0.1) of 
+                                Boolean -> {[El | Tree], InnerMeta};
+                                NewBoolean -> {[{constant, NewBoolean} | Tree], [{json_innertext, bool}, {json_innertext, 1} | InnerMeta]}
+                            end;
+                        ({number, NumberText} = El, Tree, InnerMeta) ->
+                            Number = list_to_integer(NumberText),
+                            case erlamsa_mutations:basic_type_mutation(Number, 0.1) of
+                                Number -> {[El | Tree], InnerMeta};
+                                NewNumber -> {[{number, io_lib:format("~p", [NewNumber])} | Tree], [{json_innertext, num}, {json_innertext, 1} | InnerMeta]}
+                            end;        
                         (El, Tree, InnerMeta) ->
                             {[El | Tree], InnerMeta}
                     end, {[], []}),

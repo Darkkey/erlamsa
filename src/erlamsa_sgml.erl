@@ -727,7 +727,7 @@ sgml_mutation(Ast, {_N, NT}, 8) ->
 sgml_mutation(Ast, {_N, NT}, _R) ->  %% Prob = 25% for inner mutation 
     %%TODO: here we're guessing that mutation was successfull
     %%FIXME: may be count text elements before going to mutate?
-    Muta = erlamsa_mutations:mutators_mutator(erlamsa_mutations:inner_mutations()),
+    Muta = erlamsa_mutations:mutators_mutator(erlamsa_mutations:inner_mutations(sgml)),
     {Res, Meta} = walk2acc(Ast,
                     fun
                         (Elem, Tree, InnerMeta) ->
