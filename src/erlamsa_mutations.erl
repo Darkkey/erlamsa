@@ -506,6 +506,10 @@ push_as(0, Tail)
 push_as(N, Tail) ->
     push_as(N - 1, [97 | Tail]).
 
+-spec insert_traversal(char()) -> list().
+insert_traversal(Symb) ->
+    [Symb | lists:flatten(lists:map(fun (_) -> [$., $., Symb] end, lists:seq(1, erlamsa_rnd:erand(10))))].
+
 -spec mutate_text_data(string(), [text_mutators()]) -> string().
 mutate_text_data(Lst, TxtMutators) ->
     mutate_text(erlamsa_rnd:rand_elem(TxtMutators), Lst).
@@ -536,6 +540,13 @@ mutate_text(insert_aaas, Lst) ->
     N = rand_as_count(),
     P = erlamsa_rnd:erand(length(Lst)), % in erlang lists starts from 1    
     lists:sublist(Lst, P - 1) ++ push_as(N, lists:nthtail(P, Lst));
+%% insert path traversal
+mutate_text(insert_traversal, []) -> insert_traversal("/"); %% empty list -- just insert random
+mutate_text(insert_traversal, Lst) ->
+    P = erlamsa_rnd:erand(length(Lst)), % in erlang lists starts from 1    
+    lists:sublist(Lst, P - 1) 
+        ++ insert_traversal(erlamsa_rnd:rand_elem(["\\", "/"])) 
+        ++ lists:nthtail(P, Lst);
 %% insert null
 mutate_text(insert_null, Lst) ->
     Lst ++ [0];
@@ -594,7 +605,7 @@ construct_ascii_mutator(Fun, Name) ->
 construct_ascii_bad_mutator() ->    
     construct_ascii_mutator(
         fun (Cs) -> string_generic_mutate(Cs, 
-                    [insert_badness, replace_badness, insert_aaas, insert_null], 
+                    [insert_badness, replace_badness, insert_traversal, insert_aaas, insert_null], 
                     length(Cs), 0)
         end,
         ascii_bad).
@@ -680,7 +691,7 @@ base64_mutator([H|T], Meta) ->
 
 
 %% 
-%% URI SSRF Mutator
+%% URI SSRF/Path traversal Mutator
 %%
 
 %% need this wrapper in case if ets process not started (erlamsa_app:start haven't called)
@@ -729,17 +740,29 @@ rand_uri_mutate(T, Acc, 1) ->
     {change_scheme(Acc) ++ get_ssrf_uri() ++ T, 1, {uri, success}};
 rand_uri_mutate(T, Acc, 2) ->
     {SSRFHost, SSRFPort} = get_ssrf_ep(), 
-    AtAddr = lists:flatten(io_lib:format(" @~s:~p", [SSRFHost, SSRFPort])),
-    [Domain, Query] = string:tokens(T, "/"),
-    Modified = lists:flatten([change_scheme(Acc), "://", Domain, AtAddr, $/, Query]),
-    {Modified, 1, {uri, success}}.
+    AtAddr = lists:flatten(io_lib:format(erlamsa_rnd:rand_elem([" @~s:~p", "@~s:~p"]), 
+                                         [SSRFHost, SSRFPort])
+                          ),
+    [Domain | Query] = string:tokens(T, "/"),
+    Modified = lists:flatten([change_scheme(Acc), "://", Domain, AtAddr, $/, string:join(Query,"/")]),
+    {Modified, 1, {uri, success}};
+rand_uri_mutate(T, Acc, 3) ->
+    [Domain | Query] = string:tokens(T, "/"),
+    Traversals = ["/" | lists:map(fun (_) -> "../" end, lists:seq(1, erlamsa_rnd:erand(10)))],
+    NewQuery = Traversals ++ case erlamsa_rnd:erand(4) of
+        1 -> string:join(Query, "/");
+        2 -> "Windows/win.ini";
+        3 -> "etc/shadow";
+        4 -> "etc/passwd"
+    end,
+    {lists:reverse(Acc) ++ "://" ++ Domain ++ lists:flatten(NewQuery), 1, {uri, success}}.
 
 -spec try_uri_mutate(list()) -> {list(), integer(), list()}.
 try_uri_mutate(Lst) -> try_uri_mutate(Lst, []).
 
 -spec try_uri_mutate(list(), list()) -> {list(), integer(), list()}.
 try_uri_mutate([ $:, $/, $/ | T], Acc) ->
-    rand_uri_mutate(T, Acc, erlamsa_rnd:erand(2));
+    rand_uri_mutate(T, Acc, erlamsa_rnd:erand(3)); 
 try_uri_mutate([], Acc) -> {lists:reverse(Acc), 0, []};
 try_uri_mutate([H|T], Acc) -> 
     try_uri_mutate(T, [H|Acc]).
