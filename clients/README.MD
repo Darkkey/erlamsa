@@ -16,5 +16,11 @@ $ node erlamsa_node_client.js
 Hello erlamsa! erlamsed to a!Hello erlams+!Hello erlamsa!Hello erlamsa!Hello erlamsa!
 $ python2 erlamsa_python_client.py
 Hello erlamsa! erlamsed to lllle
-$
+$ pip3 install pyerlamsa
+$ python3
+...
+>>> import pyerlamsa
+>>> e = pyerlamsa.Erlamsa('http://127.0.0.1:17771')
+>>> e.call('Hello erlamsa!');
+(True, 'Hell4amsa15i685\x81\x91')
 ```
