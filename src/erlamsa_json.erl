@@ -680,11 +680,15 @@ json_mutation(Ast, {N, _NT, _NV}, _R) ->
                                 NewBoolean -> {[{constant, NewBoolean} | Tree], [{json_innertext, bool}, {json_innertext, 1} | InnerMeta]}
                             end;
                         ({number, NumberText} = El, Tree, InnerMeta) ->
-                            Number = list_to_integer(NumberText),
-                            case erlamsa_mutations:basic_type_mutation(Number, 0.1) of
-                                Number -> {[El | Tree], InnerMeta};
-                                NewNumber -> {[{number, io_lib:format("~p", [NewNumber])} | Tree], [{json_innertext, num}, {json_innertext, 1} | InnerMeta]}
-                            end;        
+                            try list_to_integer(NumberText) of
+                                Number -> 
+                                    case erlamsa_mutations:basic_type_mutation(Number, 0.1) of
+                                        Number -> {[El | Tree], InnerMeta};
+                                        NewNumber -> {[{number, io_lib:format("~p", [NewNumber])} | Tree], [{json_innertext, num}, {json_innertext, 1} | InnerMeta]}
+                                    end
+                            catch
+                                error:badarg -> {[El | Tree], InnerMeta}
+                            end;    
                         (El, Tree, InnerMeta) ->
                             {[El | Tree], InnerMeta}
                     end, {[], []}),
