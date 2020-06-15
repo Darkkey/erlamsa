@@ -109,7 +109,7 @@ Or, in detached mode (erlamsa will go background after launch):
 ./erlamsa -H 127.0.0.1:17771 -D
 ```
 
-HTTP POST your data to `http://<Host:Port>/erlamsa/erlamsa_esi:fuzz` as `application/octet-stream`. See examples in `clients/` folder (provided for C#, node.js and python). 
+HTTP POST your data to `http://<Host:Port>/erlamsa/erlamsa_esi:fuzz` as `application/octet-stream`. See examples in `clients/` folder (provided for C#, Go, Node.js and python2/3). 
 E.g. for Python 2.7:
 ```python
 import httplib
