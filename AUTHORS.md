@@ -24,7 +24,7 @@ the full lists of such inclusions (refer to erlamsa source code for the addition
  - JSON parser tokenizer is partialy derived from JSONE json parser by Takeru Ohta < phjgt308@gmail.com > 
  - getopt command line parser reuses code from erlang getopt package by Juan Jose Comellas < juanjo@comellas.org >
  - payloads for JSON deserialized attacks were borrowed from 'Friday the 13th JSON Attacks' paper by Alvaro Muñoz & Oleksandr Mirosh
- - script-builder is built using parts from Chad DePue' edis installation scripts.
+ - script-builder is built using parts from Chad DePue' edis ( https://github.com/cbd/edis ) installation scripts.
  - original tcp proxy implementation was borrowed from the http://beezari.livejournal.com/191194.html by beezari
 
 Contributors
