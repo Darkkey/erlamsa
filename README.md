@@ -143,6 +143,33 @@ $ curl -H "Content-Type: application/json" -X POST -d '{"data":"aGVsbG8="}' http
 {"data": "bGxvbGxvaA=="}
 ```
 
+### PyErlamsa module
+
+For Python 3 you could use more handy pyerlamsa (check https://github.com/Darkkey/pyerlamsa/ for more info) module:
+
+Connecting to local erlamsa instance:
+```
+$ pip3 install pyerlamsa
+$ python3
+...
+>>> import pyerlamsa
+>>> e = pyerlamsa.Erlamsa('http://127.0.0.1:17771')
+>>> e.call('Hello erlamsa!');
+(True, 'Hell4amsa15i685\x81\x91')
+```
+
+Connecting to erlamsa cloud:
+```
+...
+>>> e = pyerlamsa.Erlamsa('https://erlamsa.online', token="yourtoken")
+>>> e.call('Hello erlamsa!');
+(True, '%n erlamsa!')
+>>> e.call('Hello erlamsa!');
+(True, 'lamsa!lo\x1ferHel')
+>>> e.call('Hello erlamsa!');
+(True, 'Hello erlamsa!Hello erlamsa!')
+```
+
 ### Fuzzing options
 
 For standalone Web or JSON fuzzing, along with fuzzing data, you could also provide fuzzing options, including `mutations`, `patterns`, `seed`, `blockscale`, e.t.c. The format of these options should be the same as in according command line keys. Pass them as HTTP headers (for standalone Web service) or as JSON members (for JSON endpoint). E.g.:
