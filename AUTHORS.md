@@ -6,7 +6,7 @@ Main developer (author and maintainer)
 
 The author of erlamsa is the main contributor and designer of the tool.
 
- - Alexander Bolshev aka dark_k3y <pancake@nopcode.org>
+ - Alexander Bolshev aka dark_k3y 
 
 
 Authors of modules / source code that exist in / used by / was used by erlamsa
