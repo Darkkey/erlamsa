@@ -249,9 +249,10 @@ streamsock_writer(Transport, Addr, Port, Maker) ->
             ok -> {F, {net,
                 fun (Data) -> Packet = Maker(Data), 
                               erlamsa_netutils:send(Transport, Sock, Packet), 
-                              receive %%TODO: print to logs?
+                              receive 
                                  {_ProtoTransport, _ClientSocket, RecvData} -> erlamsa_logger:log_data(debug, "reply from target",
-                                             [], RecvData)
+                                             [], RecvData),
+                                 ok
                               after 
                                  25 -> ok
                               end
