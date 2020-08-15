@@ -2,27 +2,29 @@ ifeq ($(PREFIX),)
     PREFIX := /usr/local
 endif
 
+REBAR3 := `which rebar3 || echo ./rebar3`
+
 default: bootstrap compile test
 
 bootstrap:
 	which rebar3 || test -f rebar3 || (mkdir -p _build && cd _build && git clone https://github.com/erlang/rebar3.git && cd rebar3 && ./bootstrap && cp ./rebar3 ../../rebar3 && cd ../..)
 
 test:
-	./rebar3 eunit
+	$(REBAR3) eunit
 
 compile:
 	echo "-define(GITVER, \"; commit: `git log -1 --format=%cd --date=local` `git rev-parse HEAD`\")." > src/version.hrl
 	echo "-define(PREFIXDIR, \"$(PREFIX)\")." >> src/version.hrl
 	mkdir -p priv
-	./rebar3 get-deps
-	./rebar3 compile
+	$(REBAR3) get-deps
+	$(REBAR3) compile
 	cp _build/default/lib/erlexec/priv/*/exec-port priv/
 	cp _build/default/lib/erlserial/priv/bin/serial priv/erlserial
 	cp -r _build/default/lib/procket/priv/procket* priv/
 	escript script-builder
 
 fast:
-	./rebar3 compile skip_deps=true
+	$(REBAR3) compile skip_deps=true
 	escript script-builder
 
 install:
