@@ -29,7 +29,7 @@ Git, Erlang. If you want to use raw IP output, gcc and make are required to buil
 
 ### Installing erlang
 
-Erlamsa requires erlang/OTP 17.5+ to run.
+Erlamsa requires erlang/OTP 18.0+ to run.
 
 Download erlang from official website http://www.erlang.org, install and put in path to `erlc`, `erl` and `escript` binaries into `PATH` variable. Or use your system's packet manager to install it.
 
