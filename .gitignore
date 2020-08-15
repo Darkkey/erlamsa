@@ -28,3 +28,6 @@ erlamsa
 erlamsa_daemon
 src/version.hrl
 priv/
+_build/
+mnesia/
+rebar.lock

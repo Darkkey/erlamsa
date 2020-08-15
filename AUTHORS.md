@@ -26,7 +26,7 @@ the full lists of such inclusions (refer to erlamsa source code for the addition
  - payloads for JSON deserialized attacks were borrowed from 'Friday the 13th JSON Attacks' paper by Alvaro Muñoz & Oleksandr Mirosh
  - script-builder is built using parts from Chad DePue' edis ( https://github.com/cbd/edis ) installation scripts.
  - original tcp proxy implementation was borrowed from the http://beezari.livejournal.com/191194.html by beezari
- - erlamsa is using original rebar (see https://github.com/rebar/rebar) for building/testing/installing purposes.
+ - erlamsa is using rebar3 (see https://github.com/erlang/rebar3) for building/testing/installing purposes.
 
 Contributors
 ------------
