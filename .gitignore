@@ -31,3 +31,4 @@ priv/
 _build/
 mnesia/
 rebar.lock
+rebar3
