@@ -2,7 +2,10 @@ ifeq ($(PREFIX),)
     PREFIX := /usr/local
 endif
 
-default: compile test
+default: bootstrap compile test
+
+bootstrap:
+	which rebar3 || test -f rebar3 || (mkdir -p _build && cd _build && git clone https://github.com/erlang/rebar3.git && cd rebar3 && ./bootstrap && cp ./rebar3 ../../rebar3 && cd ../..)
 
 test:
 	./rebar3 eunit
