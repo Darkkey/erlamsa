@@ -686,7 +686,7 @@ json_mutation(Ast, {N, _NT, _NV}, _R) ->
                                         Number -> {[El | Tree], InnerMeta};
                                         NewNumber -> {[{number, io_lib:format("~p", [NewNumber])} | Tree], [{json_innertext, num}, {json_innertext, 1} | InnerMeta]}
                                     end
-                            catch
+                            catch   
                                 error:badarg -> {[El | Tree], InnerMeta}
                             end;    
                         (El, Tree, InnerMeta) ->

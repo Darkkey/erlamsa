@@ -59,14 +59,11 @@ read_r2_data(Port) ->
     read_r2_data(Port, none, []).
 read_r2_data(Port, 0, [[0]] ) ->
     Data = receive_port(Port),
-    %io:format("1) ~p~n", [Data]),
     read_r2_data(Port, lists:nth(length(Data), Data), [Data]);
 read_r2_data(_Port, 0, Acc) ->
-    %io:format("2) ~p~n", [nil]),
     lists:droplast(lists:flatten(lists:reverse(Acc)));
 read_r2_data(Port, _Any, Acc) ->
     Data = receive_port(Port),
-    %io:format("3) ~p ~p~n", [Data, lists:nth(length(Data), Data)]),
     read_r2_data(Port, lists:nth(length(Data), Data), [Data | Acc]).
 
 
@@ -78,7 +75,6 @@ r2_ready(Port, _PrevData, Acc) ->
         port_exit ->
             {exit, lists:reverse(Acc)};
         Data -> 
-            %io:format("Start: ~p  ~p~n", [Data, lists:nth(length(Data), Data)]),
             r2_ready(Port, Data, [Data | Acc])
     end.
 
@@ -87,8 +83,7 @@ loop(Port) ->
 	{call, Caller, Msg} ->
 	    Port ! {self(), {command, Msg}},
         RcvdData = read_r2_data(Port),
-        %io:format("******* RcvData: ~p~n", [RcvdData]),
-   	    Caller ! {self(), RcvdData},
+        Caller ! {self(), RcvdData},
 	    loop(Port);
 	stop ->
 	    Port ! {self(), close},

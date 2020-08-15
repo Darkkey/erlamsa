@@ -5,21 +5,21 @@ endif
 default: compile test
 
 test:
-	./rebar eu
+	./rebar3 eunit
 
 compile:
 	echo "-define(GITVER, \"; commit: `git log -1 --format=%cd --date=local` `git rev-parse HEAD`\")." > src/version.hrl
 	echo "-define(PREFIXDIR, \"$(PREFIX)\")." >> src/version.hrl
 	mkdir -p priv
-	./rebar get-deps
-	./rebar compile
-	cp deps/erlexec/priv/*/exec-port priv/
-	cp deps/erlserial/priv/bin/serial priv/erlserial
-	cp -r deps/procket/priv/procket* priv/
+	./rebar3 get-deps
+	./rebar3 compile
+	cp _build/default/lib/erlexec/priv/*/exec-port priv/
+	cp _build/default/lib/erlserial/priv/bin/serial priv/erlserial
+	cp -r _build/default/lib/procket/priv/procket* priv/
 	escript script-builder
 
 fast:
-	./rebar compile skip_deps=true
+	./rebar3 compile skip_deps=true
 	escript script-builder
 
 install:

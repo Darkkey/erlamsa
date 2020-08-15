@@ -1,6 +1,6 @@
 #!/usr/bin/env escript
 
-%% original dea and parts of code from https://github.com/cbd/edis/blob/master/priv/script_builder
+%% original idea and parts of code from https://github.com/cbd/edis/blob/master/priv/script_builder
 %% original licence: https://github.com/cbd/edis/blob/master/LICENSE
 %% original authors: https://github.com/cbd / https://inaka.github.io
 %% Heavily adapted for erlamsa
@@ -14,19 +14,19 @@ read_file(Filename, Dir) ->
   {Filename, Bin}.
 
 main(_Args) ->
-  true = code:add_path("ebin"),
-  ok = code:add_paths(filelib:wildcard("deps/*/ebin")),
+  true = code:add_path("_build/default/lib/erlamsa/ebin"),
+  ok = code:add_paths(filelib:wildcard("_build/default/lib/*/ebin")),
   
-  Files = lists:flatmap(fun(Dir) -> load_files(Dir) end, ["ebin"|filelib:wildcard("deps/*/ebin")]),
+  Files = lists:flatmap(fun(Dir) -> load_files(Dir) end, ["ebin"|filelib:wildcard("_build/default/lib/*/ebin")]),
   
   case zip:create("mem", Files, [memory]) of
     {ok, {"mem", Zip}} ->
-      Script = <<"#!/usr/bin/env escript\n%%! -smp enable\n", Zip/binary>>,
+      Script = <<"#!/usr/bin/env escript\n%%! -smp enable -name erlamsa@127.0.0.1\n", Zip/binary>>,
       file:write_file("erlamsa", Script),
       case os:type() of
         {unix,_} ->
           os:cmd("chmod u+x erlamsa"),
-          DaemonScript = <<"#!/usr/bin/env escript\n%%! -name erlamsa_app -smp enable -noshell -detached\n", Zip/binary>>,
+          DaemonScript = <<"#!/usr/bin/env escript\n%%! -name erlamsa@127.0.0.1 -smp enable -noshell -detached\n", Zip/binary>>,
           file:write_file("erlamsa_daemon", DaemonScript),
           [] = os:cmd("chmod u+x erlamsa_daemon"),
           ok;
