@@ -306,6 +306,11 @@ parse_input_opts(InputOpts, Dict) ->
                 list_to_integer(RPort)}
                 | maps:get(proxy_address, Dict, [])],
             maps:put(mode, proxy, Dict));
+        ["serial", [$/, $/ | Port1], Opt1, Port2, Opt2] ->
+                maps:put(proxy_address,
+                [{"serial", Port1, Opt1, Port2, Opt2}
+                | maps:get(proxy_address, Dict, [])],
+                maps:put(mode, proxy, Dict));
         ["udp", LPortD, UDPClientPort, RHost, RPort] ->
                 maps:put(proxy_address,
                 [{"udp",
