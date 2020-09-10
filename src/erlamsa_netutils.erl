@@ -134,7 +134,8 @@ set_routing_ip(Proto, Host, Port) ->
         IP = get_routing_ip(Proto, Host, Port),
         ets:insert(global_config, [{cm_host, IP}]) 
     end),
-    ok.
+    ok;
+set_routing_ip(_, _Host, _Port) -> ok.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% HTTP Helpers

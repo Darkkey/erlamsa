@@ -37,7 +37,7 @@
 -include("erlamsa.hrl").
 
 % API
--export([get_supervisor_opts/1, start/1, start_fuzzproxy/1, server_stream/5, loop_udp/7]).
+-export([get_supervisor_opts/1, start/1, start_fuzzproxy/1, server_stream/5, loop_udp/7, loop_serial/5]).
 
 get_supervisor_opts(Opts) ->
     #{id => ?MODULE,
@@ -67,7 +67,6 @@ raise_prob(Prob, DC) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Proxy code:
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 proxy_listen(udp, Port, _Dict) -> erlamsa_netutils:listen(udp, Port,
                             [binary, {active, true}, {reuseaddr, true}]);
 proxy_listen(ssl, Port, Dict) -> erlamsa_netutils:listen(ssl, Port, 
@@ -77,32 +76,47 @@ proxy_listen(ssl, Port, Dict) -> erlamsa_netutils:listen(ssl, Port,
 proxy_listen(tcp, Port, _Dict) -> erlamsa_netutils:listen(tcp, Port, 
                             [binary, {reuseaddr, true}, {active, true}, {packet, 0}]).
 
+bitrate_to_maxdelay(Speed) -> 
+    trunc(math:ceil(Speed / 8 / 1000)).
+
 start_fuzzproxy(Opts) ->
-    Workers = maps:get(workers, Opts, 10),
     Verbose = erlamsa_utils:verb(stdout, maps:get(verbose, Opts, 0)),
     ProxyAddrList = maps:get(proxy_address, Opts),
     lists:map(
         fun(L) ->
-            {StrProto, LocalPort, _, DHost, DPort} = L,
-            erlamsa_netutils:set_routing_ip(tcp, DHost, DPort),
-            Proto = list_to_atom(StrProto),
-            ProtoTransport = erlamsa_netutils:transport(Proto),
-            erlamsa_netutils:netserver_start(ProtoTransport),
-            case proxy_listen(ProtoTransport, LocalPort, Opts) of
-                {ok, ListenSock} ->
-                    {ok, Port} = erlamsa_netutils:port(ProtoTransport, ListenSock),
-                    start_servers(ProtoTransport, Workers, ListenSock, L, Opts, Verbose),
-                    Port;
-                {error, Reason} ->
-                    io:format("Error: ~s", [Reason]),
-                    {error, Reason}
-            end
+            {StrProto, _, _, _, _} = L,
+            case list_to_atom(StrProto) of
+                serial -> 
+                    {StrProto, Port1, Speed1Str, Port2, Speed2Str} = L,
+                    Speed1 = list_to_integer(Speed1Str), 
+                    Speed2 = list_to_integer(Speed2Str), 
+                    start_servers(serial, 1, {Port1, Port2}, 
+                        {Speed1, Speed2}, Opts, Verbose);
+                Proto ->
+                    {StrProto, LocalPort, _, DHost, DPort} = L,
+                    Workers = maps:get(workers, Opts, 10),
+                    erlamsa_netutils:set_routing_ip(tcp, DHost, DPort),
+                    ProtoTransport = erlamsa_netutils:transport(Proto),
+                    erlamsa_netutils:netserver_start(ProtoTransport),
+                    case proxy_listen(ProtoTransport, LocalPort, Opts) of
+                        {ok, ListenSock} ->
+                            {ok, Port} = erlamsa_netutils:port(ProtoTransport, ListenSock),
+                            start_servers(ProtoTransport, Workers, ListenSock, L, Opts, Verbose),
+                            Port;
+                        {error, Reason} ->
+                            io:format("Error: ~s", [Reason]),
+                            {error, Reason}
+                    end
+                end
         end, ProxyAddrList),
     timer:sleep(infinity).
 
 spawn_stream_worker(ProtoTransport, ListenSock, Endpoint, Opts, Verbose) ->
     spawn(?MODULE, server_stream, [ProtoTransport, ListenSock, Endpoint, Opts, Verbose]).
 
+start_servers(serial, _Workers, Ports, Delay, Opts, Verbose) ->
+    erlamsa_logger:log(info, "serial proxy worker process started, socket ids ~p", [Ports]),
+    spawn(?MODULE, loop_serial, [init_ports, Ports, Delay, Opts, Verbose]);
 start_servers(udp, _Workers, ListenSock, Endpoint, Opts, Verbose) ->
     erlamsa_logger:log(info, "udp proxy worker process started, socket id ~p",
                         [ListenSock]),
@@ -147,10 +161,34 @@ server_stream(ProtoTransport, ListenSock, Endpoint, Opts, Verbose) ->
             ok
     end.
 
-report_fuzzing(nofuzz, Ret) ->
-    erlamsa_logger:log_data(debug, "from fuzzer(c->s) [fuzzing = nofuzz, skipped]", [], Ret);
-report_fuzzing(Res, Ret) ->
-    erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]", [Res], Ret).
+report_fuzzing(nofuzz, Direction, Ret) ->
+    erlamsa_logger:log_data(debug, "from fuzzer(~s) [fuzzing = nofuzz, skipped]", [Direction], Ret);
+report_fuzzing(Res, Direction, Ret) ->
+    erlamsa_logger:log_data(info, "from fuzzer(~s) [fuzzing = ~p]", [Direction, Res], Ret).
+
+loop_serial(init_ports, {Serial1, Serial2}, {Speed1, Speed2}, Opts, Verbose) ->
+    SerialPid1 = serial:start([{serialexe, erlamsa_utils:get_portsdir() ++ "erlserial"} | [{open, Serial1}, {speed, Speed1}]]),
+    SerialPid2 = serial:start([{serialexe, erlamsa_utils:get_portsdir() ++ "erlserial"} | [{open, Serial2}, {speed, Speed2}]]),
+    loop_serial(running, {SerialPid1, SerialPid2}, 
+                         lists:min([bitrate_to_maxdelay(Speed1), bitrate_to_maxdelay(Speed2)]), 
+                         Opts, Verbose);    
+loop_serial(_State, {SerialPid1, SerialPid2}, Delay, Opts, Verbose) ->
+    {ProbToClient, ProbToServer} = get_proxy_probs(Opts),
+    receive
+        {data, SerialPid1, Bytes} ->
+            erlamsa_logger:log_data(info, "from serial(1->2)", [], Bytes),
+            {Res, Ret} = fuzz(udp, ProbToClient, Opts, Bytes),
+            report_fuzzing(Res, "1->2", Ret),
+            SerialPid2 ! {send, Bytes};
+        {data, SerialPid2, Bytes} ->
+            erlamsa_logger:log_data(info, "from serial(2->1)", [], Bytes),
+            {Res, Ret} = fuzz(udp, ProbToServer, Opts, Bytes),
+            report_fuzzing(Res, "2->1", Ret),
+            SerialPid1 ! {send, Bytes}
+    after Delay -> 
+            ok = ok    
+    end,
+    loop_serial(running, {SerialPid1, SerialPid2}, Delay, Opts, Verbose).
 
 loop_udp(SrvSocket, Endpoint, init_clientsocket, ClientHost, ClientPort, Opts, Verbose) ->
     erlamsa_rnd:seed(now()),
@@ -166,7 +204,7 @@ loop_udp(SrvSocket, ClSocket, Endpoint, ClientHost, ClientPort, Opts, Verbose) -
             {udp, SrvSocket, Host, Port, Data} ->
                 erlamsa_logger:log_data(info, "from udp client(c->s ~p:~p)", [Host, Port], Data),
                 {Res, Ret} = fuzz(udp, ProbToServer, Opts, Data),
-                report_fuzzing(Res, Ret),
+                report_fuzzing(Res, "c->s", Ret),
                 %% erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]", [Res], Ret),
                 gen_udp:send(ClSocket, ServerHost, ServerPort, Ret),
                 {Host, Port};
@@ -179,7 +217,7 @@ loop_udp(SrvSocket, ClSocket, Endpoint, ClientHost, ClientPort, Opts, Verbose) -
                     _Else ->
                         {Res, Ret} = fuzz(udp, ProbToClient, Opts, Data),
                         gen_udp:send(SrvSocket, ClientHost, ClientPort, Ret),
-                        report_fuzzing(Res, Ret),
+                        report_fuzzing(Res, "s->c", Ret),
                         %%erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]",
                         %%                        [Res], Ret),
                         {ClientHost, ClientPort}
@@ -196,7 +234,7 @@ loop_stream(Proto, ProtoTransport, ClientSocket, ServerSocket, {ProbToClient, Pr
             erlamsa_logger:log_data(info, "from client(c->s)", [], Data),
             {Res, Ret} = fuzz(Proto, ProbToServer, ByPass, NC, maps:put(conndirection, ctos, Opts), Data),
             erlamsa_netutils:send(ProtoTransport, ServerSocket, Ret),
-            report_fuzzing(Res, Ret),
+            report_fuzzing(Res, "c->s", Ret),
             %% erlamsa_logger:log_data(info, "from fuzzer(c->s) [fuzzing = ~p]", [Res], Ret),
             loop_stream(Proto, ProtoTransport, ClientSocket, ServerSocket,
                     {ProbToClient, raise_prob(ProbToServer, DescentCoeff),  DescentCoeff},
@@ -205,7 +243,7 @@ loop_stream(Proto, ProtoTransport, ClientSocket, ServerSocket, {ProbToClient, Pr
             erlamsa_logger:log_data(info, "from server(s->c)", [], Data),
             {Res, Ret} = fuzz(Proto, ProbToClient, ByPass, NS, maps:put(conndirection, stoc, Opts), Data),
             erlamsa_netutils:send(ProtoTransport, ClientSocket, Ret),
-            report_fuzzing(Res, Ret),
+            report_fuzzing(Res, "s->c", Ret),
             %% erlamsa_logger:log_data(info, "from fuzzer(s->c) [fuzzing = ~p]", [Res], Ret),
             loop_stream(Proto, ProtoTransport, ClientSocket, ServerSocket,
                     {raise_prob(ProbToClient, DescentCoeff), ProbToServer, DescentCoeff},
