@@ -53,6 +53,7 @@ inputs() ->
     [
         {"filename1.txt filename2.txt ...", "data will be read from file(s) with specified name(s)"},
         {"-i proto://lport:rhost:rport", "erlamsa will work in fuzzing proxy mode, listenting on lport and sending fuzzed data to rhost:port; tcp,udp,tls,http(s) are supported"},
+        {"-i proto://proxy:lport", "erlamsa will work in standalone http proxy mode, listenting on lport and fuzzing data that goes over proxy"},
         {"-H addr:port", "erlamsa will listen on <addr:port> for HTTP POST queries with data, sending fuzzing result in reply, fuzzing options are passed via HTTP headers"}
     ].
 
@@ -120,8 +121,8 @@ cmdline_optsspec() ->
                                                                 "<arg>, which mutation patterns to use"},
     {pidfile	, undefined,
                         "pidfile",		string,                 "<arg>, PID file name"},
-    {proxyprob	, $P,	"proxy",		string,					"<arg>, activate fuzzing proxy mode, param is fuzzing probability in form of s->c,c->s e.g.: 0.5,0.5"},
-    {recursive , $r,	"recursive",	undefined, 				"include files in subdirectories"},
+    {proxyprob	, $P,	"probability",	string,					"<arg>, activate fuzzing proxy mode, param is fuzzing probability in form of s->c,c->s e.g.: 0.5,0.5"},
+    {recursive  , $r,	"recursive",	undefined, 				"include files in subdirectories"},
     {seed		, $s, 	"seed",			string, 				"<arg>, random seed in erlang format: int,int,int or source:device for an external source of entropy (e.g. binary file)"},
     {sleep		, $S, 	"sleep",		{integer, 0},			"<arg>, sleep time (in ms.) between output iterations"},
     {stroutput	, undefined, 	
@@ -294,6 +295,13 @@ parse_proxyprob_opts(ProxyProbOpts, Dict) ->
 
 parse_input_opts(InputOpts, Dict) ->
     case string:tokens(InputOpts, ":") of
+        [Proto, "//proxy", ListenPort] ->
+            maps:put(proxy_address,
+                [{Proto,
+                list_to_integer(ListenPort),
+                ?DEFAULT_UDPPROXY_CLIENTPORT,
+                nil, nil} | maps:get(proxy_address, Dict, [])],
+                maps:put(mode, proxy, maps:put(httpproxy, true, Dict)));
         [Proto, ListenPort] ->
             maps:put(input_endpoint, {Proto,
                 list_to_integer(hd(string:tokens(ListenPort, "/")))}, Dict);

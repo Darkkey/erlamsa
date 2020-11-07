@@ -194,7 +194,7 @@ streamlisten_writer(Transport, LocalPort, {CertFile, KeyFile}, PostProcess) ->
         _Else -> []
     end,
     fun F(_N, Meta) ->
-        erlamsa_netutils:netserver_start(Transport),
+        erlamsa_netutils:netserver_start(Transport, false),
         {Res, ListenSock} = erlamsa_netutils:listen(Transport, LocalPort,
                                             [binary, {active, false},
                                             {reuseaddr, true}, {packet, 0},
@@ -243,7 +243,7 @@ streamlisten_writer(Transport, LocalPort, {CertFile, KeyFile}, PostProcess) ->
 streamsock_writer(Transport, Addr, Port, Maker) ->
     erlamsa_netutils:set_routing_ip(tcp, Addr, Port),
     fun F(_N, Meta) ->
-        erlamsa_netutils:netserver_start(Transport),
+        erlamsa_netutils:netserver_start(Transport, false),
         {Res, Sock} = erlamsa_netutils:connect(Transport, Addr, Port, [binary, {active, true}], ?TCP_TIMEOUT),
         case Res of
             ok -> {F, {net,
