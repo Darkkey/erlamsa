@@ -8,5 +8,5 @@ echo %% > src/dependencies.hrl
 echo %% > src/version.hrl
 
 rem now compiling
-rebar3 compile eunit 
+escript rebar3.win compile eunit 
 escript script-builder
