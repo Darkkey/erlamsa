@@ -194,6 +194,12 @@ E.g. erlamsa, that is started as
 ```
 will accept packets on port `7777` (on all network interfaces, basically on 0.0.0.0 interface) and send them to host's `192.168.0.1` port `7777`. All packets coming from server to client will be fuzzed with probability of `0.1`(10%), from client to server -- with probability of `0.7`(70%). In this case, to start fuzzing just point your client application to erlamsa's host and port `7777`. `-L -` options means that all logging will be output to stdout.
 
+Addtionally, erlamsa supports so-called "standalone http-proxy mode", when erlamsa proxifies connections as standard HTTP-proxy and fuzzing requests/replies based on provide probabilities. To use erlamsa in this mode, please use e.g.:
+```
+./erlamsa -i http://proxy:7777 -P 0.1,0.7 -L -
+```
+Then, specify in the target HTTP proxy settings erlamsa host as a hostname and `7777` as proxy port. If you're planning to fuzz TLS-connections, don't forget to supply correct certificate to erlamsa via `--certfile` and `--keyfile` options. If target is using binary connection, please user `tcp` instead of `http` in `-i` option.
+
 ## Example usage from erlang code
 
 There are two possible ways to call erlamsa from your code: static (same host, library call) and dynamic (query the application on another node)
