@@ -157,7 +157,8 @@ stream_setup_connection(true, {ok, ClientSocket}, ProtoTransport, ListenSock, {P
                     stream_setup_connection(false, {ok, ClientSocket}, ProtoTransport, 
                                                     ListenSock, {Proto, LHost, LPort, THost, TPort}, Opts, Verbose, Data);
                 _Else -> %%some error
-                    ok
+                    erlamsa_logger:log(info, "unexpected request fro standalone HTTP proxy: ~p, socket ~p",
+                        [Data, erlamsa_netutils:socknum(ProtoTransport, ListenSock)])
             end            
     end;
 stream_setup_connection(false, {ok, ClientSocket}, ProtoTransport, ListenSock, {Proto, _, _, DHost, DPort}, Opts, Verbose, OptData) ->
