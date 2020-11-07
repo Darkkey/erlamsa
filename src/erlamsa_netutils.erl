@@ -37,10 +37,10 @@
 -endif.
 
 %% API
--export([transport/1, netserver_start/1, listen/3, port/2, socknum/2, 
-         accept/2, peername/2, sockname/2, connect/4, connect/5,
+-export([transport/1, netserver_start/2, listen/3, port/2, socknum/2, 
+         accept/2, peername/2, sockname/2, host2str/1, connect/4, connect/5,
          setopts/3, send/3, recv/4, closed/1, close/2, 
-         set_routing_ip/3, extract_http/1, pack_http/3]).
+         set_routing_ip/3, get_default_http_port/1, extract_http/1, pack_http/3]).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -55,8 +55,9 @@ transport(http2) -> tcp;
 transport(tls) -> ssl;
 transport(Tr) -> Tr.
 
-netserver_start(ssl) -> ssl:start();
-netserver_start(_Proto) -> ok.
+netserver_start(ssl, _Forced) -> ssl:start();
+netserver_start(_Proto, true) -> ssl:start();
+netserver_start(_Proto, false) -> ok.
 
 listen(ssl, LocalPort, Opts) ->
     ssl:listen(LocalPort, Opts);
@@ -85,6 +86,9 @@ accept(ssl, Sock) ->
             Else
     end;
 accept(tcp, Sock) -> gen_tcp:accept(Sock).
+
+host2str(DHost) when is_list(DHost) -> DHost;
+host2str(DHost) -> inet:ntoa(DHost).
 
 sockname(ssl, Sock) -> ssl:sockname(Sock);
 sockname(tcp, Sock) -> inet:sockname(Sock).
@@ -140,6 +144,10 @@ set_routing_ip(_, _Host, _Port) -> ok.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% HTTP Helpers
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+get_default_http_port(undefined) -> 80;
+get_default_http_port(Else) when is_list(Else) -> list_to_integer(Else);
+get_default_http_port(Else) -> Else.
 
 extract_http(Data) ->
     case erlang:decode_packet(http, Data, []) of

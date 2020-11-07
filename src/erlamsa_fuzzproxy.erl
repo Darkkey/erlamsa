@@ -97,7 +97,7 @@ start_fuzzproxy(Opts) ->
                     Workers = maps:get(workers, Opts, 10),
                     erlamsa_netutils:set_routing_ip(tcp, DHost, DPort),
                     ProtoTransport = erlamsa_netutils:transport(Proto),
-                    erlamsa_netutils:netserver_start(ProtoTransport),
+                    erlamsa_netutils:netserver_start(ProtoTransport, maps:get(httpproxy, Opts, false)),
                     case proxy_listen(ProtoTransport, LocalPort, Opts) of
                         {ok, ListenSock} ->
                             {ok, Port} = erlamsa_netutils:port(ProtoTransport, ListenSock),
@@ -126,40 +126,71 @@ start_servers(ProtoTransport, Workers, ListenSock, Endpoint, Opts, Verbose) ->
     length([spawn_stream_worker(ProtoTransport, ListenSock, Endpoint, Opts, Verbose) || _N <- lists:seq(1, Workers)]).
 
 server_stream(ProtoTransport, ListenSock, Endpoint, Opts, Verbose) ->
-    {Proto, LPort, _, DHost, DPort} = Endpoint,
-    {ProbToClient, ProbToServer} = get_proxy_probs(Opts),
-    ByPass = maps:get(bypass, Opts, 0),
-    DescentCoeff = maps:get(descent_coeff, Opts, 1),
+    {_, LPort, _, _, _} = Endpoint,
+    StandaloneProxy = maps:get(httpproxy, Opts, false),
     erlamsa_logger:log(info, "tcp proxy worker process started, listening on ~p (port :~p)",
                         [erlamsa_netutils:socknum(ProtoTransport, ListenSock), LPort]),
     erlamsa_rnd:seed(now()),
     Res = erlamsa_netutils:accept(ProtoTransport, ListenSock),
-    case Res of
-        {ok, ClientSocket} ->
-            erlamsa_logger:log(info,
-                                "initiating new connection to ~s:~p(c->s), sockets: l:~p/c:~p",
-                                [inet:ntoa(DHost), DPort, 
-                                 erlamsa_netutils:socknum(ProtoTransport, ListenSock), 
-                                 erlamsa_netutils:socknum(ProtoTransport, ClientSocket)]),
-            case erlamsa_netutils:connect(ProtoTransport, DHost, DPort, 
-                                          [binary, {packet, 0}, {active, true}]) of
-                  {ok, ServerSocket} ->
-                      loop_stream(list_to_atom(Proto), ProtoTransport, ClientSocket, ServerSocket,
-                        {ProbToClient/DescentCoeff, ProbToServer/DescentCoeff, DescentCoeff},
-                        {ByPass, 0, 0},
-                        Opts, Verbose),
-                      spawn_stream_worker(ProtoTransport, ListenSock, Endpoint, Opts, Verbose);
-                  E ->
-                      io:format("Error: connect to server failed!~n"),
-                      erlamsa_logger:log(info, "error: worker connect to server ~s:~p failed!",
-                                                [inet:ntoa(DHost), DPort]),
-                  E
-              end,
-          ok;
-        Other ->
-            erlamsa_logger:log(warning, "error: accept returned ~p", [Other]),
-            ok
-    end.
+    stream_setup_connection(StandaloneProxy, Res, ProtoTransport, ListenSock, Endpoint, Opts, Verbose, <<>>),
+    spawn_stream_worker(ProtoTransport, ListenSock, Endpoint, Opts, Verbose).
+
+stream_setup_connection(true, {ok, ClientSocket}, ProtoTransport, ListenSock, {Proto, LHost, LPort, _, _}, Opts, Verbose, _) ->
+    erlamsa_netutils:setopts(ProtoTransport, ClientSocket, [{active, once}]),
+    receive
+        {ProtoTransport, ClientSocket, Data} ->
+            case erlang:decode_packet(http, Data, []) of
+                {ok,{http_request,"CONNECT",{scheme,THost,TPort},_},_} ->
+                    erlamsa_logger:log(info, "standalone HTTP proxy, establishing connection to ~p://~s:~s(c->s), socket ~p",
+                             [ssl, THost, TPort, erlamsa_netutils:socknum(ProtoTransport, ListenSock)]),
+                    erlamsa_netutils:send(ProtoTransport, ClientSocket, <<"HTTP/1.0 200 Connection established", 13, 10, 13, 10>>),
+                    erlamsa_netutils:setopts(ProtoTransport, ClientSocket, [{active, false}]),
+                    {ok, TLSSocket} = ssl:handshake(ClientSocket, 
+                                                    [{certfile, maps:get(certfile, Opts, "cert.pem")}, 
+                                                     {keyfile, maps:get(keyfile, Opts, "key.pem")}]),
+                    erlamsa_logger:log(info, "standalone HTTP proxy, upgraded connection socket ~p to TLS socket ~p",
+                             [erlamsa_netutils:socknum(ProtoTransport, ListenSock), erlamsa_netutils:socknum(ssl, TLSSocket)]),
+                    stream_setup_connection(false, {ok, TLSSocket}, ssl, 
+                                                    ListenSock, {Proto, LHost, LPort, THost, list_to_integer(TPort)}, Opts, Verbose, <<>>);
+                {ok,{http_request,_,{absoluteURI,http,THost,MayBeTPort,"/"},_},_} ->
+                    TPort = erlamsa_netutils:get_default_http_port(MayBeTPort),
+                    stream_setup_connection(false, {ok, ClientSocket}, ProtoTransport, 
+                                                    ListenSock, {Proto, LHost, LPort, THost, TPort}, Opts, Verbose, Data);
+                _Else -> %%some error
+                    ok
+            end            
+    end;
+stream_setup_connection(false, {ok, ClientSocket}, ProtoTransport, ListenSock, {Proto, _, _, DHost, DPort}, Opts, Verbose, OptData) ->
+    {ProbToClient, ProbToServer} = get_proxy_probs(Opts),
+    ByPass = maps:get(bypass, Opts, 0),
+    DescentCoeff = maps:get(descent_coeff, Opts, 1),
+    erlamsa_logger:log(info, "initiating new connection to ~p://~s:~p(c->s), sockets: l:~p/c:~p",
+                             [ProtoTransport, erlamsa_netutils:host2str(DHost), DPort, 
+                                erlamsa_netutils:socknum(ProtoTransport, ListenSock), 
+                                erlamsa_netutils:socknum(ProtoTransport, ClientSocket)]),
+    case erlamsa_netutils:connect(ProtoTransport, DHost, DPort, 
+                                    [binary, {packet, 0}, {active, true}]) of
+            {ok, ServerSocket} ->  
+                case OptData of  %% if we're in standalone proxy mode and have some-prerecived data
+                    <<>> -> ok;
+                    ElseData -> 
+                        erlamsa_logger:log_data(info, "from client(c->s)", [], ElseData),
+                        erlamsa_netutils:send(ProtoTransport, ServerSocket, ElseData)
+                end, 
+                loop_stream(list_to_atom(Proto), ProtoTransport, ClientSocket, ServerSocket,
+                {ProbToClient/DescentCoeff, ProbToServer/DescentCoeff, DescentCoeff},
+                {ByPass, 0, 0},
+                Opts, Verbose);
+            E ->
+                io:format("Error: connect to server failed!~n"),
+                erlamsa_logger:log(info, "error: worker connect to server ~s:~p failed!",
+                                        [erlamsa_netutils:host2str(DHost), DPort]),
+            E
+    end;
+stream_setup_connection(_, Err,_,_,_,_,_,_) ->
+    erlamsa_logger:log(warning, "error: accept returned ~p", [Err]).
+            
+
 
 report_fuzzing(nofuzz, Direction, Ret) ->
     erlamsa_logger:log_data(debug, "from fuzzer(~s) [fuzzing = nofuzz, skipped]", [Direction], Ret);
@@ -228,7 +259,8 @@ loop_udp(SrvSocket, ClSocket, Endpoint, ClientHost, ClientPort, Opts, Verbose) -
 loop_stream(Proto, ProtoTransport, ClientSocket, ServerSocket, {ProbToClient, ProbToServer, DescentCoeff},
         {ByPass, NC, NS}, Opts, Verbose) ->
     erlamsa_netutils:setopts(ProtoTransport, ClientSocket, [{active, once}]),
-    ProtoTansportClosed = erlamsa_netutils:closed(ProtoTransport), 
+    ProtoTransportClosed = erlamsa_netutils:closed(ProtoTransport), 
+    ProtoTransportClosed = erlamsa_netutils:closed(ProtoTransport), 
     receive
         {ProtoTransport, ClientSocket, Data} ->
             erlamsa_logger:log_data(info, "from client(c->s)", [], Data),
@@ -248,19 +280,18 @@ loop_stream(Proto, ProtoTransport, ClientSocket, ServerSocket, {ProbToClient, Pr
             loop_stream(Proto, ProtoTransport, ClientSocket, ServerSocket,
                     {raise_prob(ProbToClient, DescentCoeff), ProbToServer, DescentCoeff},
                     {ByPass, NC, NS+1}, Opts, Verbose);
-        {ProtoTansportClosed, ClientSocket} ->
+        {ProtoTransportClosed, ClientSocket} ->
             erlamsa_netutils:close(ProtoTransport, ServerSocket),
             erlamsa_logger:log(info, "client close (c->s), c:~p ", 
                                     [erlamsa_netutils:socknum(ProtoTransport, ClientSocket)]),
             ok;
-        {ProtoTansportClosed, ServerSocket} ->
+        {ProtoTransportClosed, ServerSocket} ->
             erlamsa_netutils:close(ProtoTransport, ClientSocket),
             erlamsa_logger:log(info, "server close (s->c)m l:~p/c:~p ",
                                 [erlamsa_netutils:socknum(ProtoTransport, ServerSocket), 
                                  erlamsa_netutils:socknum(ProtoTransport, ClientSocket)]),
             ok
     end.
-        
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Fuzzing helpers
