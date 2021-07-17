@@ -450,7 +450,7 @@ parse_external([Module|T], Dict) ->
     NewDict = case Type of
         mutations -> addmodule2external(external_mutations, Module, Dict);
         post -> maps:put(external_post, Module, Dict);
-        genfuzz -> maps:put(external_gen, Module, Dict);
+        generator -> maps:put(external_generator, Module, Dict);
         fuzzer -> maps:put(external_fuzzer, Module, Dict);
         monitor -> addmodule2external(external_monitors, Module, Dict);
         logger -> addmodule2external(external_loggers, Module, Dict);

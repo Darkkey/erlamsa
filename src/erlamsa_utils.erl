@@ -44,7 +44,7 @@
         resolve_addr/1, make_post/1, make_fuzzer/1, make_mutas/1,
         load_deps/1, get_direct_fuzzing_opts/2, get_deps_dirs/1, init_procket/0, get_portsdir/0,
         hexstr_to_bin/1, bin_to_hexstr/1, build_recursive_paths/1, walk_tuple/2, tuple_length/1,
-        detect_type/1]).
+        detect_type/1, big_to_little/2]).
 
 load_deps(RuntimeDir) ->
     true and ?LOAD_PROCKET(RuntimeDir) and ?LOAD_SERIAL(RuntimeDir) and ?LOAD_ERLEXEC(RuntimeDir).
@@ -322,3 +322,9 @@ detect_type(El) when is_binary(El) -> binary;
 detect_type(El) when is_integer(El) -> integer;
 detect_type(El) when is_float(El) -> float;
 detect_type(_El) -> unknown.
+
+big_to_little(Binary, Size) when is_binary(Binary) ->
+    <<Number:Size/big>> = Binary,
+    big_to_little(Number, Size);
+big_to_little(Number, Size) -> 
+    <<Number:Size/little>>.
