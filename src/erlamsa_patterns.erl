@@ -376,6 +376,13 @@ make_pat_zip() ->
 make_pat_cpr() ->
     make_complex_pat(fun mutate_once_compressed/4, compressed).
 
+-spec pat_50_muta(any(), mutator(), meta_list()) -> list().
+pat_50_muta(Ll, Mutator, Meta) ->
+    case erlamsa_rnd:erand(2) of
+        1       -> pat_nomuta(Ll, Mutator, Meta);
+        _Else   -> pat_once_dec(Ll, Mutator, Meta)
+    end.
+
 %% TODO: temporary contract, fix it.
 -spec pat_nomuta(any(), mutator(), meta_list()) -> list().
 pat_nomuta(Ll, Mutator, Meta) ->
@@ -393,6 +400,7 @@ patterns() -> [{1, fun pat_once_dec/3, od, "Mutate once pattern"},
                {1, make_pat_csum(), cs, "Try to find control sum field and mutate enclosed data"},               
                {1, make_pat_zip(), ar, "Check whether data is an container (ZIP archive) and mutate enclosed files"},               
                {1, make_pat_cpr(), cp, "Check whether data compressed, decompress and mutate"},               
+               {0, fun pat_50_muta/3, co, "Coin-flip pattern, will output original or call mutate once pattern"},
                {0, fun pat_nomuta/3, nu, "Pattern that calls no mutations"}
               ].
 

@@ -38,8 +38,9 @@
 %% API
 -export([seed/1, gen_urandom_seed/0, rand/1, erand/1, rand_float/0, rand_bit/0, rand_occurs/1, rand_occurs_fixed/2,
         rand_nbit/1, rand_log/1, rand_elem/1, random_block/1, fast_pseudorandom_block/1,
-        random_numbers/2, random_permutation/1, rand_range/2,
-        reservoir_sample/2, rand_delta/0, rand_delta_up/0, random_bitstring/1]).
+        random_numbers/2, random_permutation/1, rand_range/2, rand_span/2,
+        reservoir_sample/2, rand_delta/0, rand_delta_up/0, random_bitstring/1,
+        rbyte/0, rword/0, rdword/0, rddword/0, rand_repeat/2]).
 
 %% Constants
 -define(P_WEAKLY_USUALLY_NOM, 11).
@@ -86,6 +87,11 @@ rand_range(L, L) ->
     L;
 rand_range(_, _) ->
     0.
+
+% generates random in range [L,R] for N-byte integer
+-spec rand_span(non_neg_integer(), non_neg_integer()) -> binary().
+rand_span(L, R) ->
+    rand_range(L, R+1).
 
 %% generate random float
 -spec rand_float() -> number().
@@ -151,7 +157,7 @@ fast_pseudorandom_block(N) ->
     <<42:Z8L, RndBlk/binary>>.
 
 %% Generate random block of bytes.
-%% TODO: check byte-stream magic here, Radamsa realization is MUCH differ
+%% TODO: check byte-stream magic here, Radamsa realization is MUCH different
 -spec random_block(non_neg_integer()) -> binary().
 random_block(N) -> random_block(N, []).
 
@@ -231,3 +237,22 @@ rand_delta_up() ->
         false ->
             -1
     end.
+
+%%% 
+%%% Genfuzz helper functions
+%%% 
+
+rbyte() -> 
+    random_block(1).
+
+rword() -> 
+    random_block(2).
+
+rdword() -> 
+    random_block(4).
+
+rddword() -> 
+    random_block(8).
+
+rand_repeat(Num, Fun) ->
+    lists:map(fun(_) -> Fun() end, lists:seq(1, Num)).

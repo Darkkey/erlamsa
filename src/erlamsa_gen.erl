@@ -36,7 +36,7 @@
 -endif.
 
 %% API
--export([make_generator/7, generators/0, default/0, tostring/1]).
+-export([make_generator/5, generators/0, default/0, tostring/1]).
 
 %% fill the rest of the stream with padding random bytes
 -spec finish(non_neg_integer()) -> [binary()].
@@ -182,6 +182,13 @@ random_stream(BlockScale) ->
 random_generator(BlockScale) ->
     fun () -> {random_stream(BlockScale), {generator, random}} end.
 
+%% external generator
+-spec external_generator(list()) -> {[binary()], [meta()]}.
+external_generator(ModuleName) ->
+    fun () -> 
+        {erlang:apply(list_to_atom(ModuleName), generator, []), {generator, external}} 
+    end.
+
 %% [{Pri, Gen}, ...] -> Gen(rs) -> output end
 -spec mux_generators(prioritized_list(), fun()) -> fun() | false.
 mux_generators([], Fail) -> Fail("No generators!");
@@ -192,8 +199,12 @@ mux_generators(Generators, _) ->
     {Name, fun () -> F() end}.
 
 %% create a lambda-generator function based on the array
--spec make_generator_fun(list(), binary() | nil, float(), fun(), non_neg_integer(), atom()) -> fun().
-make_generator_fun(Args, Inp, BlockScale, Fail, N, Recursive) ->
+-spec make_generator_fun(list(), map(), fun(), non_neg_integer()) -> fun().
+make_generator_fun(Args, Dict, Fail, N) ->
+    Inp = maps:get(input, Dict, nil),
+    BlockScale = maps:get(blockscale, Dict, 1.0),
+    Recursive = maps:get(recursive, Dict, false),
+    ExternalGen = maps:get(external_generator, Dict, nil),
     fun (false) -> Fail("Bad generator priority!");
         ({Name, Pri}) ->
             case Name of
@@ -217,22 +228,26 @@ make_generator_fun(Args, Inp, BlockScale, Fail, N, Recursive) ->
                     {Pri, {Name, direct_generator(Inp, BlockScale)}};
                 random ->
                     {Pri, {Name, random_generator(BlockScale)}};
+                genfuz when ExternalGen =/= nil ->
+                    {Pri, {Name, external_generator(ExternalGen)}};
                 _Else ->
-                    Fail("Unknown generator name."),
+                    Fail("Unknown generator name or external generator module is not specified."),
                     false
             end
     end.
 
 %% get a list of {GenAtom, Pri} and output the list of {Pri, Gen}
--spec make_generator(list(), list(), binary() | nil, float(), fun(), non_neg_integer(), atom())
+-spec make_generator(list(), list(), map(), fun(), non_neg_integer())
         -> fun() | false.
-make_generator(Pris, Args, Inp, BlockScale, Fail, N, Recursive) ->
-    Gs = [ A || A <- [(make_generator_fun(Args, Inp, BlockScale, Fail, N, Recursive))(V1)
+make_generator(Pris, Args, Dict, Fail, N) ->
+    Gs = [ A || A <- [(make_generator_fun(Args, Dict, Fail, N))(V1)
                       || V1 <- Pris], A =/= false],
     mux_generators(Gs, Fail).
 
 -spec generators() -> list().
-generators() -> [{random, 1, "generate random data"},
+generators() -> [
+                {genfuz, 0, "generational-based fuzzer using supplied grammar via external module"},
+                {random, 1, "generate random data"},
                 {jump, 100, "jump between multiple files"},
                 {direct, 500, "read data directly from erlang function call arguments"},
                 {file, 1000, "read data from given files"},

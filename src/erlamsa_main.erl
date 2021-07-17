@@ -135,27 +135,22 @@ fuzzer(Dict) ->
     erlamsa_rnd:seed(Seed),
     file:write_file("./last_seed.txt", io_lib:format("~p", [Seed])),
     Verbose(io_lib:format("Random seed: ~p~n", [Seed])),
-    DirectInput = maps:get(input, Dict, nil),
-    {Log, LogData} = case DirectInput of
-        nil -> {fun erlamsa_logger:log/3,  fun erlamsa_logger:log_data/4};
-        _DirectInput -> {fun (_,_,_) -> ok end, fun (_,_,_,_) -> ok end}
-    end,
-    Log(info, "starting fuzzer main (parent = ~p), random seed is: ~p",
-                        [maps:get(parentpid, Dict, none), Seed]),
-    Fail = fun(Why) -> io:write(Why), throw(Why) end,
-    Muta = erlamsa_mutations:make_mutator(Mutas, CustomMutas),
     %%TODO: FIXME: should be maps:get(output, Dict, "-") instead 
     %% However now direct == return, so interexchanging with input should be ok
-    RecordFun = case Paths of  
-                    [direct] -> fun record_result/2;
-                    _Else -> fun (_, _) -> [] end
-                end,
-    BlockScale = maps:get(blockscale, Dict, 1.0),
+    {Log, LogData, RecordFun} = 
+        case Paths of  
+            [direct] -> 
+                {fun (_,_,_) -> ok end, fun (_,_,_,_) -> ok end, fun record_result/2};
+            _Else -> 
+                {fun erlamsa_logger:log/3,  fun erlamsa_logger:log_data/4, fun (_, _) -> [] end}
+        end,
+    Log(info, "starting fuzzer main (parent = ~p), random seed is: ~p",
+                        [maps:get(parentpid, Dict, none), Seed]),
+    Fail = fun(Why) -> io:format(Why ++ "~n"), throw(Why) end,
+    Muta = erlamsa_mutations:make_mutator(Mutas, CustomMutas),
     Generator = erlamsa_gen:make_generator(
                                             maps:get(generators, Dict, erlamsa_gen:default()), 
-                                            Paths,
-                                            DirectInput, BlockScale, Fail, Cnt,
-                                            maps:get(recursive, Dict, false)
+                                            Paths, Dict, Fail, Cnt                                            
                                           ),
     RecordMeta = maybe_meta_logger( maps:get(metadata, Dict, nil), Fail),
     RecordMeta({seed, Seed}),
