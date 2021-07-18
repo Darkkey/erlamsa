@@ -230,8 +230,10 @@ make_generator_fun(Args, Dict, Fail, N) ->
                     {Pri, {Name, random_generator(BlockScale)}};
                 genfuz when ExternalGen =/= nil ->
                     {Pri, {Name, external_generator(ExternalGen)}};
+                genfuz ->
+                    false;
                 _Else ->
-                    Fail("Unknown generator name or external generator module is not specified."),
+                    Fail("Unknown generator name or external generator module was not specified."),
                     false
             end
     end.
