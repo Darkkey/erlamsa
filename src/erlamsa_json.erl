@@ -326,13 +326,19 @@ walk2acc(Ast, Fun, InitAcc) ->
                 {ChildAcc, ChildAcc2} = Walker(Els, InitAcc),
                 {UAcc, UAcc2} = Fun({Type, walk_reverse(ChildAcc)}, Acc, Acc2),
                 {UAcc, [ChildAcc2|UAcc2]};
+            Walker({pair, {string, Key}, El2}, {Acc, Acc2}) ->
+                {ChildAcc1, ChildAcc12} = Fun({key, Key}, [], []),
+                {ChildAcc2, ChildAcc22} = Walker(El2, InitAcc),
+                {UAcc, UAcc2} = Fun({pair, walk_uncons1(walk_reverse(ChildAcc1)), 
+                                           walk_uncons1(walk_reverse(ChildAcc2))}, Acc, Acc2),
+                {UAcc, [ChildAcc12, ChildAcc22 | UAcc2]};
             Walker({pair, El1, El2}, {Acc, Acc2}) ->
-                %io:format("Pair: ~p : ~p~n", [{pair, El1, El2}, {Acc, Count}]),
                 {ChildAcc1, ChildAcc12} = Walker(El1, InitAcc),
                 {ChildAcc2, ChildAcc22} = Walker(El2, InitAcc),
                 {UAcc, UAcc2} = Fun({pair, walk_uncons1(walk_reverse(ChildAcc1)), 
                                            walk_uncons1(walk_reverse(ChildAcc2))}, Acc, Acc2),
                 {UAcc, [ChildAcc12, ChildAcc22 | UAcc2]};
+
             Walker(El, Acc) when is_list(El) ->
                 %io:format("List: ~p : ~p~n", [El, {Acc, Count}]),
                 lists:foldl(fun(A, B) -> Walker(A, B) end, Acc, El);
@@ -666,23 +672,28 @@ json_mutation(Ast, {N, _NT, _NV}, _R) ->
     Muta = erlamsa_mutations:mutators_mutator(erlamsa_mutations:inner_mutations(json)),
     {Res, Meta} = walk2acc(Ast,
                     fun
+                        ({key, String}, Tree, InnerMeta) ->
+                            %io:format("~p~n", [{key, String}]),
+                            {NewMeta, NewString} = mutate_innertext_prob(String, Muta, 0.6/N, erlamsa_rnd:rand_float()),
+                            {[{string, NewString} | Tree], [NewMeta | InnerMeta]};
                         ({string, String}, Tree, InnerMeta) ->
-                            {NewMeta, NewString} = mutate_innertext_prob(String, Muta, 2/N, erlamsa_rnd:rand_float()),
+                            %io:format("~p~n", [{string, String}]),
+                            {NewMeta, NewString} = mutate_innertext_prob(String, Muta, 3/N, erlamsa_rnd:rand_float()),
                             {[{string, NewString} | Tree], [NewMeta | InnerMeta]};
                         ({constant, null} = El, Tree, InnerMeta) ->
-                            case mutate_null(erlamsa_rnd:rand_float(), 0.1) of
+                            case mutate_null(erlamsa_rnd:rand_float(), 3/N) of
                                 El -> {[El | Tree], InnerMeta};
                                 NewEl -> {[NewEl | Tree], [{json_innertext, null}, {json_innertext, 1} | InnerMeta]}
                             end;                           
                         ({constant, Boolean} = El, Tree, InnerMeta) ->
-                            case erlamsa_mutations:basic_type_mutation(Boolean, 0.1) of 
+                            case erlamsa_mutations:basic_type_mutation(Boolean, 3/N) of 
                                 Boolean -> {[El | Tree], InnerMeta};
                                 NewBoolean -> {[{constant, NewBoolean} | Tree], [{json_innertext, bool}, {json_innertext, 1} | InnerMeta]}
                             end;
                         ({number, NumberText} = El, Tree, InnerMeta) ->
                             try list_to_integer(NumberText) of
                                 Number -> 
-                                    case erlamsa_mutations:basic_type_mutation(Number, 0.1) of
+                                    case erlamsa_mutations:basic_type_mutation(Number, 3/N) of
                                         Number -> {[El | Tree], InnerMeta};
                                         NewNumber -> {[{number, io_lib:format("~p", [NewNumber])} | Tree], [{json_innertext, num}, {json_innertext, 1} | InnerMeta]}
                                     end
