@@ -643,7 +643,7 @@ json_mutation(Ast, {N, 0, NV}) when N < 2 ->
         _Else -> {[{failed, json}], Ast, -1}
     end;
 json_mutation(Ast, {N, NT, NV}) ->
-    json_mutation(Ast, {N, NT, NV}, erlamsa_rnd:rand(17)).
+    json_mutation(Ast, {N, NT, NV}, erlamsa_rnd:rand(21)).
 
 json_mutation(Ast, {_N, _NT, NV}, 0) ->
     {Res, _, _} = json_swap(Ast, NV),
@@ -661,7 +661,7 @@ json_mutation(Ast, {_N, _NT, NV}, 4) ->
     {Res, _, _} = json_insert(Ast, NV),
     {[{json_insert, 1}], Res, 1};
 json_mutation(_Ast, {_N, _NT, _NV}, 5) ->
-    {[{json_unserialize, 1}], make_json_unserialize(), 1};
+    {[{json_unserialize, 1}], make_json_unserialize(), -2};
 json_mutation(Ast, {N, _NT, _NV}, _R) ->  
     Muta = erlamsa_mutations:mutators_mutator(erlamsa_mutations:inner_mutations(json)),
     {Res, Meta} = walk2acc(Ast,
