@@ -31,16 +31,16 @@
 -include("erlamsa.hrl").
 
 -spec parse_headers(mod_esi:env(), options()) -> options().
-parse_headers([{http_mutations, Mutators}|T], Acc) ->
+parse_headers([{http_erlamsa_mutations, Mutators}|T], Acc) ->
     DefaultMutas = erlamsa_mutations:default(erlamsa_utils:make_mutas(maps:get(external_mutations, Acc, []))),
     {ok, M} = erlamsa_cmdparse:string_to_actions(Mutators, "mutations", DefaultMutas),
     parse_headers(T, maps:put(mutations, M, Acc));
-parse_headers([{http_patterns, Patterns}|T], Acc) ->
+parse_headers([{http_erlamsa_patterns, Patterns}|T], Acc) ->
     {ok, P} = erlamsa_cmdparse:string_to_actions(Patterns, "patterns", erlamsa_patterns:default()),
     parse_headers(T, maps:put(patterns, P, Acc));
-parse_headers([{http_blockscale, B}|T], Acc) ->
+parse_headers([{http_erlamsa_blockscale, B}|T], Acc) ->
     parse_headers(T, maps:put(blockscale, list_to_float(B), Acc));
-parse_headers([{http_seed, Seed}|T], Acc) ->
+parse_headers([{http_erlamsa_seed, Seed}|T], Acc) ->
     parse_headers(T, maps:put(seed, fun () -> erlamsa_cmdparse:parse_seed(Seed) end, Acc));
 parse_headers([{remote_addr, IP}|T], Acc) ->
     parse_headers(T, maps:put(remote_addr, IP, Acc));
