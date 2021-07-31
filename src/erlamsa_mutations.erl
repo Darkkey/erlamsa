@@ -1289,7 +1289,7 @@ mutations() ->
 %% default mutations list + external mutas
 mutations(CustomMutas) ->         
                        [{?MAX_SCORE, 10, fun erlamsa_sgml:sgml_mutate/2, sgm, "SGML tree mutations"},
-                        {?MAX_SCORE, 2, fun erlamsa_json:json_mutate/2, js, "JSON tree mutations"},
+                        {?MAX_SCORE, 3, fun erlamsa_json:json_mutate/2, js, "JSON tree mutations"},
                         {?MAX_SCORE, 1, fun sed_utf8_widen/2, uw, "try to make a code point too wide"},
                         {?MAX_SCORE, 2, fun sed_utf8_insert/2, ui, "insert funny unicode"},
                         {?MAX_SCORE, 1, construct_ascii_bad_mutator(), ab, "enhance silly issues in ASCII string data handling"},
@@ -1325,7 +1325,7 @@ mutations(CustomMutas) ->
                         {?MAX_SCORE, 1, fun sed_fuse_next/2, fn, "likely clone data between similar positions"},
                         {?MAX_SCORE, 2, fun sed_fuse_old/2, fo, "fuse previously seen data elsewhere"},
                         {?MAX_SCORE, 2, fun length_predict/2, len, "predicted length mutation"},
-                        {?MAX_SCORE, 2, fun base64_mutator/2, b64, "try mutate base64-encoded block"},
+                        {?MAX_SCORE, 7, fun base64_mutator/2, b64, "try mutate base64-encoded block"},
                         {?MAX_SCORE, 1, fun uri_mutator/2, uri, "try mutate URI to cause SSRF"},
                         {?MAX_SCORE, 1, fun zip_path_traversal/2, zip, "ZIP path traversal"},
                         {?MAX_SCORE, 0, fun nomutation/2, nil, "no mutation will occur (debugging purposes)"}
