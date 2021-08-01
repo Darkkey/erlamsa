@@ -182,7 +182,7 @@ fuzzer(Dict) ->
                         {CandidateMuta, Meta, Written, CandidateData} = erlamsa_out:output(Tmp, Fd, Post),
                         RecordMeta(lists:reverse(lists:flatten([{written, Written}| Meta]))),
                         Verbose(io_lib:format("output: ~p~n", [Written])),
-                        LogData(info, "fuzzing cycle ~p (<= ~p) finished, written: ", [I, N], CandidateData),
+                        LogData(info, "fuzzing case ~p (<= ~p) finished, written: ", [I, N], CandidateData),
                         {CandidateOut, CandidateMuta, CandidateData, 0}
                     catch
                         {cantconnect, _Err} ->
