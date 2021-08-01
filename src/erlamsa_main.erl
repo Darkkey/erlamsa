@@ -173,6 +173,7 @@ fuzzer(Dict) ->
                 RecordMeta({status, toomanyfailedoutputs}), RecordMeta({close, ok}),
                 lists:reverse(Acc);
             FuzzingLoopFun(CurMuta, DataGen, CurOut, {I, Fails}, N, Acc) ->
+                erlang:put(attempt, I),
                 {Ll, GenMeta} = DataGen(),
                 {NewOut, NewMuta, Data, NewFails} =
                     try
