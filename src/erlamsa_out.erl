@@ -43,6 +43,13 @@
 flush([]) -> <<>>;
 flush([H|T]) when is_binary(H) -> R = flush(T), <<H/binary, R/binary>>.
 
+-spec get_attempt() -> integer().
+get_attempt() ->
+    case get(attempt) of
+        undefined -> 0;
+        N -> N
+    end.
+
 %% last member find
 -spec last_output(any()) -> any().
 %% TODO: FIXME: ugly fix to avoid crashes on [<< >> | { .. }] <-- need to be fixed somewhere upper
@@ -128,11 +135,12 @@ exec_writer(App) ->
     %%TODO: FIXME: select correct path
     exec:start([{portexe, erlamsa_utils:get_portsdir() ++ "exec-port"}]),
     Watcher = spawn(fun W() -> 
+                        Attempt = get_attempt(),
                         receive 
                             {Stream, Pid, Data} -> 
-                                erlamsa_logger:log_data(info, "received from ~p on ~p", [Pid, Stream], Data);
+                                erlamsa_logger:log_data(info, "received [case = ~p] from ~p on ~p", [Attempt, Pid, Stream], Data);
                             Unknown -> 
-                                erlamsa_logger:log(info, "received: ~p", [Unknown])                                
+                                erlamsa_logger:log(info, "received [case = ~p]: ~p", [Attempt, Unknown])                                
                         end, W()
                     end),  
     fun F(_N, Meta) ->
@@ -202,15 +210,20 @@ streamlisten_writer(Transport, LocalPort, {CertFile, KeyFile}, PostProcess) ->
                                           ),
         case Res of
             ok -> {F, {net,
-                fun (Data) ->                    
+                fun (Data) ->  
+                    Attempt = get_attempt(),                  
                     case erlamsa_netutils:accept(Transport, ListenSock) of
                         {ok, ClientSock} ->
                             {ok, {IP, _}} = erlamsa_netutils:sockname(Transport, ClientSock), 
                             ets:insert(global_config, [{cm_host, IP}]),
                             {ok, {Address, Port}} = erlamsa_netutils:peername(Transport, ClientSock), 
-                            TmpRecv = erlamsa_netutils:recv(Transport, ClientSock, 0, infinity),
-                            erlamsa_logger:log_data(info, "~p client connect from ~p:~p, received:",
-                                            [Transport, Address, Port], TmpRecv),
+                            case erlamsa_netutils:recv(Transport, ClientSock, 0, infinity) of
+                                {ok, TmpRecv} ->
+                                    erlamsa_logger:log_data(info, "~p client connect from ~p:~p, received [case = ~p]:",
+                                            [Transport, Address, Port, Attempt], TmpRecv);
+                                _RecvError ->
+                                    ok
+                            end,    
                             erlamsa_netutils:send(Transport, ClientSock, PostProcess(Data)), timer:sleep(1),
                             erlamsa_netutils:close(Transport, ClientSock),
                             %% FIXME: should we close listen socket here? is it ok?
@@ -243,6 +256,7 @@ streamlisten_writer(Transport, LocalPort, {CertFile, KeyFile}, PostProcess) ->
 streamsock_writer(Transport, Addr, Port, Maker) ->
     erlamsa_netutils:set_routing_ip(tcp, Addr, Port),
     fun F(_N, Meta) ->
+        Attempt = get_attempt(),
         erlamsa_netutils:netserver_start(Transport, false),
         {Res, Sock} = erlamsa_netutils:connect(Transport, Addr, Port, [binary, {active, true}], ?TCP_TIMEOUT),
         case Res of
@@ -250,8 +264,8 @@ streamsock_writer(Transport, Addr, Port, Maker) ->
                 fun (Data) -> Packet = Maker(Data), 
                               erlamsa_netutils:send(Transport, Sock, Packet), 
                               receive 
-                                 {_ProtoTransport, _ClientSocket, RecvData} -> erlamsa_logger:log_data(debug, "reply from target",
-                                             [], RecvData),
+                                 {_ProtoTransport, _ClientSocket, RecvData} -> erlamsa_logger:log_data(debug, "reply [case = ~p] from target",
+                                             [Attempt], RecvData),
                                  ok
                               after 
                                  25 -> ok
@@ -278,12 +292,13 @@ udplisten_writer(LocalPort) ->
                                                {reuseaddr, true}, {ip, {0, 0, 0, 0}}
                                               ]
                                   ),
+        Attempt = get_attempt(),
         case Res of
             ok -> {F, {net,
                 fun (Data) ->
                     {ok, {Address, Port, TmpPacket}} = gen_udp:recv(Sock, 0, infinity),
-                    erlamsa_logger:log(info, "udp message received from ~p:~p: ~p",
-                                             [Address, Port, TmpPacket]),
+                    erlamsa_logger:log(info, "udp message received [case = ~p] from ~p:~p: ~p",
+                                             [Attempt, Address, Port, TmpPacket]),
                     gen_udp:send(Sock, Address, Port, Data)
                 end,
                 fun () -> gen_udp:close(Sock) end
@@ -306,7 +321,7 @@ udpsock_writer(Addr, PortFrom, PortTo, Options) ->
         {Res, Sock} = gen_udp:open(PortFrom, [binary, {active, true}, {reuseaddr, true} | Options]),
         case Res of
             ok -> {F, {net,
-                fun (Data) -> gen_udp:send(Sock, Addr, PortTo, Data) end,
+                fun (Data) -> gen_udp:send(Sock, Addr, PortTo, Data) end, %% TODO: Receiver?
                 fun () -> gen_udp:close(Sock) end
                 }, [{output, udpsock} | Meta]};
             _Else ->
