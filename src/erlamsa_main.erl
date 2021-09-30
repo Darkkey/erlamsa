@@ -158,6 +158,7 @@ fuzzer(Dict) ->
     Out = erlamsa_out:string_outputs(Dict),
     Post = erlamsa_utils:make_post(maps:get(external_post, Dict, nil)),
     Sleep = maps:get(sleep, Dict, 0),
+    Skip = maps:get(skip, Dict, 0),
     FailDelay = maps:get(faildelay, Dict, 0),
     %% Creating the Fuzzing Loop function
     FuzzingLoop = 
@@ -177,8 +178,12 @@ fuzzer(Dict) ->
                 {Ll, GenMeta} = DataGen(),
                 {NewOut, NewMuta, Data, NewFails} =
                     try
-                        {CandidateOut, Fd, OutMeta} = CurOut(I, [{nth, I}, GenMeta]),
+                        {CandidateOut, CandidateFd, OutMeta} = CurOut(I, [{nth, I}, GenMeta]),
                         Tmp = Pat(Ll, CurMuta, OutMeta),
+                        Fd = case I =< Skip of
+                            true -> skip;
+                            false -> CandidateFd
+                        end, 
                         {CandidateMuta, Meta, Written, CandidateData} = erlamsa_out:output(Tmp, Fd, Post),
                         RecordMeta(lists:reverse(lists:flatten([{written, Written}| Meta]))),
                         Verbose(io_lib:format("output: ~p~n", [Written])),

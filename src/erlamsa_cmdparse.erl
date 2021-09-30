@@ -79,7 +79,6 @@ cmdline_optsspec() ->
     {ascent 	, $A,	"ascent",		{float, 1.0},			"<arg>, fuzzing proxy: use ascent/descent coefficient for fuzzing probability (TCP/HTTP only)"},
     {about		, $a, 	"about", 		undefined, 				"what is this thing"},
     {blockscale , $b, 	"blockscale", 	{float, 1.0},			"<arg>, increase/decrease default min (256 bytes) fuzzed blocksize multiplier"},
-    {bypass		, $B,	"bypass",		{integer, 0},			"<arg>, fuzzing proxy: bypass first <arg> packets before start fuzzing (TCP/HTTP only)"},
     {certfile	, undefined,
                         "certfile",		string,			        "<arg>, certificate file for fuzzing TLS-based communications"},
     {cloudsvc	, undefined,
@@ -98,6 +97,7 @@ cmdline_optsspec() ->
                         "hexoutput",	undefined,    			"output data in logs as hex"},
     {httpsvc    , $H,   "httpservice",  string,				    "<arg>, run as HTTP service on <host:port>, e.g.: 127.0.0.1:17771"},
     {input		, $i, 	"input",		string, 				"<arg>, special input, e.g. proto://lport:[udpclientport:]rhost:rport (fuzzing proxy) or proto://:port, proto://host:port for data endpoint (generation mode)"},
+    {skip		, $k, 	"skip",		    {integer, 0},			"<arg>, normal mode: skip <arg> samples instead of outputting them; fuzzing proxy: bypass first <arg> packets before start fuzzing (TCP/HTTP only)"},
     {keyfile	, undefined,
                         "keyfile",		string,			        "<arg>, key file for fuzzing TLS-based communications"},
     {list		, $l,	"list",			undefined,				"list i/o options, monitors, mutations, patterns and generators"},
@@ -502,8 +502,6 @@ parse_opts([{monitor, MonitorSpec}|T], Dict) ->
                             Dict));
 parse_opts([{ascent, DC}|T], Dict) ->
     parse_opts(T, maps:put(descent_coeff, DC, Dict));
-parse_opts([{bypass, DC}|T], Dict) ->
-    parse_opts(T, maps:put(bypass, DC, Dict));
 parse_opts([{verbose, Lvl}|T], Dict) ->
     parse_opts(T, maps:put(verbose, Lvl, Dict));
 parse_opts([debug|T], Dict) ->
@@ -544,6 +542,8 @@ parse_opts([{faildelay, FailDelay}|T], Dict) ->
     parse_opts(T, maps:put(faildelay, FailDelay, Dict));
 parse_opts([{sleep, Sleep}|T], Dict) ->
     parse_opts(T, maps:put(sleep, Sleep, Dict));
+parse_opts([{skip, Skip}|T], Dict) ->
+    parse_opts(T, maps:put(skip, Skip, Dict));
 parse_opts([{logger, LogOpts}|T], Dict) ->
     parse_opts(T, parse_logger_opts(LogOpts, Dict));
 parse_opts([noiolog|T], Dict) ->
