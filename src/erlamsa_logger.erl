@@ -164,11 +164,11 @@ build_logger_csv(FName) ->
     fun
         (TimeStamp, Pid, Type, LogMsg, Data, DataLen) when DataLen > 0, DataLen < ?MAX_LOG_DATA ->
             append_to_csv(FName, TimeStamp, Pid, Type, LogMsg,
-                          io_lib:format("~p,\"~s\"", [byte_size(Data),
-                                        remove_newlines_from_data(Data)]));
+                          io_lib:format("~p,~s", [DataLen,
+                                        erlamsa_utils:bin_to_hexstr(Data)]));
         (TimeStamp, Pid, Type, LogMsg, _Data, DataLen) when DataLen > 0 ->
             append_to_csv(FName, TimeStamp, Pid, Type, LogMsg,
-                          io_lib:format("\"~p\"", [DataLen]));                                
+                          io_lib:format("~p", [DataLen]));                                
         (TimeStamp, Pid, Type, LogMsg, _Data, _DataLen) ->
             append_to_csv(FName, TimeStamp, Pid, Type, LogMsg, ",")
     end.

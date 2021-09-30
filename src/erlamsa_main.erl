@@ -124,14 +124,13 @@ record_result(X, Acc) -> [X | Acc].
 -spec fuzzer(#{}) -> [binary()].
 fuzzer(Dict) ->
     %% Getting All Data from options
-    SeedFun = maps:get(seed, Dict, fun() -> erlamsa_rnd:gen_urandom_seed() end),
+    Seed = maps:get(seed, Dict, erlamsa_rnd:gen_urandom_seed()),
     CustomMutas = erlamsa_utils:make_mutas(maps:get(external_mutations, Dict, nil)),
     Mutas = maps:get(mutations, Dict, erlamsa_mutations:default(CustomMutas)),
     Cnt = maps:get(n, Dict, 1), 
     MaxFails = maps:get(maxfails, Dict, ?TOO_MANY_FAILED_ATTEMPTS),
     Paths = maps:get(paths, Dict, ["-"]),
     Verbose = erlamsa_utils:verb(stderr, maps:get(verbose, Dict, 0)),
-    Seed = SeedFun(),
     erlamsa_rnd:seed(Seed),
     file:write_file("./last_seed.txt", io_lib:format("~p", [Seed])),
     Verbose(io_lib:format("Random seed: ~p~n", [Seed])),
@@ -173,6 +172,7 @@ fuzzer(Dict) ->
                 RecordMeta({status, toomanyfailedoutputs}), RecordMeta({close, ok}),
                 lists:reverse(Acc);
             FuzzingLoopFun(CurMuta, DataGen, CurOut, {I, Fails}, N, Acc) ->
+                StartFuzz = now(),
                 erlang:put(attempt, I),
                 {Ll, GenMeta} = DataGen(),
                 {NewOut, NewMuta, Data, NewFails} =
@@ -182,7 +182,7 @@ fuzzer(Dict) ->
                         {CandidateMuta, Meta, Written, CandidateData} = erlamsa_out:output(Tmp, Fd, Post),
                         RecordMeta(lists:reverse(lists:flatten([{written, Written}| Meta]))),
                         Verbose(io_lib:format("output: ~p~n", [Written])),
-                        LogData(info, "fuzzing case ~p (<= ~p) finished, written: ", [I, N], CandidateData),
+                        LogData(info, "fuzzing [case = ~p] (<= ~p) finished, written: ", [I, N], CandidateData),
                         {CandidateOut, CandidateMuta, CandidateData, 0}
                     catch
                         {cantconnect, _Err} ->
@@ -191,19 +191,26 @@ fuzzer(Dict) ->
                         {fderror, _Err} ->
                             {CurOut, CurMuta, <<>>, Fails + 1}
                     end,
-                timer:sleep(Sleep),
+                EndFuzz = now(),
+                timer:sleep(
+                    case Sleep - trunc(timer:now_diff(EndFuzz, StartFuzz)/1000) of 
+                        SleepTime when SleepTime >= 0 -> SleepTime;
+                        _ElseTime -> 0
+                    end
+                ),
                 FuzzingLoopFun(NewMuta, DataGen, NewOut, {I + 1, NewFails}, N, RecordFun(Data, Acc))
         end,
     %% Running in single- or multi- threaded mode
     Threads = get_threading_mode(maps:get(output, Dict, "-"), Cnt, maps:get(workers, Dict, 1)),
-    run_fuzzing_loop(Threads, FuzzingLoop, SeedFun, Muta, Generator, Out, Cnt).
+    WorkerSameSeed = maps:get(workers_same_seed, Dict, false),
+    run_fuzzing_loop(Threads, FuzzingLoop, {Seed, WorkerSameSeed}, Muta, Generator, Out, Cnt).
 
--spec run_fuzzing_loop(integer() | list(), fun(), fun(), fun(), {atom(), fun()}, fun(), non_neg_integer()) -> ok.
+-spec run_fuzzing_loop(integer() | list(), fun(), {{integer(), integer(), integer()}, atom()}, fun(), {atom(), fun()}, fun(), non_neg_integer()) -> ok.
 %% single- threaded mode
-run_fuzzing_loop(1, FuzzingLoop, _SeedFun, Muta, {_GenName, Gen}, Out, Cnt) ->
+run_fuzzing_loop(1, FuzzingLoop, {_Seed, _}, Muta, {_GenName, Gen}, Out, Cnt) ->
     FuzzingLoop(Muta, Gen, Out, {1, 0}, Cnt, []);
 %% multi- threaded mode
-run_fuzzing_loop(Threads, FuzzingLoop, SeedFun, Muta, {GenName, Gen}, Out, Cnt) ->
+run_fuzzing_loop(Threads, FuzzingLoop, {Seed, WorkerSameSeed}, Muta, {GenName, Gen}, Out, Cnt) ->
     %% Selecting generator
     %% For stdio we need to pre-read the data;
     %% otherwise it could be some random that we should variate
@@ -211,16 +218,25 @@ run_fuzzing_loop(Threads, FuzzingLoop, SeedFun, Muta, {GenName, Gen}, Out, Cnt) 
         stdin -> GenRes = Gen(), fun() -> GenRes end;
         _Else -> Gen
     end,
+    erlamsa_rnd:seed(Seed),
+    WorkerGenSeed = case WorkerSameSeed of
+        true -> fun () -> Seed end;
+        false -> fun () -> {erlamsa_rnd:erand(99999), erlamsa_rnd:erand(99999), erlamsa_rnd:erand(99999)} end
+    end, 
+    SeededThreads =  lists:map(
+            fun ({{A, B, W}, R}) -> 
+                S = WorkerGenSeed(),
+                {{A, B, W}, R, S} 
+            end, Threads),
     MainProcessPid = erlang:self(),
     [spawn(fun() -> 
-            NewSeed = SeedFun(),
-            erlamsa_rnd:seed(NewSeed), 
-            erlamsa_logger:log(info, "fuzzing worker process ~p started, range {~p, ~p} + ~p additional, seed = ~p", [W, A, B, trunc(R/Cnt), NewSeed]),
+            erlamsa_rnd:seed(S),
+            erlamsa_logger:log(info, "fuzzing worker process ~p started, range {~p, ~p} + ~p additional, seed = ~p", [W, A, B, trunc(R/Cnt), S]),
             FuzzingLoop(Muta, MultiGen, Out, {A, 0}, B, []),
             FuzzingLoop(Muta, MultiGen, Out, {R, 0}, R, []),
             MainProcessPid ! {finished, W, erlang:self(), {{A, B, W}, R}}
-        end)  || {{A, B, W}, R} <- Threads],
-    wait_for_finished(length(Threads)).
+        end)  || {{A, B, W}, R, S} <- SeededThreads],
+    wait_for_finished(length(SeededThreads)).
 
 
 

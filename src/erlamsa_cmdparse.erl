@@ -129,7 +129,9 @@ cmdline_optsspec() ->
                         "stroutput",	undefined,    			"force output data in logs as ASCII-strings"},
     {verbose	, $v,	"verbose",		{integer, 0},			"be more verbose, show some progress during generation"},
     {version	, $V, 	"version",		undefined, 				"show program version"},
-    {workers	, $w, 	"workers",		integer,    			"<arg>, number of working threads (1 for standalone, 10 for proxy/fass)"}
+    {workers	, $w, 	"workers",		integer,    			"<arg>, number of working threads (1 for standalone, 10 for proxy/fass)"},
+    {workers_same_seed, undefined, 
+                        "workers-same-seed", undefined, 		"run all workers with the same seed, each to generate n/w samples"}
 ].
 
 usage() ->
@@ -412,12 +414,12 @@ parse_seed(Seed) ->
     list_to_tuple([list_to_integer(X) || X <- string:tokens(Seed, ",")]).
 
 parse_seed_opt("source:" ++ Source, Dict) ->
-        maps:put(seed, fun() -> erlamsa_rnd_ext:get_seed() end,
+        maps:put(seed, erlamsa_rnd_ext:get_seed(),
                 maps:put(ext_rnd, fun(Opts) -> erlamsa_rnd_ext:get_supervisor_opts(Opts) end,
                         maps:put(ext_rnd_source, Source, Dict)));
 parse_seed_opt(Seed, Dict) ->
     try
-        maps:put(seed, fun() -> parse_seed(Seed) end, Dict)
+        maps:put(seed, parse_seed(Seed), Dict)
     catch
         error:badarg ->
             fail("Invalid seed format! Usage: int,int,int")
@@ -516,6 +518,8 @@ parse_opts([{count, N}|T], Dict) ->
     parse_opts(T, maps:put(n, N, Dict));
 parse_opts([hexoutput|T], Dict) ->
     parse_opts(T, maps:put(dataoutput, hex, Dict));
+parse_opts([workers_same_seed|T], Dict) ->
+    parse_opts(T, maps:put(workers_same_seed, true, Dict));
 parse_opts([stroutput|T], Dict) ->
     parse_opts(T, maps:put(dataoutput, str, Dict));
 parse_opts([{certfile, CertFile}|T], Dict) ->
