@@ -164,7 +164,7 @@ stream_setup_connection(true, {ok, ClientSocket}, ProtoTransport, ListenSock, {P
     end;
 stream_setup_connection(false, {ok, ClientSocket}, ProtoTransport, ListenSock, {Proto, _, _, DHost, DPort}, Opts, Verbose, OptData) ->
     {ProbToClient, ProbToServer} = get_proxy_probs(Opts),
-    ByPass = maps:get(bypass, Opts, 0),
+    ByPass = maps:get(skip, Opts, 0),
     DescentCoeff = maps:get(descent_coeff, Opts, 1),
     erlamsa_logger:log(info, "initiating new connection to ~p://~s:~p(c->s), sockets: l:~p/c:~p",
                              [ProtoTransport, erlamsa_netutils:host2str(DHost), DPort, 
