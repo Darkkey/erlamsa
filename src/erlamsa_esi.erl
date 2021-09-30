@@ -87,6 +87,8 @@ call_fuzzer(Sid, Opts, In) ->
     Dict = erlamsa_utils:get_direct_fuzzing_opts(In, Opts),
     erlamsa_logger:log(info, "Request from IP ~s, session ~p",
                         [maps:get(http_x_real_ip, Dict, maps:get(remote_addr, Dict, nil)), Sid]),
+    erlamsa_logger:log(debug, "Session ~p options are ~p",
+                        [Sid, Opts]),
     erlamsa_logger:log_data(info, "Input data <session = ~p>", [Sid], In),
     Output = erlamsa_fsupervisor:get_fuzzing_output(Dict),
     erlamsa_logger:log_data(info, "Output data <session = ~p>", [Sid], Output),

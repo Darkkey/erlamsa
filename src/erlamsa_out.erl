@@ -264,11 +264,11 @@ streamsock_writer(Transport, Addr, Port, Maker) ->
                 fun (Data) -> Packet = Maker(Data), 
                               erlamsa_netutils:send(Transport, Sock, Packet), 
                               receive 
-                                 {_ProtoTransport, _ClientSocket, RecvData} -> erlamsa_logger:log_data(debug, "reply [case = ~p] from target",
+                                 {_ProtoTransport, _ClientSocket, RecvData} -> erlamsa_logger:log_data(info, "reply [case = ~p] from target",
                                              [Attempt], RecvData),
                                  ok
                               after 
-                                 25 -> ok
+                                 25 -> ok  %% FIXME: AS PARAMATER!!!!
                               end
                         end,
                 %% TODO: ugly timeout before closing..., should be in another thread
