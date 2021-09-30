@@ -472,6 +472,7 @@ blocks_port(Ll, Fd, Data, N, _) -> {Ll, Fd, Data, N}.
 
 %% closes the port (and possibly writes the data in case of HTTP)
 -spec close_port(binary(), output_dest()) -> ok | {'error', file:posix() | badarg | terminated}.
+close_port(_, skip) -> ok;
 close_port(_, stdout) -> ok;
 close_port(_, return) -> ok;
 close_port(_, {net, _Writer, Closer}) -> Closer();
@@ -484,6 +485,7 @@ close_port(_, Fd) -> file:close(Fd).
 %% TODO: UGLY, need rewrite and handle errors, also rewrite spec
 -spec write_really(binary(), output_dest()) -> {any(), binary()}.
 write_really(Data, return) -> {ok, Data};
+write_really(_Data, skip) -> {ok, <<>>};
 write_really(Data, stdout) -> {file:write(standard_io, Data), <<>>};
 write_really(Data, {http, _Final}) -> {ok, Data};
 write_really(Data, {https, _Final}) -> {ok, Data};
