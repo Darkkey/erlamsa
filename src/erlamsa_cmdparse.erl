@@ -83,6 +83,8 @@ cmdline_optsspec() ->
                         "certfile",		string,			        "<arg>, certificate file for fuzzing TLS-based communications"},
     {cloudsvc	, undefined,
                         "cloudsvc",		{string, "nil"},	    "<arg>, activate cloudservice with <arg> as a management token"},                        
+    {sequence_muta, undefined, 	
+                        "consequtive-mutators", undefined, 		"when iterative outputting cases, next case mutator will be based on success/failure of previos one, which adds additional diversity; Warning: this will slow skipping"},
     {debug		, $d,	"debug",		undefined,				"run in debug/profiler mode, activates verbose"},
     {detach	    , $D,	"detach",		undefined,			    "detach from console after start (service mode)"},
     {external	, $e,   "external", 	string,					"external pre/post/generation/mutation module"},
@@ -548,6 +550,8 @@ parse_opts([{logger, LogOpts}|T], Dict) ->
     parse_opts(T, parse_logger_opts(LogOpts, Dict));
 parse_opts([noiolog|T], Dict) ->
     parse_opts(T, maps:put(noiolog, true, Dict));
+parse_opts([sequence_muta|T], Dict) ->
+    parse_opts(T, maps:put(sequence_muta, true, Dict));
 parse_opts([{external, ModuleNames}|T], Dict) ->
     parse_opts(T, parse_external(string:tokens(ModuleNames, ","), Dict));
 parse_opts([{proxyprob, ProxyProbOpts}|T], Dict) ->
