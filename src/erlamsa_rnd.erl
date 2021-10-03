@@ -36,7 +36,7 @@
 -include("erlamsa.hrl").
 
 %% API
--export([seed/1, gen_urandom_seed/0, rand/1, erand/1, rand_float/0, rand_bit/0, rand_occurs/1, rand_occurs_fixed/2,
+-export([seed/1, gen_urandom_seed/0, gen_predictable_seed/0, rand/1, erand/1, rand_float/0, rand_bit/0, rand_occurs/1, rand_occurs_fixed/2,
         rand_nbit/1, rand_log/1, rand_elem/1, random_block/1, fast_pseudorandom_block/1,
         random_numbers/2, random_permutation/1, rand_range/2, rand_span/2,
         reservoir_sample/2, rand_delta/0, rand_delta_up/0, random_bitstring/1,
@@ -60,6 +60,9 @@ gen_urandom_seed() ->
             lists:seq(1, 3)
         )
     ).
+
+-spec gen_predictable_seed() -> {non_neg_integer(), non_neg_integer(), non_neg_integer()}.
+gen_predictable_seed() -> {erlamsa_rnd:erand(99999), erlamsa_rnd:erand(99999), erlamsa_rnd:erand(99999)}.
 
 %% common GCD (uneffective!)
 -spec gcd(non_neg_integer(), non_neg_integer()) -> non_neg_integer().

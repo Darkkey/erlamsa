@@ -159,6 +159,8 @@ fuzzer(Dict) ->
     Post = erlamsa_utils:make_post(maps:get(external_post, Dict, nil)),
     Sleep = maps:get(sleep, Dict, 0),
     Skip = maps:get(skip, Dict, 0),
+    SequenceMuta = maps:get(sequence_muta, Dict, false),
+    MaxRunningTime = maps:get(maxrunningtime, Dict, 30),
     FailDelay = maps:get(faildelay, Dict, 0),
     %% Creating the Fuzzing Loop function
     FuzzingLoop = 
@@ -174,31 +176,60 @@ fuzzer(Dict) ->
                 lists:reverse(Acc);
             FuzzingLoopFun(CurMuta, DataGen, CurOut, {I, Fails}, N, Acc) ->
                 StartFuzz = now(),
-                erlang:put(attempt, I),
-                {Ll, GenMeta} = DataGen(),
-                {NewOut, NewMuta, Data, NewFails} =
-                    try
-                        {CandidateOut, CandidateFd, OutMeta} = CurOut(I, [{nth, I}, GenMeta]),
-                        Tmp = Pat(Ll, CurMuta, OutMeta),
-                        Fd = case I =< Skip of
-                            true -> skip;
-                            false -> CandidateFd
-                        end, 
-                        {CandidateMuta, Meta, Written, CandidateData} = erlamsa_out:output(Tmp, Fd, Post),
-                        RecordMeta(lists:reverse(lists:flatten([{written, Written}| Meta]))),
-                        Verbose(io_lib:format("output: ~p~n", [Written])),
-                        LogData(info, "fuzzing [case = ~p] (<= ~p) finished, written: ", [I, N], CandidateData),
-                        {CandidateOut, CandidateMuta, CandidateData, 0}
-                    catch
-                        {cantconnect, _Err} ->
-                            timer:sleep(10*Fails + FailDelay),
-                            {CurOut, CurMuta, <<>>, Fails + 1};
-                        {fderror, _Err} ->
-                            {CurOut, CurMuta, <<>>, Fails + 1}
+                FuzzingProcessPid = erlang:self(),
+                ThreadSeed = erlamsa_rnd:gen_predictable_seed(),
+                FuzzingFun = fun() -> 
+                                spawn(fun() -> 
+                                    erlamsa_rnd:seed(ThreadSeed),
+                                    erlang:put(attempt, I),
+                                    {Ll, GenMeta} = DataGen(),
+                                    {NewOut, NewMuta, Data, NewFails} =
+                                        try
+                                            {CandidateOut, CandidateFd, OutMeta} = CurOut(I, [{nth, I}, GenMeta]),
+                                            Tmp = Pat(Ll, CurMuta, OutMeta), 
+                                            Fd = case I =< Skip of true -> skip; false -> CandidateFd end,                                                                       
+                                            {CandidateMuta, Meta, Written, CandidateData} = erlamsa_out:output(Tmp, Fd, Post),
+                                            case I =< Skip of
+                                                true -> 
+                                                    RecordMeta(lists:reverse(lists:flatten([{written, Written}| Meta]))),
+                                                    Log(debug, "fuzzing [case = ~p] (<= ~p): processing, but skipping output ", [I, N]);
+                                                false -> 
+                                                    Verbose(io_lib:format("output: ~p~n", [Written])),
+                                                    LogData(info, "fuzzing [case = ~p] (<= ~p) finished, written: ", [I, N], CandidateData)
+                                            end,
+                                            {CandidateOut, CandidateMuta, CandidateData, 0}
+                                        catch
+                                            {cantconnect, _Err} ->
+                                                timer:sleep(10*Fails + FailDelay),
+                                                {CurOut, CurMuta, <<>>, Fails + 1};
+                                            {fderror, _Err} ->
+                                                {CurOut, CurMuta, <<>>, Fails + 1}
+                                        end,
+                                    FuzzingProcessPid ! {finished, erlang:self(), {NewOut, NewMuta, Data, NewFails}}
+                                end),
+                                receive
+                                    {finished, _Pid, FuzzRes} -> FuzzRes
+                                after 
+                                    MaxRunningTime*1000 ->
+                                        {CurOut, CurMuta, <<>>, Fails}
+                                end
+                            end,
+                {NewOut, NewMuta, Data, NewFails} = 
+                    case SequenceMuta of
+                        true -> 
+                            FuzzingFun();
+                        false -> 
+                            case I =< Skip of
+                                false -> 
+                                    {NO, _NM, ND, NF} = FuzzingFun(),
+                                    {NO, CurMuta, ND, NF};                            
+                                true ->
+                                    Log(debug, "fuzzing [case = ~p] (<= ~p): skipping ", [I, N]),
+                                    {CurOut, CurMuta, <<>>, Fails}
+                            end
                     end,
-                EndFuzz = now(),
                 timer:sleep(
-                    case Sleep - trunc(timer:now_diff(EndFuzz, StartFuzz)/1000) of 
+                    case Sleep - trunc(timer:now_diff(now(), StartFuzz)/1000) of 
                         SleepTime when SleepTime >= 0 -> SleepTime;
                         _ElseTime -> 0
                     end
@@ -226,7 +257,7 @@ run_fuzzing_loop(Threads, FuzzingLoop, {Seed, WorkerSameSeed}, Muta, {GenName, G
     erlamsa_rnd:seed(Seed),
     WorkerGenSeed = case WorkerSameSeed of
         true -> fun () -> Seed end;
-        false -> fun () -> {erlamsa_rnd:erand(99999), erlamsa_rnd:erand(99999), erlamsa_rnd:erand(99999)} end
+        false -> fun () -> erlamsa_rnd:gen_predictable_seed() end
     end, 
     SeededThreads =  lists:map(
             fun ({{A, B, W}, R}) -> 
