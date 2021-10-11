@@ -68,7 +68,7 @@ output(Ll, Fd, Post) ->
     %% (ok? (and (pair? ll) (tuple? (car ll)))) ;; all written?
     %% ^-- do we really need to check this?
     {Muta, Meta} = last_output(NLl),
-    FlushedData = flush(Data),
+    FlushedData = flush(lists:reverse(Data)),
     close_port(FlushedData, NewFd),
     {Muta, Meta, N, FlushedData}.
 
