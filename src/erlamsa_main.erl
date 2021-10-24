@@ -214,6 +214,8 @@ fuzzer(Dict) ->
                         after 
                             MaxRunningTime*1000 ->
                                 erlang:exit(FuzzingWorkerPid, kill),
+                                erlamsa_logger:log(info, "Stopped potentially frozen fuzzing process: ~p after ~p ms~n",
+                                    [FuzzingWorkerPid, MaxRunningTime*1000]),
                                 {CurOut, CurMuta, <<>>, Fails}
                         end
                     end,
