@@ -133,17 +133,17 @@ serial_writer(Options) ->
 -spec exec_writer(string()) -> fun().
 exec_writer(App) ->
     %%TODO: FIXME: select correct path
-    exec:start([{portexe, erlamsa_utils:get_portsdir() ++ "exec-port"}]),
-    Watcher = spawn(fun W() -> 
-                        Attempt = get_attempt(),
+    exec:start([{portexe, erlamsa_utils:get_portsdir() ++ "exec-port"}]),  
+    fun F(Attempt, Meta) ->
+        Watcher = spawn(
+                    fun W() -> 
                         receive 
                             {Stream, Pid, Data} -> 
                                 erlamsa_logger:log_data(info, "received [case = ~p] from ~p on ~p", [Attempt, Pid, Stream], Data);
                             Unknown -> 
                                 erlamsa_logger:log(info, "received [case = ~p]: ~p", [Attempt, Unknown])                                
                         end, W()
-                    end),  
-    fun F(_N, Meta) ->
+                    end),
         {ok, Pid, OsPid} = exec:run(App, [stdin, monitor, {stdout, Watcher}, {stderr, Watcher}]),
         erlamsa_logger:log(info, "new process is executed [OS Pid = ~p]", [OsPid]),
         erlamsa_monitor:send_pid(OsPid),
@@ -162,7 +162,8 @@ exec_writer(App) ->
                         erlamsa_logger:log(LogLevel, "process ~p exit with reason ~p", [OsPid, LogStatus])
                 after ?EXEC_SLEEP -> 
                     exec:stop(Pid)               
-                end
+                end,
+                exec:stop(Watcher)
             end
         }, [{output, exec} | Meta]}
     end.
@@ -201,7 +202,7 @@ streamlisten_writer(Transport, LocalPort, {CertFile, KeyFile}, PostProcess) ->
         ssl -> [{certfile, CertFile}, {keyfile, KeyFile}];
         _Else -> []
     end,
-    fun F(_N, Meta) ->
+    fun F(Attempt, Meta) ->
         erlamsa_netutils:netserver_start(Transport, false),
         {Res, ListenSock} = erlamsa_netutils:listen(Transport, LocalPort,
                                             [binary, {active, false},
@@ -211,7 +212,6 @@ streamlisten_writer(Transport, LocalPort, {CertFile, KeyFile}, PostProcess) ->
         case Res of
             ok -> {F, {net,
                 fun (Data) ->  
-                    Attempt = get_attempt(),                  
                     case erlamsa_netutils:accept(Transport, ListenSock) of
                         {ok, ClientSock} ->
                             {ok, {IP, _}} = erlamsa_netutils:sockname(Transport, ClientSock), 
@@ -255,24 +255,34 @@ streamlisten_writer(Transport, LocalPort, {CertFile, KeyFile}, PostProcess) ->
 -spec streamsock_writer(tcp | tls, inet:ip_address(), inet:port_number(), fun()) -> fun().
 streamsock_writer(Transport, Addr, Port, Maker) ->
     erlamsa_netutils:set_routing_ip(tcp, Addr, Port),
-    fun F(_N, Meta) ->
-        Attempt = get_attempt(),
+    fun F(Attempt, Meta) ->
         erlamsa_netutils:netserver_start(Transport, false),
         {Res, Sock} = erlamsa_netutils:connect(Transport, Addr, Port, [binary, {active, true}], ?TCP_TIMEOUT),
         case Res of
             ok -> {F, {net,
                 fun (Data) -> Packet = Maker(Data), 
-                              erlamsa_netutils:send(Transport, Sock, Packet), 
-                              receive 
-                                 {_ProtoTransport, _ClientSocket, RecvData} -> erlamsa_logger:log_data(info, "reply [case = ~p] from target",
-                                             [Attempt], RecvData),
-                                 ok
-                              after 
-                                 25 -> ok  %% FIXME: AS PARAMATER!!!!
-                              end
+                              erlamsa_netutils:send(Transport, Sock, Packet)
+                              %% TODO: receiving here could catch races, as an option?
+                                %   receive 
+                                %      {_ProtoTransport, _ClientSocket, RecvData} -> erlamsa_logger:log_data(info, "reply [case = ~p] from target",
+                                %                  [Attempt], RecvData),
+                                %      ok
+                                %   after 
+                                %      25 -> ok  %% FIXME: AS PARAMATER!!!!
+                                %   end
                         end,
-                %% TODO: ugly timeout before closing..., should be in another thread
-                fun () -> timer:sleep(25), erlamsa_netutils:close(Transport, Sock), ok end
+                fun () -> 
+                    receive 
+                        {_ProtoTransport, _ClientSocket, RecvData} -> 
+                            erlamsa_logger:log_data(info, "reply [case = ~p] from target",
+                                    [Attempt], RecvData),
+                            ok
+                    after 
+                        25 -> ok  %% FIXME: AS PARAMATER!!!!
+                    end,
+                    erlamsa_netutils:close(Transport, Sock), 
+                    ok 
+                end
                 }, [{output, Transport} | Meta]};
             _Else ->
                 Err = lists:flatten(io_lib:format("Error opening ~p socket to ~s:~p '~s'",
@@ -287,12 +297,11 @@ streamsock_writer(Transport, Addr, Port, Maker) ->
 
 -spec udplisten_writer(inet:port_number()) -> fun().
 udplisten_writer(LocalPort) ->
-    fun F(_N, Meta) ->
+    fun F(Attempt, Meta) ->
         {Res, Sock} = gen_udp:open(LocalPort, [binary, {active, false},
                                                {reuseaddr, true}, {ip, {0, 0, 0, 0}}
                                               ]
                                   ),
-        Attempt = get_attempt(),
         case Res of
             ok -> {F, {net,
                 fun (Data) ->
