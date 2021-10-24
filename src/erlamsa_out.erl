@@ -163,7 +163,7 @@ exec_writer(App) ->
                 after ?EXEC_SLEEP -> 
                     exec:stop(Pid)               
                 end,
-                exec:stop(Watcher)
+                erlang:exit(Watcher, kill)
             end
         }, [{output, exec} | Meta]}
     end.

@@ -178,42 +178,45 @@ fuzzer(Dict) ->
                 StartFuzz = now(),
                 FuzzingProcessPid = erlang:self(),
                 ThreadSeed = erlamsa_rnd:gen_predictable_seed(),
-                FuzzingFun = fun() -> 
-                                spawn(fun() -> 
-                                    erlamsa_rnd:seed(ThreadSeed),
-                                    erlang:put(attempt, I),
-                                    {Ll, GenMeta} = DataGen(),
-                                    {NewOut, NewMuta, Data, NewFails} =
-                                        try
-                                            {CandidateOut, CandidateFd, OutMeta} = CurOut(I, [{nth, I}, GenMeta]),
-                                            Tmp = Pat(Ll, CurMuta, OutMeta), 
-                                            Fd = case I =< Skip of true -> skip; false -> CandidateFd end,                                                                       
-                                            {CandidateMuta, Meta, Written, CandidateData} = erlamsa_out:output(Tmp, Fd, Post),
-                                            case I =< Skip of
-                                                true -> 
-                                                    RecordMeta(lists:reverse(lists:flatten([{written, Written}| Meta]))),
-                                                    Log(debug, "fuzzing [case = ~p] (<= ~p): processing, but skipping output ", [I, N]);
-                                                false -> 
-                                                    Verbose(io_lib:format("output: ~p~n", [Written])),
-                                                    LogData(info, "fuzzing [case = ~p] (<= ~p) finished, written: ", [I, N], CandidateData)
-                                            end,
-                                            {CandidateOut, CandidateMuta, CandidateData, 0}
-                                        catch
-                                            {cantconnect, _Err} ->
-                                                timer:sleep(10*Fails + FailDelay),
-                                                {CurOut, CurMuta, <<>>, Fails + 1};
-                                            {fderror, _Err} ->
-                                                {CurOut, CurMuta, <<>>, Fails + 1}
-                                        end,
-                                    FuzzingProcessPid ! {finished, erlang:self(), {NewOut, NewMuta, Data, NewFails}}
-                                end),
-                                receive
-                                    {finished, _Pid, FuzzRes} -> FuzzRes
-                                after 
-                                    MaxRunningTime*1000 ->
-                                        {CurOut, CurMuta, <<>>, Fails}
-                                end
-                            end,
+                FuzzingFun = 
+                    fun() -> 
+                        FuzzingWorkerPid = spawn(fun() -> 
+                            erlamsa_rnd:seed(ThreadSeed),
+                            erlang:put(attempt, I),
+                            {Ll, GenMeta} = DataGen(),
+                            {NewOut, NewMuta, Data, NewFails} =
+                                try
+                                    {CandidateOut, CandidateFd, OutMeta} = CurOut(I, [{nth, I}, GenMeta]),
+                                    Tmp = Pat(Ll, CurMuta, OutMeta), 
+                                    Fd = case I =< Skip of true -> skip; false -> CandidateFd end,                                                                       
+                                    {CandidateMuta, Meta, Written, CandidateData} = erlamsa_out:output(Tmp, Fd, Post),
+                                    case I =< Skip of
+                                        true -> 
+                                            RecordMeta(lists:reverse(lists:flatten([{written, Written}| Meta]))),
+                                            Log(debug, "fuzzing [case = ~p] (<= ~p): processing, but skipping output ", [I, N]);
+                                        false -> 
+                                            Verbose(io_lib:format("output: ~p~n", [Written])),
+                                            LogData(info, "fuzzing [case = ~p] (<= ~p) finished, written: ", [I, N], CandidateData)
+                                    end,
+                                    {CandidateOut, CandidateMuta, CandidateData, 0}
+                                catch
+                                    {cantconnect, _Err} ->
+                                        timer:sleep(10*Fails + FailDelay),
+                                        {CurOut, CurMuta, <<>>, Fails + 1};
+                                    {fderror, _Err} ->
+                                        {CurOut, CurMuta, <<>>, Fails + 1}
+                                end,
+                            FuzzingProcessPid ! {finished, erlang:self(), {NewOut, NewMuta, Data, NewFails}}
+                        end),
+                        receive
+                            {finished, _Pid, FuzzRes} -> 
+                                FuzzRes
+                        after 
+                            MaxRunningTime*1000 ->
+                                erlang:exit(FuzzingWorkerPid, kill),
+                                {CurOut, CurMuta, <<>>, Fails}
+                        end
+                    end,
                 {NewOut, NewMuta, Data, NewFails} = 
                     case SequenceMuta of
                         true -> 
