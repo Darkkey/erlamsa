@@ -89,7 +89,7 @@ get_fuzzing_output(Node, SupervisorPid, Dict) ->
 stop_process(_, _, undefined) ->
     true;
 stop_process(Pid, Time, _ProcessInfo) ->
-    io:format("Stopped possibly bugged process: ~p (launched @ ~p, now is ~p)~n",
+    erlamsa_logger:log(info, "Stopped possibly bugged process: ~p (launched @ ~p, now is ~p)~n",
                 [Pid, Time, erlang:system_time(seconds)]),
     erlang:exit(Pid, kill).
 
