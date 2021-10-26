@@ -235,7 +235,7 @@ fuzzer(Dict) ->
                     end,
                 timer:sleep(
                     case Sleep - trunc(timer:now_diff(now(), StartFuzz)/1000) of 
-                        SleepTime when SleepTime >= 0 -> SleepTime, I > Skip;
+                        SleepTime when SleepTime >= 0, I > Skip -> SleepTime;
                         _ElseTime -> 0
                     end
                 ),
