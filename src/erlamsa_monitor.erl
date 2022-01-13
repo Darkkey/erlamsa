@@ -38,7 +38,8 @@ monitors() ->
      {cm, erlamsa_mon_connect, "TCP connection listener monitor (run by default)"},
      {lc, erlamsa_mon_logcat, "Logcat/ADB crash monitor"},
      {r2, erlamsa_mon_r2, "Radare2 debugging monitor"},
-     {probe, erlamsa_mon_network, "Network probe monitor"}
+     {probe, erlamsa_mon_network, "Network probe monitor"},
+     {lxi, erlamsa_mon_lxi, "LXI/SCPI monitor"}
     ].
 
 send_pid(Pid) ->

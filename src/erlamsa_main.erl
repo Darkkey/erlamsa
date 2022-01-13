@@ -155,12 +155,11 @@ fuzzer(Dict) ->
     RecordMeta({seed, Seed}),
     PatList = maps:get(patterns, Dict, erlamsa_patterns:default()),
     Pat = erlamsa_patterns:make_pattern(PatList),
-    Out = erlamsa_out:string_outputs(Dict),
+    {Out, MaxRunningTime} = erlamsa_out:string_outputs(Dict),
     Post = erlamsa_utils:make_post(maps:get(external_post, Dict, nil)),
     Sleep = maps:get(sleep, Dict, 0),
     Skip = maps:get(skip, Dict, 0),
     SequenceMuta = maps:get(sequence_muta, Dict, false),
-    MaxRunningTime = maps:get(maxrunningtime, Dict, 30),
     FailDelay = maps:get(faildelay, Dict, 0),
     %% Creating the Fuzzing Loop function
     FuzzingLoop = 
@@ -212,10 +211,10 @@ fuzzer(Dict) ->
                             {finished, _Pid, FuzzRes} -> 
                                 FuzzRes
                         after 
-                            MaxRunningTime*1000 ->
+                            MaxRunningTime ->
                                 erlang:exit(FuzzingWorkerPid, kill),
                                 erlamsa_logger:log(info, "Stopped potentially frozen fuzzing process: ~p after ~p ms~n",
-                                    [FuzzingWorkerPid, MaxRunningTime*1000]),
+                                    [FuzzingWorkerPid, MaxRunningTime]),
                                 {CurOut, CurMuta, <<>>, Fails}
                         end
                     end,
