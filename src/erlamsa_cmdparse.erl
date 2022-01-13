@@ -372,6 +372,10 @@ parse_url([<<"tcp">>|T], _URL) ->
     parse_sock_addr(tcp, binary_to_list(hd(T)));
 parse_url([<<"tls">>|T], _URL) ->
     parse_sock_addr(tls, binary_to_list(hd(T)));
+parse_url([<<"cansockd">>|T], _URL) ->
+    parse_sock_addr(cansockd, binary_to_list(hd(T)));
+parse_url([<<"cansockd_isotp">>|T], _URL) ->
+    parse_sock_addr(cansockd_isotp, binary_to_list(hd(T)));
 parse_url([<<"serial">>|T], _URL) ->
     parse_serial_addr(binary_to_list(hd(T)));
 parse_url([<<"exec">>|T], _URL) ->
@@ -531,7 +535,7 @@ parse_opts([{mnesia, MnesiaDir}|T], Dict) ->
 parse_opts([{pidfile, PidFile}|T], Dict) ->
     parse_opts(T, maps:put(pidfile, PidFile, Dict));
 parse_opts([{maxrunningtime, MT}|T], Dict) ->
-    parse_opts(T, maps:put(maxrunningtime, MT, Dict));
+    parse_opts(T, maps:put(maxrunningtime, MT*1000, Dict));
 parse_opts([{maxfails, MT}|T], Dict) ->
     parse_opts(T, maps:put(maxfails, MT, Dict));
 parse_opts([{blockscale, B}|T], Dict) ->

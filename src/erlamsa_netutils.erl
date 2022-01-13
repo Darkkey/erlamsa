@@ -52,6 +52,8 @@ transport(http2s) -> ssl;
 transport(https) -> ssl;
 transport(http) -> tcp;
 transport(http2) -> tcp;
+transport(cansockd_isotp) -> tcp;
+transport(cansockd) -> tcp;
 transport(tls) -> ssl;
 transport(Tr) -> Tr.
 

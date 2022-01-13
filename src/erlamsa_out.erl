@@ -361,17 +361,17 @@ make_http_writer(Transport, Host, Port, Path, Query, Type, Param, Options) ->
     Maker = create_http_header(Host, Type, Param, Path, Query, http_headers(Options, [])),
     streamsock_writer(Transport, Host, Port, Maker).
 
--spec http_writer(atom(), tuple(), fun()) -> fun().
-http_writer(Transport, {[], Port, _Path, _Query, []}, Opts) ->
-    http_writer(Transport, {[], Port, _Path, _Query, "application/octet-stream"}, Opts);
-http_writer(Transport,{[], Port, _Path, _Query, ContentType}, Opts) ->
-    streamlisten_writer(Transport, Port, Opts, make_http_server_reply(ContentType));
-http_writer(Transport, {Host, Port, Path, Query, []}, _) ->
-    make_http_writer(Transport, Host, Port, Path, Query, "GET", "", []);
-http_writer(Transport, {Host, Port, Path, Query, ["GET", Param|T]}, _) ->
-    make_http_writer(Transport, Host, Port, Path, Query, "GET", Param, T);
-http_writer(Transport, {Host, Port, Path, Query, [Type | T]}, _) ->
-    make_http_writer(Transport, Host, Port, Path, Query, Type, "", T).
+-spec http_writer(atom(), tuple(), fun(), integer()) -> fun().
+http_writer(Transport, {[], Port, _Path, _Query, []}, Opts, TM) ->
+    http_writer(Transport, {[], Port, _Path, _Query, "application/octet-stream"}, Opts, TM);
+http_writer(Transport,{[], Port, _Path, _Query, ContentType}, Opts, _TM) ->
+    {streamlisten_writer(Transport, Port, Opts, make_http_server_reply(ContentType)), infinity};
+http_writer(Transport, {Host, Port, Path, Query, []}, _, TM) ->
+    {make_http_writer(Transport, Host, Port, Path, Query, "GET", "", []), TM};
+http_writer(Transport, {Host, Port, Path, Query, ["GET", Param|T]}, _, TM) ->
+    {make_http_writer(Transport, Host, Port, Path, Query, "GET", Param, T), TM};
+http_writer(Transport, {Host, Port, Path, Query, [Type | T]}, _, TM) ->
+    {make_http_writer(Transport, Host, Port, Path, Query, Type, "", T), TM}.
 
 -spec make_host_header(string()) -> binary().
 make_host_header(Host) ->
@@ -409,50 +409,125 @@ http_headers([], Acc) ->
     flush(Acc).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% ISO/TP protocol helpers
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+isotp_single(A) -> 
+    Len = size(A),
+    binary_to_list(<<0:4, Len:4/integer, A/binary>>).
+
+isotp_first(Len, First) ->
+    Bin = list_to_binary(First),
+    <<1:4, Len:12/integer, Bin/binary>>.
+
+isotp_cons(Len, Idx, [A,B,C,D,E,F,G|Tail], Acc) ->
+    Bin = list_to_binary([A,B,C,D,E,F,G]),
+    isotp_cons(Len, Idx + 1, Tail, [<<2:4, Idx:4/integer, Bin/binary>>|Acc]);
+isotp_cons(Len, Idx, Tail, Acc) when Idx > 15 ->
+    isotp_cons(Len, 0, Tail, Acc);
+isotp_cons(_Len, _Idx, [], Acc) ->
+    lists:reverse(Acc);
+isotp_cons(Len, Idx, Tail, Acc) ->
+    Bin = list_to_binary(Tail),
+    isotp_cons(Len, Idx + 1, [], [<<2:4, Idx:4/integer, Bin/binary>>|Acc]).
+
+iso_tpish(A) when size(A) < 7 -> 
+    isotp_single(A);
+iso_tpish(A) when size(A) >= 7 -> 
+    Len = size(A),
+    {First, Last} = lists:split(6, binary_to_list(A)),
+    FirstFrame = isotp_first(Len, First),
+    Res = isotp_cons(Len, 0, Last, [FirstFrame]),
+    lists:flatten(lists:map(fun binary_to_list/1, Res)).
+    
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% CANSOCKD protocol helpers
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+cansockfd_list_to_hexstr(Lst) ->
+  lists:flatten([io_lib:format("~2.16.0B ", [X]) || X <- Lst]).
+
+make_cansockd_cmd(ID, Bytes) ->
+    lists:flatten(io_lib:format("< send ~s ~p ~s>", 
+        [
+           ID,
+           length(Bytes),
+           cansockfd_list_to_hexstr(Bytes) 
+        ])).
+
+-spec cansockd_data(list(), integer(), list()) -> binary().
+cansockd_data(Interface, ID, Data) ->
+    IntBin = list_to_binary(io_lib:format("< open ~s >", [Interface])),
+    DataBin = cansockd_data_body(ID, Data, []),
+    <<IntBin/binary, DataBin/binary>>.
+
+-spec cansockd_data_body(list(), list(), list()) -> binary().
+cansockd_data_body(ID, [A,B,C,D,E,F,G,H | Tail], Acc) ->
+    CANCmd = make_cansockd_cmd(ID, [A,B,C,D,E,F,G,H]),
+    cansockd_data_body(ID, Tail, [CANCmd|Acc]);
+cansockd_data_body(_ID, [], Acc) ->
+    list_to_binary(lists:reverse(Acc));
+cansockd_data_body(ID, Tail, Acc) ->
+    CANCmd = make_cansockd_cmd(ID, Tail),
+    cansockd_data_body(ID, [], [CANCmd|Acc]).
+
+-spec cansockd_writer(atom(), list(), integer(), list(), list(), fun()) -> fun().
+cansockd_writer(Transport, Host, Port, Interface, ID, Pre) ->
+    streamsock_writer(Transport, Host, Port, fun (Data) -> cansockd_data(Interface, ID, Pre(Data)) end).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Output specification parser
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% TODO: FIXME: using of cert and key file from cmd options
--spec string_outputs(#{}) -> fun().
+-spec string_outputs(#{}) -> {fun(), integer()}.
 string_outputs(Opts) ->
+    TM = maps:get(maxrunningtime, Opts, 30),
     case maps:get(output, Opts, "-") of
-        "-" -> fun stdout_stream/2;
-        return -> fun return_stream/2;
-        {tcp, {Port}} -> streamlisten_writer(tcp, list_to_integer(Port), {nil, nil}, fun (A) -> A end);
-        {tls, {Port}} -> streamlisten_writer(ssl, list_to_integer(Port), 
+        "-" -> {fun stdout_stream/2, TM} ;
+        return -> {fun return_stream/2, TM};
+        {tcp, {Port}} -> {streamlisten_writer(tcp, list_to_integer(Port), {nil, nil}, fun (A) -> A end), infinity};
+        {tls, {Port}} -> {streamlisten_writer(ssl, list_to_integer(Port), 
                                                 {maps:get(certfile, Opts, "cert.pem"), 
                                                  maps:get(keyfile, Opts, "key.pem")}, 
-                                                fun (A) -> A end);
-        {udp, {Port}} -> udplisten_writer(list_to_integer(Port));
-        {tcp, {Addr, Port}} -> streamsock_writer(tcp, Addr, list_to_integer(Port), fun (A) -> A  end);
-        {tls, {Addr, Port}} -> streamsock_writer(ssl, Addr, list_to_integer(Port), fun (A) -> A  end);
+                                                fun (A) -> A end), infinity};
+        {udp, {Port}} -> {udplisten_writer(list_to_integer(Port)), infinity};
+        {tcp, {Addr, Port}} -> {streamsock_writer(tcp, Addr, list_to_integer(Port), fun (A) -> A  end), TM};
+        {tls, {Addr, Port}} -> {streamsock_writer(ssl, Addr, list_to_integer(Port), fun (A) -> A  end), TM};
         {udp, {StrIfAddr, PortFrom, Addr = "255.255.255.255", PortTo}} -> 
             {ok, IfAddr} = inet:getaddr(StrIfAddr, inet), %%TODO: ugly, refactor in distinct function
-            udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), [{broadcast, true}, {ip, IfAddr}]);
+            {udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), [{broadcast, true}, {ip, IfAddr}]), TM};
         {udp, {StrIfAddr, PortFrom, Addr, PortTo}} -> 
             {ok, IfAddr} = inet:getaddr(StrIfAddr, inet),
-            udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), [{ip, IfAddr}]);
-        {udp, {PortFrom, Addr, PortTo}} -> udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), []);
-        {udp, {Addr, Port}} -> udpsock_writer(Addr, 0, list_to_integer(Port), []);
+            {udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), [{ip, IfAddr}]), TM};
+        {udp, {PortFrom, Addr, PortTo}} -> {udpsock_writer(Addr, list_to_integer(PortFrom), list_to_integer(PortTo), []), TM};
+        {udp, {Addr, Port}} -> {udpsock_writer(Addr, 0, list_to_integer(Port), []), TM};
         %% RAW IP output <-- fuzzed packet is inside proper IP packet
-        {ip, {Addr, Proto}} -> rawsock_writer(Addr,
+        {ip, {Addr, Proto}} -> {rawsock_writer(Addr,
                                               [{protocol, list_to_integer(Proto)},
                                                {type, raw}, {family, inet}]
-                                             );
+                                             )
+                                            , TM};
         %% RAW output <-- fuzzed packet are on layer 3
-        {raw, {Addr, Iface}} -> rawsock_writer(Addr,
+        {raw, {Addr, Iface}} -> {rawsock_writer(Addr,
                                                [{protocol, raw}, {interface, Iface},
                                                 {type, raw}, {family, inet}]
-                                              );
+                                              )
+                                            , TM};
+        {cansockd, {Addr, Port, Int, CanID}} -> 
+            {cansockd_writer(tcp, Addr, list_to_integer(Port), Int, CanID, fun binary_to_list/1), TM};
+        {cansockd_isotp, {Addr, Port, Int, CanID}} -> 
+            {cansockd_writer(tcp, Addr, list_to_integer(Port), Int, CanID, fun iso_tpish/1), TM};
         {http, Params} -> 
-            http_writer(tcp, Params, {nil, nil});
+            http_writer(tcp, Params, {nil, nil}, TM);
         {https, Params} -> 
             http_writer(ssl, Params, {maps:get(certfile, Opts, "cert.pem"), 
-                                      maps:get(keyfile, Opts, "key.pem")});
+                                      maps:get(keyfile, Opts, "key.pem")}, TM);
         {serial, {Port, Speed}} ->
-            serial_writer([{open, Port}, {speed, list_to_integer(Speed)}]);
+            {serial_writer([{open, Port}, {speed, list_to_integer(Speed)}]), TM};
         {exec, App} ->
-            exec_writer(App);
+            {exec_writer(App), infinity};
         Str -> file_writer(Str)
     end.
 
