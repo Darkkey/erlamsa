@@ -36,7 +36,10 @@
 -endif.
 
 %% API
--export([output/3, string_outputs/1, flush/1]).
+-export([output/3, string_outputs/1, flush/1, 
+    streamsock_writer/4, streamlisten_writer/4,
+    udplisten_writer/1, udpsock_writer/4,
+    cansockd_data/3]).
 
 %% convert list-of-bvecs to one big binary
 -spec flush(list(nil | binary())) -> any().
@@ -528,6 +531,9 @@ string_outputs(Opts) ->
             {serial_writer([{open, Port}, {speed, list_to_integer(Speed)}]), TM};
         {exec, App} ->
             {exec_writer(App), infinity};
+        {external, Params} ->
+            ModuleName = maps:get(external_generator, Opts, nil),
+            {erlang:apply(list_to_atom(ModuleName), output, [Params]), TM};
         Str -> file_writer(Str)
     end.
 

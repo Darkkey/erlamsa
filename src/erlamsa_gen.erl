@@ -208,7 +208,7 @@ make_generator_fun(Args, Dict, Fail, N) ->
     fun (false) -> Fail("Bad generator priority!");
         ({Name, Pri}) ->
             case Name of
-                stdin when hd(Args) == "-" ->
+                stdin when hd(Args) == "-", ExternalGen == nil ->
                     {Pri, {Name, stdin_generator(N == 1, BlockScale)}}; %% TODO: <<-- 1 in Radamsa
                 stdin ->
                     false;
@@ -248,13 +248,13 @@ make_generator(Pris, Args, Dict, Fail, N) ->
 
 -spec generators() -> list().
 generators() -> [
-                {genfuz, 0, "generational-based fuzzer using supplied grammar via external module"},
                 {random, 1, "generate random data"},
                 {jump, 100, "jump between multiple files"},
                 {direct, 500, "read data directly from erlang function call arguments"},
                 {file, 1000, "read data from given files"},
-                {stdin, 100000,
-                    "read data from standard input if no paths are given or - is among them"}].
+                {genfuz, 10000, "generational-based fuzzer using supplied grammar via external module"},
+                {stdin, 100000, "read data from standard input if no paths are given or - is among them"}
+            ].
 
 -spec default() -> list().
 default() ->[{Name, Pri} || {Name, Pri, _Desc} <- generators()].

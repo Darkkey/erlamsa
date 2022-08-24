@@ -90,7 +90,8 @@ start_behaviour(Dict) ->
     create_pid_file(maps:get(pidfile, Dict, nil)),
     case maps:get(mode, Dict, stdio) of
         genfuzz -> %%TODO: make genfuzz supevisable
-            {[], fun () -> erlamsa_gfcomms:start(Dict), run(Dict), sleep() end};
+            %%{[], fun () -> erlamsa_gfcomms:start(Dict), run(Dict), sleep() end}; %%old genfuzz, deprecated
+            {[], fun () -> erlamsa_main:fuzzer(Dict), timer:sleep(1) end};
         proxy ->
             {[erlamsa_fuzzproxy:get_supervisor_opts(Dict)], fun () -> run(Dict), sleep() end};
         stdio ->
