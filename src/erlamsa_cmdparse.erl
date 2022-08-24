@@ -180,7 +180,7 @@ show_list(Dict) ->
 set_defaults(Dict) ->
     Workers =
         case maps:get(mode, Dict, stdio) of
-            genfuzz ->   3;
+            genfuzz ->   1;
             proxy   -> 	10;
             stdio   ->   1;
             faas 	->	10;
@@ -386,8 +386,8 @@ parse_url([<<"http2">>|_T], URL) ->
     parse_http_addr(URL);
 parse_url([<<"https">>|_T], URL) ->
     parse_http_addr(URL);
-%parse_url([<<"exec">>|_T], URL) ->
-%    parse_exec(URL);
+parse_url([<<"external">>|_T], URL) ->
+    {external, string:tokens(URL, ":")};
 parse_url(_, URL) ->
     fail(io_lib:format("invalid output URL specification: '~s'", [URL])).
 
