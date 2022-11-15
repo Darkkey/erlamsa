@@ -534,7 +534,7 @@ string_outputs(Opts) ->
         {external, Params} ->
             ModuleName = maps:get(external_generator, Opts, nil),
             {erlang:apply(list_to_atom(ModuleName), output, [Params]), TM};
-        Str -> file_writer(Str)
+        Str -> {file_writer(Str), TM}
     end.
 
 
