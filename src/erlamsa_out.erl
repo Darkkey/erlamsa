@@ -36,7 +36,7 @@
 -endif.
 
 %% API
--export([output/3, string_outputs/1, flush/1, 
+-export([output/4, string_outputs/1, flush/1, 
     streamsock_writer/4, streamlisten_writer/4,
     udplisten_writer/1, udpsock_writer/4,
     cansockd_data/3]).
@@ -63,17 +63,24 @@ last_output(L) when is_list(L) ->
 last_output(F) when is_function(F) -> last_output(F());
 last_output(X) -> X.
 
--spec output(lazy_list_of_bins(), output_dest(), fun()) -> {fun(), meta(), integer(), binary()}.
-output([], _Fd, _Post) ->
+-spec output(lazy_list_of_bins(), any(), output_dest(), fun()) -> {fun(), meta(), integer(), binary()}.
+output([], _OldOut, _Fd, _Post) ->
     erlamsa_utils:error({fderror, "Something wrong happened with output FD."});
-output(Ll, Fd, Post) ->
+output(Ll, OldOut, Fd, Post) -> 
     {NLl, NewFd, Data, N} = blocks_port(Ll, Fd, Post),
     %% (ok? (and (pair? ll) (tuple? (car ll)))) ;; all written?
     %% ^-- do we really need to check this?
     {Muta, Meta} = last_output(NLl),
     FlushedData = flush(lists:reverse(Data)),
     close_port(FlushedData, NewFd),
-    {Muta, Meta, N, FlushedData}.
+    NewOut = update_out_fd(OldOut, Fd, NewFd),
+    {Muta, Meta, N, FlushedData, NewOut}.
+
+update_out_fd(Out, Fd, Fd) ->
+	Out;
+update_out_fd(Out, Fd, NewFd = {net, WF, CF}) ->
+	fun F(Attempt, Meta) -> {F, {net, WF, CF}, [{net_fd_updated}|Meta]} end;
+update_out_fd(Out, _, _) -> Out.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% STDIO Streams
@@ -298,22 +305,8 @@ streamsock_writer(Transport, Addr, Port, Maker) ->
 %% Generic Single Socket Network Stream (TCP or TLS) Client output
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
--spec stream_singlesock_writer(tcp | tls, inet:ip_address(), inet:port_number(), fun()) -> fun().
-stream_singlesock_writer(Transport, Addr, Port, Maker) ->
-	stream_singlesock_writer(Transport, Addr, Port, Maker, <<>>).
-
--spec stream_singlesock_writer(tcp | tls, inet:ip_address(), inet:port_number(), fun(), binary()) -> fun().
-stream_singlesock_writer(Transport, Addr, Port, Maker, Banner) ->
-    erlamsa_netutils:set_routing_ip(tcp, Addr, Port),
-    erlamsa_netutils:netserver_start(Transport, false),
-    {Res, Sock} = erlamsa_netutils:connect(Transport, Addr, Port, [binary, {active, true}], ?TCP_TIMEOUT),
-    case Res of
-        ok -> 
-            erlamsa_netutils:send(Transport, Sock, Banner),
-    	    fun F(Attempt, Meta) -> {F, {net,
-	        fun (Data) -> Packet = Maker(Data), 
-                              erlamsa_netutils:send(Transport, Sock, Packet)
-                        end,
+%%TODO: functionality for reconnect, need heavy refactor
+create_singlesock_closer(Attempt) ->
                 fun () -> 
                     receive 
                         {_ProtoTransport, _ClientSocket, RecvData} -> 
@@ -324,7 +317,46 @@ stream_singlesock_writer(Transport, Addr, Port, Maker, Banner) ->
                         25 -> ok  %% FIXME: AS PARAMATER!!!!
                     end,
                     ok 
-                end
+                end.
+
+create_singlesock_writer(Transport, Addr, Port, Sock, Attempt, HostPid, Banner, Maker) ->
+    fun (Data) -> Packet = Maker(Data), 
+        case erlamsa_netutils:send(Transport, Sock, Packet) of
+            ok -> ok;
+	   Else -> 
+                erlamsa_logger:log(debug, "socketcand connection terminated, reconnecting...", []),
+		{Res, NewSock} = erlamsa_netutils:connect(Transport, Addr, Port, [binary, {active, true}], ?TCP_TIMEOUT),
+		gen_tcp:controlling_process(NewSock, HostPid),
+		case Res of
+        	    ok -> 
+                        erlamsa_logger:log(debug, "socketcand new socket FD: ~p", [NewSock]),
+			erlamsa_netutils:send(Transport, NewSock, Banner),
+			erlamsa_netutils:send(Transport, NewSock, Packet),
+			{newfd, ok, create_singlesock_writer(Transport, Addr, Port, NewSock, Attempt, HostPid, Banner, Maker), create_singlesock_closer(Attempt)};
+		    _Else -> 
+	            	Err = lists:flatten(io_lib:format("Error opening ~p socket to ~s:~p '~s'",
+                                                  [Transport, Addr, Port, Sock])),
+        	    	erlamsa_utils:error({cantconnect, Err})
+		end
+        end
+    end.
+
+-spec stream_singlesock_writer(tcp | tls, inet:ip_address(), inet:port_number(), fun()) -> fun().
+stream_singlesock_writer(Transport, Addr, Port, Maker) ->
+	stream_singlesock_writer(Transport, Addr, Port, Maker, <<>>).
+
+-spec stream_singlesock_writer(tcp | tls, inet:ip_address(), inet:port_number(), fun(), binary()) -> fun().
+stream_singlesock_writer(Transport, Addr, Port, Maker, Banner) ->
+    erlamsa_netutils:set_routing_ip(tcp, Addr, Port),
+    erlamsa_netutils:netserver_start(Transport, false),
+    HostPid = self(),
+    {Res, Sock} = erlamsa_netutils:connect(Transport, Addr, Port, [binary, {active, true}], ?TCP_TIMEOUT),
+    case Res of
+        ok -> 
+            erlamsa_netutils:send(Transport, Sock, Banner),
+    	    fun F(Attempt, Meta) -> {F, {net,
+    		create_singlesock_writer(Transport, Addr, Port, Sock, Attempt, HostPid, Banner, Maker),
+		create_singlesock_closer(Attempt)
                 }, [{output, Transport} | Meta]}
 	     end;
         _Else ->
@@ -535,6 +567,7 @@ cansockd_isotp_banner(Interface, SID, DID) ->
     list_to_binary(io_lib:format("< open ~s >< isotpmode >< isotpconf ~s ~s 0 0 0 >", [Interface, SID, DID])).
 
 -spec cansockd_isotp_data(list()) -> binary().
+cansockd_isotp_data([]) -> <<>>;
 cansockd_isotp_data(Data) ->
     list_to_binary(lists:flatten(io_lib:format("< sendpdu ~s >", 
         [
@@ -599,7 +632,6 @@ string_outputs(Opts) ->
         Str -> {file_writer(Str), TM}
     end.
 
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% PORTS Operations
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -615,10 +647,10 @@ blocks_port(Ll, Fd, Post) -> blocks_port(Ll, Fd, [], 0, Post).
 blocks_port([], Fd, Data, N, _) -> {[], Fd, Data, N};
 blocks_port([Ll], Fd, Data, N, Post) when is_function(Ll) -> blocks_port(Ll(), Fd, Data, N, Post);
 blocks_port(Ll = [H|T], Fd, Data, N, Post) when is_binary(H) ->
-    {Res, NewData} = write_really(Post(H), Fd),
+    {Res, NewFd, NewData} = write_really(Post(H), Fd),
     case Res of
-        ok when is_binary(H) -> blocks_port(T, Fd, [NewData|Data], N + byte_size(H), Post);
-        _Else -> {Ll, Fd, Data, N}
+        ok when is_binary(H) -> blocks_port(T, NewFd, [NewData|Data], N + byte_size(H), Post);
+        _Else -> {Ll, NewFd, Data, N}
     end;
 blocks_port(Ll, Fd, Data, N, _) -> {Ll, Fd, Data, N}.
 
@@ -633,15 +665,20 @@ close_port(_, {serial, _Writer, Closer}) -> Closer();
 close_port(Data, {http, Final}) -> Final(Data);
 close_port(_, Fd) -> file:close(Fd).
 
+%%TODO: spec here
+update_fd({Type, _, _}, {newfd, Res, WF, CF}) ->
+	{Res, {Type, WF, CF}};
+update_fd(Fd, Res) -> {Res, Fd}.
+
 %% write to Fd or stdout
 %% TODO: UGLY, need rewrite and handle errors, also rewrite spec
--spec write_really(binary(), output_dest()) -> {any(), binary()}.
-write_really(Data, return) -> {ok, Data};
-write_really(_Data, skip) -> {ok, <<>>};
-write_really(Data, stdout) -> {file:write(standard_io, Data), <<>>};
-write_really(Data, {http, _Final}) -> {ok, Data};
-write_really(Data, {https, _Final}) -> {ok, Data};
-write_really(Data, {net, Writer, _Closer}) -> {Writer(Data), Data};
-write_really(Data, {exec, Writer, _Closer}) -> {Writer(Data), Data};
-write_really(Data, {serial, Writer, _Closer}) -> {Writer(Data), Data};
-write_really(Data, Fd) -> {file:write(Fd, Data), <<>>}.
+-spec write_really(binary(), output_dest()) -> {any(), output_dest(), binary()}.
+write_really(Data, Fd = return) -> {ok, Fd, Data};
+write_really(_Data, Fd = skip) -> {ok, Fd, <<>>};
+write_really(Data, Fd = stdout) -> {file:write(standard_io, Data), Fd, <<>>};
+write_really(Data, Fd = {http, _Final}) -> {ok, Fd, Data};
+write_really(Data, Fd = {https, _Final}) -> {ok, Fd, Data};
+write_really(Data, Fd = {net, Writer, _Closer}) -> {Res, NewFd} = update_fd(Fd, Writer(Data)), {Res, NewFd, Data};
+write_really(Data, Fd = {exec, Writer, _Closer}) ->  {Writer(Data), Fd, Data};
+write_really(Data, Fd = {serial, Writer, _Closer}) ->  {Writer(Data), Fd, Data};
+write_really(Data, Fd) -> {file:write(Fd, Data), Fd, <<>>}.

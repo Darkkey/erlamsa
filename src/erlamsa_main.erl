@@ -187,17 +187,18 @@ fuzzer(Dict) ->
                                 try
                                     {CandidateOut, CandidateFd, OutMeta} = CurOut(I, [{nth, I}, GenMeta]),
                                     Tmp = Pat(Ll, CurMuta, OutMeta), 
+                                    % Verbose(io_lib:format("Pat: ~p ~p ~p~n", [Tmp, CurMuta, OutMeta])),
                                     Fd = case I =< Skip of true -> skip; false -> CandidateFd end,                                                                       
-                                    {CandidateMuta, Meta, Written, CandidateData} = erlamsa_out:output(Tmp, Fd, Post),
+                                    {CandidateMuta, Meta, Written, CandidateData, UpdatedOut} = erlamsa_out:output(Tmp, CandidateOut, Fd, Post),
                                     case I =< Skip of
                                         true -> 
                                             RecordMeta(lists:reverse(lists:flatten([{written, Written}| Meta]))),
                                             Log(debug, "fuzzing [case = ~p] (<= ~p): processing, but skipping output ", [I, N]);
                                         false -> 
-                                            Verbose(io_lib:format("output: ~p~n", [Written])),
+                                            Verbose(io_lib:format("output: ~p ~p~n", [Written, Meta])),
                                             LogData(info, "fuzzing [case = ~p] (<= ~p) finished, written: ", [I, N], CandidateData)
                                     end,
-                                    {CandidateOut, CandidateMuta, CandidateData, 0}
+                                    {UpdatedOut, CandidateMuta, CandidateData, 0}
                                 catch
                                     {cantconnect, _Err} ->
                                         timer:sleep(10*Fails + FailDelay),
