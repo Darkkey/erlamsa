@@ -338,6 +338,8 @@ parse_input_opts(InputOpts, Dict) ->
 parse_sock_addr(SockType, Addr) ->
     Tokens = string:tokens(Addr, ":"),
     case length(Tokens) of
+        N when N > 0, N < 6, SockType =:= cansockd_isotp ->
+            {SockType, list_to_tuple(Tokens)};
         N when N > 0, N < 5 ->
             {SockType, list_to_tuple(Tokens)};
         _Else ->
