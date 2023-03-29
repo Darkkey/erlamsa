@@ -527,7 +527,7 @@ cansockd_isotp_writer(Transport, Host, Port, Interface, SID, DID, Pre) ->
 -spec cansockd_isotp_data(list(), integer(), list(), list()) -> binary().
 cansockd_isotp_data(Interface, SID, DID, Data) ->
     IntBin = list_to_binary(io_lib:format("< open ~s >< isotpmode >< isotpconf ~s ~s 0 0 0 >", [Interface, SID, DID])),
-    io:format("~s~n", [IntBin]),
+    % io:format("~s~n", [IntBin]),
     DataBin = make_cansockd_isotp_cmd(Data),
     <<IntBin/binary, DataBin/binary>>.
 
