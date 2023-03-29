@@ -22,7 +22,7 @@ parse_params(["url=" ++ URL|T], Acc) ->
 parse_params(["var=" ++ Report|T], Acc) ->
     parse_params(T, maps:put(var, list_to_atom(Report), Acc));
 parse_params(["channel=" ++ Channel|T], Acc) ->
-    parse_params(T, maps:put(channel, list_to_integer(Channel), Acc));
+    parse_params(T, maps:put(channel, Channel, Acc));
 parse_params(["delay=" ++ Delay|T], Acc) ->
     parse_params(T, maps:put(delay , list_to_integer(Delay), Acc));
 parse_params(["uvalue=" ++ Timeout|T], Acc) ->
@@ -62,7 +62,9 @@ lxi_monitor(MonOpts) ->
             gen_tcp:send(Sock, io_lib:format("INST ~p~n", [Channel])),
             lxi_monitor_loop(MonOpts, Sock, 
                 maps:get(delay, MonOpts, 1000),
-                {   maps:get(var, MonOpts, current),
+                {   
+		    Channel,
+		    maps:get(var, MonOpts, current),
                     maps:get(lvalue, MonOpts, 0.5),
                     maps:get(uvalue, MonOpts, 1.0)
                 });
@@ -70,11 +72,11 @@ lxi_monitor(MonOpts) ->
             erlamsa_logger:log(error, "Could not connect to LXI endpoint ~s:~p: ~p~n", [Addr, Port, Err])
     end.
 
-lxi_monitor_loop(MonOpts, Sock, Delay, Params = {Var, LValue, UValue}) ->
+lxi_monitor_loop(MonOpts, Sock, Delay, Params = {_Channel, Var, LValue, UValue}) ->
     gen_tcp:send(Sock, io_lib:format("MEAS:CURR?~n", [])),
     case gen_tcp:recv(Sock, 0, ?LXI_TIMEOUT) of
         {ok, BinVal} -> 
-            StrVal = binary_to_list(BinVal),
+            StrVal = lists:flatten(string:replace(binary_to_list(BinVal),"+"," ")),
             Val = list_to_float(string:trim(StrVal)),
             if
                 Val > UValue; Val < LValue ->

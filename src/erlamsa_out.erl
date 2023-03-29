@@ -295,6 +295,43 @@ streamsock_writer(Transport, Addr, Port, Maker) ->
     end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Generic Single Socket Network Stream (TCP or TLS) Client output
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+-spec stream_singlesock_writer(tcp | tls, inet:ip_address(), inet:port_number(), fun()) -> fun().
+stream_singlesock_writer(Transport, Addr, Port, Maker) ->
+    erlamsa_netutils:set_routing_ip(tcp, Addr, Port),
+    erlamsa_netutils:netserver_start(Transport, false),
+    {Res, Sock} = erlamsa_netutils:connect(Transport, Addr, Port, [binary, {active, true}], ?TCP_TIMEOUT),
+    case Res of
+        ok -> 
+    	    fun F(Attempt, Meta) -> {F, {net,
+	        fun (Data) -> Packet = Maker(Data), 
+                              erlamsa_netutils:send(Transport, Sock, Packet)
+                        end,
+                fun () -> 
+                    receive 
+                        {_ProtoTransport, _ClientSocket, RecvData} -> 
+                            erlamsa_logger:log_data(info, "reply [case = ~p] from target",
+                                    [Attempt], RecvData),
+                            ok
+                    after 
+                        25 -> ok  %% FIXME: AS PARAMATER!!!!
+                    end,
+                    ok 
+                end
+                }, [{output, Transport} | Meta]}
+	     end;
+        _Else ->
+	    fun _F(_Attempt, _Meta) ->
+	            Err = lists:flatten(io_lib:format("Error opening ~p socket to ~s:~p '~s'",
+                                                  [Transport, Addr, Port, Sock])),
+        	    erlamsa_utils:error({cantconnect, Err})
+	    end
+    end.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% UDP Server Output
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -411,6 +448,7 @@ http_headers([H|T], Acc) ->
 http_headers([], Acc) ->
     flush(Acc).
 
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% ISO/TP protocol helpers
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -449,7 +487,7 @@ iso_tpish(A) when size(A) >= 7 ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 cansockfd_list_to_hexstr(Lst) ->
-  lists:flatten([io_lib:format("~2.16.0B ", [X]) || X <- Lst]).
+  lists:flatten([io_lib:format("~2.16.0B", [X]) || X <- Lst]).
 
 make_cansockd_cmd(ID, Bytes) ->
     lists:flatten(io_lib:format("< send ~s ~p ~s>", 
@@ -479,6 +517,25 @@ cansockd_data_body(ID, Tail, Acc) ->
 cansockd_writer(Transport, Host, Port, Interface, ID, Pre) ->
     streamsock_writer(Transport, Host, Port, fun (Data) -> cansockd_data(Interface, ID, Pre(Data)) end).
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% SocketCAND ISO/TP protocol helpers
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+-spec cansockd_isotp_writer(atom(), list(), integer(), list(), list(), list(), fun()) -> fun().
+cansockd_isotp_writer(Transport, Host, Port, Interface, SID, DID, Pre) ->
+    stream_singlesock_writer(Transport, Host, Port, fun (Data) -> cansockd_isotp_data(Interface, SID, DID, Pre(Data)) end).
+
+-spec cansockd_isotp_data(list(), integer(), list(), list()) -> binary().
+cansockd_isotp_data(Interface, SID, DID, Data) ->
+    IntBin = list_to_binary(io_lib:format("< open ~s >< isotpmode >< isotpconf ~s ~s 0 0 0 >", [Interface, SID, DID])),
+    io:format("~s~n", [IntBin]),
+    DataBin = make_cansockd_isotp_cmd(Data),
+    <<IntBin/binary, DataBin/binary>>.
+
+make_cansockd_isotp_cmd(Bytes) ->
+    list_to_binary(lists:flatten(io_lib:format("< sendpdu ~s >", 
+        [
+           cansockfd_list_to_hexstr(Bytes) 
+        ]))).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Output specification parser
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -520,8 +577,9 @@ string_outputs(Opts) ->
                                             , TM};
         {cansockd, {Addr, Port, Int, CanID}} -> 
             {cansockd_writer(tcp, Addr, list_to_integer(Port), Int, CanID, fun binary_to_list/1), TM};
-        {cansockd_isotp, {Addr, Port, Int, CanID}} -> 
-            {cansockd_writer(tcp, Addr, list_to_integer(Port), Int, CanID, fun iso_tpish/1), TM};
+        {cansockd_isotp, {Addr, Port, Int, SID, DID}} -> 
+	    %{cansockd_writer(tcp, Addr, list_to_integer(Port), Int, CanID, fun iso_tpish/1), TM};
+            {cansockd_isotp_writer(tcp, Addr, list_to_integer(Port), Int, SID, DID, fun binary_to_list/1), TM};
         {http, Params} -> 
             http_writer(tcp, Params, {nil, nil}, TM);
         {https, Params} -> 
