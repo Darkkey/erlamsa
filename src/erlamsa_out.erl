@@ -300,11 +300,16 @@ streamsock_writer(Transport, Addr, Port, Maker) ->
 
 -spec stream_singlesock_writer(tcp | tls, inet:ip_address(), inet:port_number(), fun()) -> fun().
 stream_singlesock_writer(Transport, Addr, Port, Maker) ->
+	stream_singlesock_writer(Transport, Addr, Port, Maker, <<>>).
+
+-spec stream_singlesock_writer(tcp | tls, inet:ip_address(), inet:port_number(), fun(), binary()) -> fun().
+stream_singlesock_writer(Transport, Addr, Port, Maker, Banner) ->
     erlamsa_netutils:set_routing_ip(tcp, Addr, Port),
     erlamsa_netutils:netserver_start(Transport, false),
     {Res, Sock} = erlamsa_netutils:connect(Transport, Addr, Port, [binary, {active, true}], ?TCP_TIMEOUT),
     case Res of
         ok -> 
+            erlamsa_netutils:send(Transport, Sock, Banner),
     	    fun F(Attempt, Meta) -> {F, {net,
 	        fun (Data) -> Packet = Maker(Data), 
                               erlamsa_netutils:send(Transport, Sock, Packet)
@@ -522,19 +527,18 @@ cansockd_writer(Transport, Host, Port, Interface, ID, Pre) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 -spec cansockd_isotp_writer(atom(), list(), integer(), list(), list(), list(), fun()) -> fun().
 cansockd_isotp_writer(Transport, Host, Port, Interface, SID, DID, Pre) ->
-    stream_singlesock_writer(Transport, Host, Port, fun (Data) -> cansockd_isotp_data(Interface, SID, DID, Pre(Data)) end).
+    Banner = cansockd_isotp_banner(Interface, SID, DID),
+    stream_singlesock_writer(Transport, Host, Port, fun (Data) -> cansockd_isotp_data(Pre(Data)) end, Banner).
 
--spec cansockd_isotp_data(list(), integer(), list(), list()) -> binary().
-cansockd_isotp_data(Interface, SID, DID, Data) ->
-    IntBin = list_to_binary(io_lib:format("< open ~s >< isotpmode >< isotpconf ~s ~s 0 0 0 >", [Interface, SID, DID])),
-    % io:format("~s~n", [IntBin]),
-    DataBin = make_cansockd_isotp_cmd(Data),
-    <<IntBin/binary, DataBin/binary>>.
+-spec cansockd_isotp_banner(list(), list(), list()) -> binary().
+cansockd_isotp_banner(Interface, SID, DID) ->
+    list_to_binary(io_lib:format("< open ~s >< isotpmode >< isotpconf ~s ~s 0 0 0 >", [Interface, SID, DID])).
 
-make_cansockd_isotp_cmd(Bytes) ->
+-spec cansockd_isotp_data(list()) -> binary().
+cansockd_isotp_data(Data) ->
     list_to_binary(lists:flatten(io_lib:format("< sendpdu ~s >", 
         [
-           cansockfd_list_to_hexstr(Bytes) 
+           cansockfd_list_to_hexstr(Data) 
         ]))).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Output specification parser
