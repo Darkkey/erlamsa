@@ -116,7 +116,7 @@ recv(ssl, Sock, Size, Timeout) -> ssl:recv(Sock, Size, Timeout).
 closed(tcp) -> tcp_closed;
 closed(ssl) -> ssl_closed.
 
-close(tcp, Sock) -> io:format("~n~n~n~n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@~n~n~n"), gen_tcp:close(Sock);
+close(tcp, Sock) -> gen_tcp:close(Sock);
 close(ssl, Sock) -> ssl:close(Sock).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
