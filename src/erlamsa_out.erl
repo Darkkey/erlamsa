@@ -524,7 +524,7 @@ iso_tpish(A) when size(A) >= 7 ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 cansockfd_list_to_hexstr(Lst) ->
-  lists:flatten([io_lib:format("~2.16.0B", [X]) || X <- Lst]).
+  lists:flatten([io_lib:format("~2.16.0B ", [X]) || X <- Lst]).
 
 make_cansockd_cmd(ID, Bytes) ->
     lists:flatten(io_lib:format("< send ~s ~p ~s>", 
@@ -571,7 +571,7 @@ cansockd_isotp_data([]) -> <<>>;
 cansockd_isotp_data(Data) ->
     list_to_binary(lists:flatten(io_lib:format("< sendpdu ~s >", 
         [
-           cansockfd_list_to_hexstr(Data) 
+  	   lists:flatten([io_lib:format("~2.16.0B", [X]) || X <- Data])
         ]))).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Output specification parser
