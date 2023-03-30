@@ -59,7 +59,7 @@ lxi_monitor(MonOpts) ->
     case gen_tcp:connect(Addr, Port, [binary, {active, false}], ?LXI_TIMEOUT) of 
         {ok, Sock} ->
             Channel = maps:get(channel, MonOpts, 1),
-            gen_tcp:send(Sock, io_lib:format("INST ~p~n", [Channel])),
+            gen_tcp:send(Sock, io_lib:format("INST ~s~n", [Channel])),
             lxi_monitor_loop(MonOpts, Sock, 
                 maps:get(delay, MonOpts, 1000),
                 {   
